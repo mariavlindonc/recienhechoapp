@@ -1,6 +1,6 @@
 # --- Etapa 1: compilación ---
 # Imagen con el toolchain de Go en la misma versión que declara go.mod (1.27).
-# Alpine la hace más liviana de descargar; esta etapa no llega a la imagen final.
+# Esta etapa no llega a la imagen final.
 FROM golang:1.27-alpine AS build
 
 # Directorio de trabajo dentro del contenedor; los comandos siguientes corren acá.
@@ -17,16 +17,13 @@ RUN go mod download
 # Recién ahora se copia el código fuente (lo que cambia seguido).
 COPY . .
 
-# CGO_ENABLED=0 genera un binario estático que no necesita libc, requisito para
-# correr sobre distroless/static. -trimpath saca las rutas locales del binario
-# (builds reproducibles) y -ldflags="-s -w" quita símbolos de depuración para
-# achicarlo.
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/servicio .
+# Compila el servicio a un único binario.
+RUN go build -o /out/servicio .
 
 # --- Etapa 2: ejecución ---
-# Imagen mínima sin shell ni gestor de paquetes: menos superficie de ataque y
-# pocos MB. La variante :nonroot ejecuta el proceso con un usuario sin privilegios.
-FROM gcr.io/distroless/static-debian12:nonroot
+# Alpine es chica (unos pocos MB) y trae shell, así se puede entrar al contenedor
+# a depurar con `docker exec -it <contenedor> sh`.
+FROM alpine:3
 
 # Solo se trae el binario compilado; el código fuente y el toolchain quedan afuera.
 COPY --from=build /out/servicio /servicio
