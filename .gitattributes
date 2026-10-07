@@ -1,0 +1,2 @@
+# Go exige finales de línea LF; sin esto, gofmt falla en Windows con core.autocrlf=true.
+*.go text eol=lf

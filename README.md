@@ -1,1 +1,25 @@
-Borrador: El sistema es un e-commerce de pastelería a pedido. Consiste de al menos 3 microservicios: usuarios, productos y pedidos. Para los compradores las funciones incluirán la búsqueda de productos, consulta de un catálogo, realización de pedido, solicitud de pedido especial (proceso asíncrono), pedidos programados, visualización de pedidos pendientes (posible ETA en tiempo real). Los pedidos se manejarán con una base de datos no relacional. Para los vendedores las funciones incluirán un recetario, un calendario de producción con algoritmos de cálculo de tiempos y espacios. Los productos se manejarán con una base relacional de productos, que utilizará una caché dado que los productos cambian poco y tendrán imágenes ("caros" de consultar). Para publicar: servicios de notificaciones Para consumir: deliveries del proyecto de transportes programas
+# Recién hecho
+
+E-commerce de pastelería a pedido: los compradores encargan productos y los vendedores organizan su producción.
+
+## Cómo levantarlo
+
+Requisitos: Docker con Compose.
+
+```bash
+cp .env.example .env && docker compose up --build -d
+```
+
+| Servicio | URL |
+|---|---|
+| API Gateway | http://localhost:8080/health |
+| Usuarios | http://localhost:8081/health |
+| Productos | http://localhost:8082/health |
+| Pedidos | http://localhost:8083/health |
+
+## Documentación
+
+- [SPEC.md](SPEC.md): requisitos
+- [AGENTS.md](AGENTS.md): comandos, convenciones y reglas (también para agentes de código)
+- [CONTRIBUTING.md](CONTRIBUTING.md): ramas, commits y pull requests
+- [docs/](docs/): arquitectura, ADRs, contratos y postmortems
