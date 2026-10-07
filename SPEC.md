@@ -1,0 +1,15 @@
+# Especificación
+
+## Descripción
+
+Borrador: El sistema es un e-commerce de pastelería a pedido. Consiste de al menos 3 microservicios: usuarios, productos y pedidos. Para los compradores las funciones incluirán la búsqueda de productos, consulta de un catálogo, realización de pedido, solicitud de pedido especial (proceso asíncrono), pedidos programados, visualización de pedidos pendientes (posible ETA en tiempo real). Los pedidos se manejarán con una base de datos no relacional. Para los vendedores las funciones incluirán un recetario, un calendario de producción con algoritmos de cálculo de tiempos y espacios. Los productos se manejarán con una base relacional de productos, que utilizará una caché dado que los productos cambian poco y tendrán imágenes ("caros" de consultar). Para publicar: servicios de notificaciones Para consumir: deliveries del proyecto de transportes programas
+
+## Actores
+
+## Funcionalidades del comprador
+
+## Funcionalidades del vendedor
+
+## Integraciones externas
+
+## Requisitos no funcionales

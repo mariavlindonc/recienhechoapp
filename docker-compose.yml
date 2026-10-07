@@ -1,0 +1,41 @@
+name: recienhecho
+
+services:
+  api-gateway:
+    build: ./services/api-gateway
+    container_name: recienhecho-api-gateway
+    environment:
+      PORT: ${API_GATEWAY_PORT}
+    ports:
+      - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
+    networks: [interna]
+
+  usuarios:
+    build: ./services/usuarios
+    container_name: recienhecho-usuarios
+    environment:
+      PORT: ${USUARIOS_PORT}
+    ports:
+      - "${USUARIOS_PORT}:${USUARIOS_PORT}"
+    networks: [interna]
+
+  productos:
+    build: ./services/productos
+    container_name: recienhecho-productos
+    environment:
+      PORT: ${PRODUCTOS_PORT}
+    ports:
+      - "${PRODUCTOS_PORT}:${PRODUCTOS_PORT}"
+    networks: [interna]
+
+  pedidos:
+    build: ./services/pedidos
+    container_name: recienhecho-pedidos
+    environment:
+      PORT: ${PEDIDOS_PORT}
+    ports:
+      - "${PEDIDOS_PORT}:${PEDIDOS_PORT}"
+    networks: [interna]
+
+networks:
+  interna:
