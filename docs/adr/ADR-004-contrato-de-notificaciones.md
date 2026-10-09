@@ -28,7 +28,7 @@ Publicamos **notificaciones**: otro sistema nos pide mandar un email a uno de su
 
 - **Eventos (AsyncAPI):** el otro grupo publica en una cola nuestra. Obliga a exponer el broker en internet y a darle credenciales a otro grupo, y es más difícil de probar. Lo descartamos para la capacidad externa; adentro del sistema sí usamos eventos ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
 - **POST síncrono que espera el envío:** más simple para el consumidor, pero le traslada nuestras demoras y fallas del correo.
-- **Versión en la URL** (`/v1/...`): permite convivir dos versiones a la vez, pero con un solo consumidor y un contrato chico no lo necesitamos y ensucia todas las rutas.
+- **Versión en la URL:** permite convivir dos versiones a la vez, pero con un solo consumidor y un contrato chico no lo necesitamos y ensucia todas las rutas.
 - **Versionado por header** (`Accept: application/vnd...`): menos visible y más difícil de probar con `curl`.
 - **Mock escrito en Go:** no suma una herramienta, pero hay que mantenerlo a mano a la par del contrato; Prism lee el mismo archivo y no se puede desincronizar.
 

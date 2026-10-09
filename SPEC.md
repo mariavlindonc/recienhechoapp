@@ -35,12 +35,12 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 
 | Id | Funcionalidad |
 |---|---|
-| V1 | Alta, baja y modificación de productos (precio, imágenes, anticipación mínima) |
-| V2 | Recetario: ingredientes y cantidades por producto |
-| V3 | Definir la capacidad de producción de cada día |
-| V4 | Ver el calendario de producción: qué hay que hacer cada día |
-| V5 | Cotizar, aceptar o rechazar pedidos especiales |
-| V6 | Avanzar el estado de los pedidos (en producción, listo, entregado) |
+| VE1 | Alta, baja y modificación de productos (precio, imágenes, anticipación mínima) |
+| VE2 | Recetario: ingredientes y cantidades por producto |
+| VE3 | Definir la capacidad de producción de cada día |
+| VE4 | Ver el calendario de producción: qué hay que hacer cada día |
+| VE5 | Cotizar, aceptar o rechazar pedidos especiales |
+| VE6 | Avanzar el estado de los pedidos (en producción, listo, entregado) |
 
 ## Reglas de negocio
 
@@ -67,7 +67,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 - Dado que el comprador reintenta el mismo pedido porque se cortó la conexión, cuando llega el segundo intento, entonces no se crea un pedido duplicado ni se reserva el cupo dos veces.
 - Dado que el inventario del proveedor no responde, cuando el comprador hace un pedido, entonces el pedido queda `pendiente_confirmacion` y el comprador lo ve así.
 
-**C6 y V5. Pedido especial**
+**C6 y VE5. Pedido especial**
 - Dado un pedido especial solicitado, cuando el vendedor lo cotiza, entonces el comprador recibe un email con el precio y puede aceptarlo dentro de las 48 h.
 - Dado un pedido especial cotizado hace más de 48 h, cuando el comprador intenta aceptarlo, entonces se le informa que la cotización venció.
 
@@ -78,7 +78,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 **C9. Avisos**
 - Dado un pedido que pasa a `listo`, cuando el cambio se guarda, entonces el comprador recibe un único email aunque el evento se entregue más de una vez.
 
-**V3 y V4. Capacidad y calendario**
+**VE3 y VE4. Capacidad y calendario**
 - Dado un día con 6 reservados, cuando el vendedor intenta bajar la capacidad a 5, entonces el sistema no lo permite.
 
 ## Integraciones externas
