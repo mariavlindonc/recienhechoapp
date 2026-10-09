@@ -2,7 +2,17 @@
 
 E-commerce de pastelería a pedido: los compradores encargan productos para ahora, para una fecha futura o a medida, y la pastelería organiza su producción según la capacidad que tiene cada día.
 
-Trabajo Práctico Integrador de Arquitectura de Software 2026 (UCC).
+Trabajo Práctico Integrador de Arquitectura de Software 2026, Facultad de Ingeniería (UCC).
+
+## Integrantes
+
+- Agustín Di Mario
+- María Victoria Lindon
+- Athina Terrera
+
+## Estado
+
+Versión 0.1.0, Entrega 1: diseño y contrato con mock. Los servicios todavía solo exponen `/health`; la funcionalidad se implementa a partir de la Entrega 2.
 
 ## Objetivo
 
@@ -18,9 +28,9 @@ Que un comprador pueda encargar sin llamar a la pastelería, y que la pastelerí
 
 ## Arquitectura
 
-Cuatro microservicios en Go (Gin) detrás de un api gateway: **usuarios**, **productos**, **pedidos** y **notificaciones**. Diagramas y detalle en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Cuatro microservicios en Go (Gin) detrás de un API Gateway: **usuarios**, **productos**, **pedidos** y **notificaciones**. Diagramas y detalle en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-Publicamos la capacidad de **notificaciones** para otro grupo y consumimos su **inventario**.
+Publicamos la capacidad de **notificaciones** para que la use otro grupo, y consumimos la de **inventario** que publica otro grupo.
 
 ## Cómo levantarlo
 
@@ -30,9 +40,11 @@ Requisitos: Docker con Compose.
 cp .env.example .env && docker compose up --build -d
 ```
 
+Si el build falla por falta de memoria, construí los servicios de a uno (`docker compose build <servicio>`) y después volvé a correr `docker compose up -d`.
+
 Cómo probar el mock del contrato de notificaciones: [docs/contracts](docs/contracts/README.md#probar-contra-el-mock).
 
-Parte desplegada: pendiente (la capacidad de notificaciones se publica en una URL pública antes de la presentación).
+Parte desplegada: todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar en una URL pública antes de la presentación, y el link va a estar acá.
 
 ## Documentación
 
