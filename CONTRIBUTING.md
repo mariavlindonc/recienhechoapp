@@ -32,7 +32,7 @@ Cuerpo opcional explicando el porqué.
 ```
 
 - Tipos: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `build`, `ci`.
-- Alcance: el servicio (`usuarios`, `productos`, `pedidos`, `api-gateway`) o `infra`, `docs`.
+- Alcance: el servicio (`usuarios`, `productos`, `pedidos`, `notificaciones`, `api-gateway`) o `infra`, `docs`.
 - Cambios incompatibles: `!` después del tipo (`feat(pedidos)!: ...`) y un pie `BREAKING CHANGE:`.
 
 ## Varios agentes en paralelo: git worktrees

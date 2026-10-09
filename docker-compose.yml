@@ -37,5 +37,25 @@ services:
       - "${PEDIDOS_PORT}:${PEDIDOS_PORT}"
     networks: [interna]
 
+  notificaciones:
+    build: ./services/notificaciones
+    container_name: recienhecho-notificaciones
+    environment:
+      PORT: ${NOTIFICACIONES_PORT}
+    ports:
+      - "${NOTIFICACIONES_PORT}:${NOTIFICACIONES_PORT}"
+    networks: [interna]
+
+  # Mock del contrato publicado (docs/contracts/notificaciones-v1.yaml), ver ADR-004.
+  notificaciones-mock:
+    image: stoplight/prism:5
+    container_name: recienhecho-notificaciones-mock
+    command: mock -m false -h 0.0.0.0 -p ${NOTIFICACIONES_MOCK_PORT} /contrato/notificaciones-v1.yaml
+    volumes:
+      - ./docs/contracts:/contrato:ro
+    ports:
+      - "${NOTIFICACIONES_MOCK_PORT}:${NOTIFICACIONES_MOCK_PORT}"
+    networks: [interna]
+
 networks:
   interna:
