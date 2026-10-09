@@ -7,7 +7,7 @@ Instrucciones para agentes de código (Claude Code, Antigravity, Codex, OpenCode
 **Recién hecho**: e-commerce de pastelería a pedido. Microservicios en Go con Gin, orquestados con Docker Compose. Requisitos en [SPEC.md](SPEC.md).
 
 ```
-services/   api-gateway, usuarios, productos, pedidos (cada uno con su go.mod y Dockerfile)
+services/   api-gateway, usuarios, productos, pedidos, notificaciones (cada uno con su go.mod y Dockerfile)
 frontend/   pendiente
 docs/       arquitectura, ADRs, contratos, postmortems
 ```
@@ -35,7 +35,11 @@ for servicio in services/*/; do (cd "$servicio" && go test ./... && go vet ./...
 
 ## Infraestructura
 
-Todavía no hay dependencias (bases, caché, mensajería, etc.). Cada una que se agregue se lista acá con su uso, puerto y URL local.
+Cada dependencia que se agregue se lista acá con su uso, puerto y URL local. Las bases, la caché y el broker están propuestos en [ADR-002](docs/adr/ADR-002-persistencia.md) y [ADR-003](docs/adr/ADR-003-comunicacion-entre-servicios.md), pero todavía no están en el compose.
+
+| Dependencia | Uso | Puerto | URL local |
+|---|---|---|---|
+| Prism (`stoplight/prism:5`) | Mock del contrato de notificaciones ([ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md)) | `NOTIFICACIONES_MOCK_PORT` (4010) | http://localhost:4010/notificaciones |
 
 ## Reglas
 
