@@ -8,6 +8,7 @@ Recién hecho le ofrece a otros grupos el envío de notificaciones por email a s
 |---|---|
 | Contrato | [notificaciones.yaml](notificaciones.yaml) (OpenAPI 3.1) |
 | Versión vigente | **1.0.0** |
+| URL pública | Pendiente (se publica antes de la presentación) |
 | Estado | Mock disponible; implementación real pendiente (Entrega 2) |
 | Decisión | [ADR-004](../adr/ADR-004-contrato-de-notificaciones.md) |
 
@@ -47,6 +48,8 @@ Todos los errores tienen la forma `{"codigo": "...", "mensaje": "..."}`. El prog
 Recomendamos un timeout de 3 segundos del lado del consumidor. Si el `POST` se corta por timeout, no se sabe si quedó creado: reintentar con la misma clave lo resuelve.
 
 ### Probar contra el mock
+
+Los comandos son para bash (en Windows, Git Bash).
 
 ```bash
 cp .env.example .env
