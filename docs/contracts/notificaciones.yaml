@@ -8,6 +8,7 @@ info:
     (202) y el resultado se consulta con el GET.
 
     Documentación de uso, errores y versionado en docs/contracts/README.md.
+    La versión vigente es la de `info.version` (versionado semántico).
 servers:
   - url: http://localhost:4010
     description: Mock local (Prism, `docker compose up`)
@@ -18,7 +19,7 @@ security:
   - claveApi: []
 
 paths:
-  /v1/notificaciones:
+  /notificaciones:
     post:
       operationId: crearNotificacion
       summary: Solicita el envío de una notificación
@@ -51,7 +52,7 @@ paths:
               description: URL para consultar el estado.
               schema:
                 type: string
-              example: /v1/notificaciones/9f1c2a7e-3b4d-4e8a-9c21-5d6f7a8b9c0d
+              example: /notificaciones/9f1c2a7e-3b4d-4e8a-9c21-5d6f7a8b9c0d
           content:
             application/json:
               schema:
@@ -76,7 +77,7 @@ paths:
         '503':
           $ref: '#/components/responses/NoDisponible'
 
-  /v1/notificaciones/{id}:
+  /notificaciones/{id}:
     get:
       operationId: obtenerNotificacion
       summary: Consulta el estado de una notificación
@@ -152,7 +153,7 @@ components:
         canal:
           type: string
           enum: [email]
-          description: Medio de envío. En v1 solo `email`; se pueden sumar otros sin romper compatibilidad.
+          description: Medio de envío. Por ahora solo `email`; se pueden sumar otros sin romper compatibilidad.
         destinatario:
           type: string
           format: email

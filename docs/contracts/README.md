@@ -6,8 +6,8 @@ Recién hecho le ofrece a otros grupos el envío de notificaciones por email a s
 
 | | |
 |---|---|
-| Contrato | [notificaciones-v1.yaml](notificaciones-v1.yaml) (OpenAPI 3.1) |
-| Versión vigente | **1.0.0** (prefijo `/v1`) |
+| Contrato | [notificaciones.yaml](notificaciones.yaml) (OpenAPI 3.1) |
+| Versión vigente | **1.0.0** |
 | Estado | Mock disponible; implementación real pendiente (Entrega 2) |
 | Decisión | [ADR-004](../adr/ADR-004-contrato-de-notificaciones.md) |
 
@@ -15,10 +15,10 @@ Recién hecho le ofrece a otros grupos el envío de notificaciones por email a s
 
 | Operación | Para qué |
 |---|---|
-| `POST /v1/notificaciones` | Pedir el envío. Responde `202` con el `id` y estado `pendiente`. |
-| `GET /v1/notificaciones/{id}` | Consultar el estado: `pendiente`, `enviada` o `fallida` (con `motivo`). |
+| `POST /notificaciones` | Pedir el envío. Responde `202` con el `id` y estado `pendiente`. |
+| `GET /notificaciones/{id}` | Consultar el estado: `pendiente`, `enviada` o `fallida` (con `motivo`). |
 
-En v1 el único canal es `email`, y el cuerpo es texto plano de hasta 5000 caracteres.
+Por ahora el único canal es `email`, y el cuerpo es texto plano de hasta 5000 caracteres.
 
 ### Autenticación
 
@@ -54,7 +54,7 @@ docker compose up -d notificaciones-mock
 ```
 
 ```bash
-curl -i -X POST http://localhost:4010/v1/notificaciones \
+curl -i -X POST http://localhost:4010/notificaciones \
   -H "X-API-Key: prueba" \
   -H "Idempotency-Key: 2b0e8f4a-7c1d-4f3e-8a9b-1c2d3e4f5a6b" \
   -H "Content-Type: application/json" \
@@ -62,7 +62,7 @@ curl -i -X POST http://localhost:4010/v1/notificaciones \
 ```
 
 ```bash
-curl -H "X-API-Key: prueba" http://localhost:4010/v1/notificaciones/9f1c2a7e-3b4d-4e8a-9c21-5d6f7a8b9c0d
+curl -H "X-API-Key: prueba" http://localhost:4010/notificaciones/9f1c2a7e-3b4d-4e8a-9c21-5d6f7a8b9c0d
 ```
 
 El mock valida el pedido contra el contrato: sin `X-API-Key` responde `401` y con un cuerpo inválido responde `400`. Para forzar otras respuestas se usa el header `Prefer`:
@@ -74,10 +74,10 @@ El mock devuelve siempre los mismos ejemplos: no guarda estado, así que no se p
 
 ### Versionado
 
-- La versión mayor va en la URL (`/v1`) y la completa en `info.version` del contrato (versionado semántico).
-- **Cambios compatibles** (no cambia la URL; sube la versión menor): agregar operaciones, campos opcionales en el pedido, campos en la respuesta, valores nuevos de `canal`. El consumidor tiene que ignorar los campos que no conoce.
-- **Cambios incompatibles** (nueva `/v2`): quitar o renombrar campos, volver obligatorio uno opcional, cambiar significados o códigos de error. `/v1` sigue funcionando hasta el final de la evaluación, y avisamos con al menos 2 semanas de anticipación.
-- Cada versión publicada queda en este directorio (`notificaciones-v1.yaml`, `notificaciones-v2.yaml`, ...) y los cambios se anotan abajo.
+- La versión vigente está en `info.version` del contrato, con versionado semántico (`MAYOR.MENOR.PARCHE`). Las URLs no llevan versión.
+- **Cambios compatibles** (sube la versión menor): agregar operaciones, campos opcionales en el pedido, campos en la respuesta, valores nuevos de `canal`. El consumidor tiene que ignorar los campos que no conoce.
+- **Cambios incompatibles** (sube la versión mayor): quitar o renombrar campos, volver obligatorio uno opcional, cambiar significados o códigos de error. Los evitamos; si hiciera falta uno, se acuerda antes con el grupo consumidor y se avisa con al menos 2 semanas de anticipación.
+- Cada cambio se anota en el historial de abajo; las versiones anteriores del archivo quedan en el historial de git.
 
 ### Historial
 

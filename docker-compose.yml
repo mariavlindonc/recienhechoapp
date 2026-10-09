@@ -46,11 +46,11 @@ services:
       - "${NOTIFICACIONES_PORT}:${NOTIFICACIONES_PORT}"
     networks: [interna]
 
-  # Mock del contrato publicado (docs/contracts/notificaciones-v1.yaml), ver ADR-004.
+  # Mock del contrato publicado (docs/contracts/notificaciones.yaml), ver ADR-004.
   notificaciones-mock:
     image: stoplight/prism:5
     container_name: recienhecho-notificaciones-mock
-    command: mock -m false -h 0.0.0.0 -p ${NOTIFICACIONES_MOCK_PORT} /contrato/notificaciones-v1.yaml
+    command: mock -m false -h 0.0.0.0 -p ${NOTIFICACIONES_MOCK_PORT} /contrato/notificaciones.yaml
     volumes:
       - ./docs/contracts:/contrato:ro
     ports:

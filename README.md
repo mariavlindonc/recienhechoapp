@@ -30,16 +30,7 @@ Requisitos: Docker con Compose.
 cp .env.example .env && docker compose up --build -d
 ```
 
-| Componente | URL |
-|---|---|
-| API Gateway | http://localhost:8080/health |
-| Usuarios | http://localhost:8081/health |
-| Productos | http://localhost:8082/health |
-| Pedidos | http://localhost:8083/health |
-| Notificaciones | http://localhost:8084/health |
-| Mock del contrato de notificaciones | http://localhost:4010/v1/notificaciones |
-
-Por ahora los servicios solo responden `/health`. El mock responde según el contrato publicado (ejemplos en [docs/contracts](docs/contracts/README.md#probar-contra-el-mock)).
+Cómo probar el mock del contrato de notificaciones: [docs/contracts](docs/contracts/README.md#probar-contra-el-mock).
 
 Parte desplegada: pendiente (la capacidad de notificaciones se publica en una URL pública antes de la presentación).
 

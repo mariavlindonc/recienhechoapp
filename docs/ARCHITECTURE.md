@@ -86,7 +86,7 @@ Cada servicio es el único dueño de sus datos ([ADR-001](adr/ADR-001-limites-de
 | usuarios | 8081 | Registro, login, roles comprador/vendedor | Cuentas, roles, contraseñas hasheadas | Registro, login, perfil |
 | productos | 8082 | Catálogo, búsqueda, recetario | Productos, precios (centavos), imágenes, recetas | Catálogo, búsqueda, ABM (vendedor) |
 | pedidos | 8083 | Pedidos inmediatos, programados y especiales; calendario y capacidad de producción | Pedidos y estados, cupos por día | Crear y seguir pedidos, calendario (vendedor) |
-| notificaciones | 8084 | Envío de avisos a compradores y a usuarios de otros grupos | Notificaciones, estados, claves de idempotencia | [Contrato v1](contracts/notificaciones-v1.yaml) |
+| notificaciones | 8084 | Envío de avisos a compradores y a usuarios de otros grupos | Notificaciones, estados, claves de idempotencia | [Contrato](contracts/notificaciones.yaml) |
 
 La capacidad de producción vive en `pedidos` porque reservar el cupo y crear el pedido tienen que ser una sola operación atómica: es la operación del sistema que no puede duplicar ni perder información.
 
@@ -139,5 +139,5 @@ Pendiente (D11, Entrega 2): logs estructurados con id de correlación, métricas
 
 | Integración | Rol | Servicio responsable | Estado |
 |---|---|---|---|
-| Notificaciones | Publicamos | notificaciones (vía api-gateway) | Contrato v1 + mock ([docs/contracts](contracts/README.md), [ADR-004](adr/ADR-004-contrato-de-notificaciones.md)) |
+| Notificaciones | Publicamos | notificaciones (vía api-gateway) | Contrato + mock ([docs/contracts](contracts/README.md), [ADR-004](adr/ADR-004-contrato-de-notificaciones.md)) |
 | Inventario | Consumimos | pedidos | Esperando el contrato del otro grupo (D9) |

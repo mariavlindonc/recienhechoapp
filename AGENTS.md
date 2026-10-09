@@ -39,7 +39,7 @@ Cada dependencia que se agregue se lista acá con su uso, puerto y URL local. La
 
 | Dependencia | Uso | Puerto | URL local |
 |---|---|---|---|
-| Prism (`stoplight/prism:5`) | Mock del contrato de notificaciones ([ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md)) | `NOTIFICACIONES_MOCK_PORT` (4010) | http://localhost:4010/v1/notificaciones |
+| Prism (`stoplight/prism:5`) | Mock del contrato de notificaciones ([ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md)) | `NOTIFICACIONES_MOCK_PORT` (4010) | http://localhost:4010/notificaciones |
 
 ## Reglas
 
