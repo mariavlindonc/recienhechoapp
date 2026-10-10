@@ -40,11 +40,9 @@ Requisitos: Docker con Compose.
 cp .env.example .env && docker compose up --build -d
 ```
 
-Si el build falla por falta de memoria, construí los servicios de a uno (`docker compose build <servicio>`) y después volvé a correr `docker compose up -d`.
-
 Cómo probar el mock del contrato de notificaciones: [docs/contracts](docs/contracts/README.md#probar-contra-el-mock).
 
-Parte desplegada: todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar en una URL pública antes de la presentación, y el link va a estar acá.
+Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar en una URL pública antes de la presentación, y el link va a estar acá.
 
 ## Documentación
 
