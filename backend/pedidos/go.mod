@@ -1,4 +1,4 @@
-module github.com/mariavlindonc/recienhechoapp/services/pedidos
+module github.com/mariavlindonc/recienhechoapp/backend/pedidos
 
 go 1.27.0
 

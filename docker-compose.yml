@@ -2,7 +2,7 @@ name: recienhecho
 
 services:
   api-gateway:
-    build: ./services/api-gateway
+    build: ./backend/api-gateway
     container_name: recienhecho-api-gateway
     environment:
       PORT: ${API_GATEWAY_PORT}
@@ -11,7 +11,7 @@ services:
     networks: [interna]
 
   usuarios:
-    build: ./services/usuarios
+    build: ./backend/usuarios
     container_name: recienhecho-usuarios
     environment:
       PORT: ${USUARIOS_PORT}
@@ -20,7 +20,7 @@ services:
     networks: [interna]
 
   productos:
-    build: ./services/productos
+    build: ./backend/productos
     container_name: recienhecho-productos
     environment:
       PORT: ${PRODUCTOS_PORT}
@@ -29,7 +29,7 @@ services:
     networks: [interna]
 
   pedidos:
-    build: ./services/pedidos
+    build: ./backend/pedidos
     container_name: recienhecho-pedidos
     environment:
       PORT: ${PEDIDOS_PORT}
@@ -38,7 +38,7 @@ services:
     networks: [interna]
 
   notificaciones:
-    build: ./services/notificaciones
+    build: ./backend/notificaciones
     container_name: recienhecho-notificaciones
     environment:
       PORT: ${NOTIFICACIONES_PORT}
