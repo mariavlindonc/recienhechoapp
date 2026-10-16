@@ -48,12 +48,12 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 
 | Documento | Contenido |
 |---|---|
-| [SPEC.md](SPEC.md) | Alcance: actores, funcionalidades, reglas de negocio y criterios de aceptación |
+| [docs/SPEC.md](docs/SPEC.md) | Alcance: actores, funcionalidades, reglas de negocio y criterios de aceptación |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Servicios, datos, comunicación y diagramas |
 | [docs/adr/](docs/adr/) | Decisiones de arquitectura |
 | [docs/contracts/](docs/contracts/README.md) | Contrato publicado (notificaciones) y consumido (inventario) |
 | [docs/POSTMORTEM.md](docs/POSTMORTEM.md) | Informe de la caída controlada (pendiente) |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Ramas, commits y pull requests |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Ramas, commits y pull requests |
 | [AGENTS.md](AGENTS.md) | Comandos, convenciones y reglas (también para agentes de código) |
 
 ### Decisiones

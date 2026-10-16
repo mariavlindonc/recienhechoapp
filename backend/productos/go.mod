@@ -1,4 +1,4 @@
-module github.com/mariavlindonc/recienhechoapp/services/notificaciones
+module github.com/mariavlindonc/recienhechoapp/backend/productos
 
 go 1.27.0
 

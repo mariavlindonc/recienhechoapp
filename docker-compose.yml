@@ -2,7 +2,7 @@ name: recienhecho
 
 services:
   api-gateway:
-    build: ./services/api-gateway
+    build: ./backend/api-gateway
     container_name: recienhecho-api-gateway
     environment:
       PORT: ${API_GATEWAY_PORT}
@@ -11,7 +11,7 @@ services:
     networks: [interna]
 
   usuarios:
-    build: ./services/usuarios
+    build: ./backend/usuarios
     container_name: recienhecho-usuarios
     environment:
       PORT: ${USUARIOS_PORT}
@@ -20,7 +20,7 @@ services:
     networks: [interna]
 
   productos:
-    build: ./services/productos
+    build: ./backend/productos
     container_name: recienhecho-productos
     environment:
       PORT: ${PRODUCTOS_PORT}
@@ -29,7 +29,7 @@ services:
     networks: [interna]
 
   pedidos:
-    build: ./services/pedidos
+    build: ./backend/pedidos
     container_name: recienhecho-pedidos
     environment:
       PORT: ${PEDIDOS_PORT}
@@ -38,12 +38,34 @@ services:
     networks: [interna]
 
   notificaciones:
-    build: ./services/notificaciones
+    build: ./backend/notificaciones
     container_name: recienhecho-notificaciones
     environment:
       PORT: ${NOTIFICACIONES_PORT}
+      MONGO_URI: mongodb://${NOTIFICACIONES_MONGO_USUARIO}:${NOTIFICACIONES_MONGO_CLAVE}@mongo-notificaciones:27017/?authSource=admin
     ports:
       - "${NOTIFICACIONES_PORT}:${NOTIFICACIONES_PORT}"
+    depends_on:
+      mongo-notificaciones:
+        condition: service_healthy
+    networks: [interna]
+
+  # Base propia de notificaciones (ADR-002): ningún otro servicio se conecta acá.
+  mongo-notificaciones:
+    image: mongo:8
+    container_name: recienhecho-mongo-notificaciones
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${NOTIFICACIONES_MONGO_USUARIO}
+      MONGO_INITDB_ROOT_PASSWORD: ${NOTIFICACIONES_MONGO_CLAVE}
+    volumes:
+      - mongo-notificaciones-datos:/data/db
+    ports:
+      - "${NOTIFICACIONES_MONGO_PORT}:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks: [interna]
 
   # Mock del contrato publicado (docs/contracts/notificaciones.yaml), ver ADR-004.
@@ -56,6 +78,9 @@ services:
     ports:
       - "${NOTIFICACIONES_MOCK_PORT}:${NOTIFICACIONES_MOCK_PORT}"
     networks: [interna]
+
+volumes:
+  mongo-notificaciones-datos:
 
 networks:
   interna:
