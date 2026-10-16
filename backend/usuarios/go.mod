@@ -1,4 +1,4 @@
-module github.com/mariavlindonc/recienhechoapp/services/usuarios
+module github.com/mariavlindonc/recienhechoapp/backend/usuarios
 
 go 1.27.0
 

@@ -4,10 +4,10 @@ Instrucciones para agentes de código (Claude Code, Antigravity, Codex, OpenCode
 
 ## Proyecto
 
-**Recién hecho**: e-commerce de pastelería a pedido. Microservicios en Go con Gin, orquestados con Docker Compose. Requisitos en [SPEC.md](SPEC.md).
+**Recién hecho**: e-commerce de pastelería a pedido. Microservicios en Go con Gin, orquestados con Docker Compose. Requisitos en [SPEC.md](docs/SPEC.md).
 
 ```
-services/   api-gateway, usuarios, productos, pedidos, notificaciones (cada uno con su go.mod y Dockerfile)
+backend/    api-gateway, usuarios, productos, pedidos, notificaciones (cada uno con su go.mod y Dockerfile)
 frontend/   pendiente
 docs/       arquitectura, ADRs, contratos, postmortems
 ```
@@ -20,7 +20,7 @@ docker compose up --build -d         # levantar
 docker compose down                  # bajar
 
 # Tests y lint, desde la raíz (en Windows, con Git Bash). gofmt no tiene que listar nada.
-for servicio in services/*/; do (cd "$servicio" && go test ./... && go vet ./...) || break; done; gofmt -l services
+for servicio in backend/*/; do (cd "$servicio" && go test ./... && go vet ./...) || break; done; gofmt -l backend
 ```
 
 ## Convenciones
@@ -31,7 +31,7 @@ for servicio in services/*/; do (cd "$servicio" && go test ./... && go vet ./...
 - Configuración por variables de entorno; nada sensible en el código.
 - Un servicio no importa código de otro.
 - Commits con [Conventional Commits](https://www.conventionalcommits.org/es/) en español: `feat(productos): agrega listado de catálogo`.
-- Ramas con git flow; detalle en [CONTRIBUTING.md](CONTRIBUTING.md).
+- Ramas con git flow; detalle en [CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ## Infraestructura
 
@@ -40,6 +40,7 @@ Cada dependencia que se agregue se lista acá con su uso, puerto y URL local. La
 | Dependencia | Uso | Puerto | URL local |
 |---|---|---|---|
 | Prism (`stoplight/prism:5`) | Mock del contrato de notificaciones ([ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md)) | `NOTIFICACIONES_MOCK_PORT` (4010) | http://localhost:4010/notificaciones |
+| MongoDB (`mongo:8`) | Base propia de `notificaciones` ([ADR-002](docs/adr/ADR-002-persistencia.md)) | `NOTIFICACIONES_MONGO_PORT` (27017) | `mongodb://localhost:27017` (usuario y clave en `.env`) |
 
 ## Reglas
 

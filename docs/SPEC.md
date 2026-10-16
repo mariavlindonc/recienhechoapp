@@ -51,7 +51,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 | R3 | Un pedido se confirma cuando el inventario del proveedor reserva los insumos de la receta. Si el proveedor no responde, el pedido queda `pendiente_confirmacion` y no se rechaza. |
 | R4 | El precio queda fijado al crear el pedido; cambios posteriores del catálogo no lo afectan. |
 | R5 | Los montos se manejan en centavos (enteros), nunca con decimales. |
-| R6 | Un pedido solo pasa por las transiciones válidas (ver [estados de un pedido](docs/ARCHITECTURE.md#estados-de-un-pedido)). No se puede cancelar en producción ni entregar algo que no está listo. |
+| R6 | Un pedido solo pasa por las transiciones válidas (ver [estados de un pedido](ARCHITECTURE.md#estados-de-un-pedido)). No se puede cancelar en producción ni entregar algo que no está listo. |
 | R7 | Cancelar libera el cupo del día y los insumos reservados. |
 | R8 | Una cotización de pedido especial vence a las 48 h si el comprador no la acepta. |
 
@@ -85,7 +85,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 
 | Integración | Rol | Uso |
 |---|---|---|
-| Notificaciones | **Publicamos** | Otros sistemas nos piden enviar emails a sus usuarios. Contrato y documentación en [docs/contracts](docs/contracts/README.md). |
+| Notificaciones | **Publicamos** | Otros sistemas nos piden enviar emails a sus usuarios. Contrato y documentación en [contracts](contracts/README.md). |
 | Inventario | **Consumimos** | Al confirmar un pedido, `pedidos` consulta y reserva los insumos de la receta. Detalle en D9 cuando el otro grupo publique su contrato. |
 
 ## Requisitos no funcionales
