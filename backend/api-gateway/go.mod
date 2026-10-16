@@ -1,4 +1,4 @@
-module github.com/mariavlindonc/recienhechoapp/services/api-gateway
+module github.com/mariavlindonc/recienhechoapp/backend/api-gateway
 
 go 1.27.0
 

@@ -90,7 +90,7 @@ Cada servicio es el único dueño de sus datos ([ADR-001](adr/ADR-001-limites-de
 
 La capacidad de producción vive en `pedidos` porque reservar el cupo y crear el pedido tienen que ser una sola operación atómica: es la operación del sistema que no puede duplicar ni perder información.
 
-Estructura de cada servicio, hoy: `services/<servicio>/` con su propio `go.mod`, `main.go` (solo `/health`) y `Dockerfile`. Ningún servicio importa código de otro. La arquitectura interna de cada uno (D2) se define en la Entrega 2.
+Estructura de cada servicio, hoy: `backend/<servicio>/` con su propio `go.mod`, `main.go` (solo `/health`) y `Dockerfile`. Ningún servicio importa código de otro. La arquitectura interna de cada uno (D2) se define en la Entrega 2.
 
 ### Estados de un pedido
 
