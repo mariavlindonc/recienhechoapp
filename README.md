@@ -53,8 +53,6 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 | [docs/adr/](docs/adr/) | Decisiones de arquitectura |
 | [docs/contracts/](docs/contracts/README.md) | Contrato publicado (notificaciones) y consumido (inventario) |
 | [docs/POSTMORTEM.md](docs/POSTMORTEM.md) | Informe de la caída controlada (pendiente) |
-| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Ramas, commits y pull requests |
-| [AGENTS.md](AGENTS.md) | Comandos, convenciones y reglas (también para agentes de código) |
 
 ### Decisiones
 
