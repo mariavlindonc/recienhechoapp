@@ -59,6 +59,8 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 | Decisión | ADR | Estado |
 |---|---|---|
 | D1 Límites de los servicios | [ADR-001](docs/adr/ADR-001-limites-de-los-servicios.md) | Aceptado |
-| D3 Persistencia | [ADR-002](docs/adr/ADR-002-persistencia.md) | Propuesto |
+| D3 Persistencia | [ADR-002](docs/adr/ADR-002-persistencia.md) | Aceptado para notificaciones; propuesto para el resto |
 | D5 Comunicación entre servicios | [ADR-003](docs/adr/ADR-003-comunicacion-entre-servicios.md) | Propuesto |
 | D8 Contrato propio | [ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md) | Aceptado |
+| Canal y servidor de envío | [ADR-005](docs/adr/ADR-005-envio-de-email.md) | Aceptado |
+| D11 Observabilidad | [ADR-006](docs/adr/ADR-006-observabilidad.md) | Aceptado (versión inicial) |

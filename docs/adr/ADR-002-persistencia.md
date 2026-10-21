@@ -2,7 +2,8 @@
 
 ## Estado
 
-Propuesto (versión inicial; se valida en la Entrega 2)
+- **Aceptado** para `notificaciones` (MongoDB), Entrega 2.
+- **Propuesto** para `usuarios`, `productos` y `pedidos`: se acepta al implementar cada servicio.
 
 ## Contexto
 
@@ -19,26 +20,31 @@ Patrones de acceso esperados:
 
 | Servicio | Almacenamiento | Por qué |
 |---|---|---|
-| usuarios | PostgreSQL | Datos tabulares, email con restricción `UNIQUE` |
-| productos | PostgreSQL + Redis (caché) | Catálogo estructurado con filtros; Redis guarda el catálogo y el detalle de producto porque cambian poco y se piden mucho |
+| usuarios | MySQL | Datos tabulares, email con restricción `UNIQUE` |
+| productos | MySQL + Redis (caché) | Catálogo estructurado con filtros; Redis guarda el catálogo y el detalle de producto porque cambian poco y se piden mucho |
 | pedidos | MongoDB | El pedido es un documento con sus ítems adentro y se lee entero, sin joins; los pedidos especiales tienen campos variables |
 | notificaciones | MongoDB | Documentos simples; índice único sobre (clave de API, `Idempotency-Key`) para no duplicar envíos |
+
+**Motor relacional: MySQL.** Lo usamos en la materia y el grupo ya lo conoce, así que no suma curva de aprendizaje. Cubre lo que necesitan `usuarios` y `productos`: restricciones `UNIQUE`, índices compuestos para filtrar el catálogo por categoría y precio, y transacciones (InnoDB).
 
 Precios y montos se guardan como enteros en centavos (`int64`), nunca como decimales con coma flotante.
 
 **Cupo de producción.** Cada día tiene un documento en `pedidos` con la capacidad y lo ya reservado. La reserva se hace con un único update condicional atómico (`reservado + cantidad <= capacidad`): si no matchea, no hay cupo. Dentro de un documento MongoDB garantiza atomicidad, así que no hacen falta transacciones multidocumento. El tratamiento completo (concurrencia, reintentos, fallas parciales) va en D4.
 
+**Notificaciones.** Una base MongoDB propia (`mongo:8`). La colección `notificaciones` guarda cada envío con su estado; la consulta es por id y siempre filtrando por la clave de API, así que un grupo no ve las notificaciones de otro. Las claves de idempotencia van en una colección aparte, con índice único sobre (clave de API, `Idempotency-Key`) y un índice TTL que las borra a las 24 h, como dice el contrato; así vence la clave pero la notificación se puede seguir consultando.
+
 **Imágenes.** No se guardan en la base: se guarda la URL. Dónde se alojan se decide al implementar `productos`.
 
 ## Alternativas consideradas
 
-- **PostgreSQL para todo.** Simplifica la operación y daría transacciones en `pedidos`, pero no cumple el requisito de dos tipos de almacenamiento, y los pedidos especiales con campos libres quedarían en columnas JSON.
+- **PostgreSQL en lugar de MySQL.** Ofrece más (JSONB, índices parciales), pero para tablas de usuarios y un catálogo no lo necesitamos, y con MySQL el grupo tiene más experiencia.
+- **MySQL para todo.** Simplifica la operación y daría transacciones en `pedidos`, pero no cumple el requisito de dos tipos de almacenamiento, y los pedidos especiales con campos libres quedarían en columnas JSON.
 - **MongoDB para productos.** El catálogo es tabular y se filtra por varios campos; ahí un esquema relacional con restricciones encaja mejor.
 - **Caché en memoria de cada instancia** (en lugar de Redis). Más simple, pero con varias instancias cada una tendría su propia copia y se complica invalidar.
 
 ## Consecuencias
 
-- Hay que operar tres motores (PostgreSQL, MongoDB, Redis); por ahora solo están propuestos y se suman al `docker-compose` cuando este ADR pase a Aceptado.
+- Hay que operar tres motores (MySQL, MongoDB, Redis). Cada uno se suma al `docker-compose` cuando se acepta para su servicio: MongoDB de `notificaciones` entra en la Entrega 2.
 - No hay joins entre servicios; las vistas que cruzan datos aceptan consistencia eventual.
 - La caché de productos puede mostrar un precio viejo por unos segundos. El precio que vale es el que `pedidos` le pide a `productos` al crear el pedido, sin caché. La vigencia y la invalidación se definen en D7.
 - En MongoDB los esquemas no los controla la base: hay que validarlos en el código del servicio.

@@ -44,8 +44,8 @@ flowchart TB
         pedidos["pedidos<br/>Go + Gin"]
         notificaciones["notificaciones<br/>Go + Gin"]
         busqueda[("Motor de búsqueda<br/>(D6)")]
-        pgU[("PostgreSQL<br/>usuarios")]
-        pgP[("PostgreSQL<br/>productos")]
+        myU[("MySQL<br/>usuarios")]
+        myP[("MySQL<br/>productos")]
         redis[("Redis<br/>caché de catálogo")]
         mongoPed[("MongoDB<br/>pedidos")]
         mongoNot[("MongoDB<br/>notificaciones")]
@@ -63,8 +63,8 @@ flowchart TB
     gateway --> productos
     gateway --> pedidos
     gateway --> notificaciones
-    usuarios --> pgU
-    productos --> pgP
+    usuarios --> myU
+    productos --> myP
     productos --> redis
     productos --> busqueda
     pedidos --> mongoPed
@@ -113,8 +113,8 @@ Los pedidos especiales pasan antes por `solicitado` → `cotizado` y de ahí a `
 
 | Servicio | Almacenamiento | Motivo |
 |---|---|---|
-| usuarios | PostgreSQL | Datos tabulares, email único |
-| productos | PostgreSQL + Redis | Filtros sobre el catálogo; se lee mucho y cambia poco |
+| usuarios | MySQL | Datos tabulares, email único |
+| productos | MySQL + Redis | Filtros sobre el catálogo; se lee mucho y cambia poco |
 | pedidos | MongoDB | Pedido como documento con sus ítems; campos libres en pedidos especiales |
 | notificaciones | MongoDB | Documentos simples, índice único de idempotencia |
 
