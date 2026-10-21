@@ -37,4 +37,5 @@ Publicamos **notificaciones**: otro sistema nos pide mandar un email a uno de su
 - El consumidor tiene que hacer polling del `GET` si quiere saber el resultado final; un webhook de aviso se puede sumar después como cambio compatible.
 - Tenemos que guardar las claves de idempotencia (24 h) y las notificaciones por grupo ([ADR-002](ADR-002-persistencia.md)).
 - El mock no tiene estado: sirve para integrar formatos y errores, no para probar idempotencia.
-- Queda pendiente elegir el proveedor real de email (Entrega 2) y publicar la capacidad en una URL pública antes de la presentación.
+- El servidor de correo quedó definido en [ADR-005](ADR-005-envio-de-email.md) (Entrega 2): Mailpit en desarrollo y Gmail para la demo. El contrato no cambia, porque el servidor de correo no es visible para el consumidor.
+- Queda pendiente publicar la capacidad en una URL pública antes de la presentación.
