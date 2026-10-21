@@ -2,7 +2,8 @@
 
 ## Estado
 
-Propuesto (versión inicial; se valida en la Entrega 2)
+- **Aceptado** para la comunicación síncrona del api-gateway, Entrega 2.
+- **Propuesto** para el resto (llamadas de `pedidos` y mensajería con RabbitMQ): se acepta al implementar `pedidos`, para la presentación.
 
 ## Contexto
 
@@ -61,4 +62,11 @@ Que el evento se publique sí o sí después de guardar el cambio (sin perderlo 
 - Los avisos al comprador pueden llegar unos segundos después del cambio de estado.
 - Hay que operar RabbitMQ; se suma al `docker-compose` cuando este ADR pase a Aceptado.
 - Cada consumidor tiene que ser idempotente y la DLQ necesita que alguien la mire (alerta en D11).
-- Los valores de timeout y reintentos son iniciales: se ajustan con los tests de carga (D13).
+- Los valores de timeout y reintentos son iniciales: se ajustan con los tests de carga ([ADR-013](ADR-013-capacidad-y-costos.md)).
+
+## Validación (Entrega 2)
+
+- **Gateway → servicios:** implementado con `httputil.ReverseProxy` hacia `notificaciones`, timeout de 3 s y sin reintentos. Si el servicio no responde, el gateway devuelve `503 no_disponible`. Se acepta como estaba.
+- **Asíncrono en el flujo propio de notificaciones:** el `POST` responde `202` y el envío del mail pasa en segundo plano, con 3 reintentos y espera exponencial. Confirma la idea de este ADR de no hacer esperar al que pide por una dependencia lenta, aunque todavía sin broker.
+- **RabbitMQ** queda para la presentación, cuando exista `pedidos` para publicar `pedido.estado_cambiado`.
+- Los mecanismos de protección y la tabla de dependencias de cada servicio están en [ADR-011](ADR-011-resiliencia.md); el circuit breaker hacia inventario en [ADR-010](ADR-010-consumo-de-inventario.md).
