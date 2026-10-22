@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -8,12 +9,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 const nombreServicio = "api-gateway"
 
 // tiempoMaximoServicios es el timeout del gateway hacia los servicios internos (ADR-003).
 const tiempoMaximoServicios = 3 * time.Second
+
+// esperaTrazasAlApagar es cuánto se espera para mandar los últimos spans.
+const esperaTrazasAlApagar = 5 * time.Second
 
 func main() {
 	// Todos los logs del gateway salen en JSON con el nombre del servicio (ADR-006).
@@ -35,6 +40,16 @@ func ejecutar() error {
 		return fmt.Errorf("NOTIFICACIONES_URLS: %w", err)
 	}
 
+	apagarTrazas, err := iniciarTrazas(context.Background(), nombreServicio)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		contextoTrazas, cancelarTrazas := context.WithTimeout(context.Background(), esperaTrazasAlApagar)
+		defer cancelarTrazas()
+		apagarTrazas(contextoTrazas)
+	}()
+
 	router := nuevoRouter(nuevoProxyBalanceado("notificaciones", instanciasNotificaciones, tiempoMaximoServicios))
 	slog.Info("api-gateway escuchando", "puerto", puerto, "instancias_notificaciones", len(instanciasNotificaciones))
 	if err := router.Run(":" + puerto); err != nil {
@@ -47,11 +62,18 @@ func ejecutar() error {
 // al servicio de notificaciones tal cual llega (headers, cuerpo y respuesta).
 func nuevoRouter(notificaciones http.Handler) *gin.Engine {
 	router := gin.New()
-	router.Use(gin.Recovery(), registrarSolicitudes(slog.Default()))
+	// otelgin va primero: abre el span de la solicitud y así el middleware de logs
+	// ya ve el trace_id.
+	router.Use(otelgin.Middleware(nombreServicio, otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registrarSolicitudes(slog.Default()))
 	router.GET("/health", func(contexto *gin.Context) {
 		contexto.JSON(http.StatusOK, gin.H{"status": "ok", "service": nombreServicio})
 	})
 	router.Any("/notificaciones", gin.WrapH(notificaciones))
 	router.Any("/notificaciones/*resto", gin.WrapH(notificaciones))
 	return router
+}
+
+// sinChequeosDeSalud evita trazar /health, que no aporta nada en Jaeger.
+func sinChequeosDeSalud(pedido *http.Request) bool {
+	return pedido.URL.Path != "/health"
 }
