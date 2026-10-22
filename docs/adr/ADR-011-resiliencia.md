@@ -5,7 +5,7 @@
 - **Aceptado** para `api-gateway` y `notificaciones`, Entrega 2.
 - **Propuesto** para `pedidos` y `productos`: se acepta al implementar cada servicio.
 
-Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, límite de uso y envío en segundo plano con reintentos. Faltan el proxy con timeout y el balanceo del api-gateway, y un timeout por operación contra MongoDB en `notificaciones` (hoy solo lo tiene el ping de `/health`, de 2 s).
+Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB, límite de uso y envío en segundo plano con reintentos. Faltan el proxy con timeout y el balanceo del api-gateway.
 
 ## Contexto
 
@@ -19,7 +19,7 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 |---|---|---|---|
 | api-gateway | notificaciones | `503 no_disponible` en `/notificaciones*`; las demás rutas siguen | Timeout de 3 s; balanceo con health checks ([ADR-012](ADR-012-balanceo-de-carga.md)) |
 | api-gateway | usuarios, productos, pedidos | `503` en las rutas de ese servicio | Timeout de 3 s |
-| notificaciones | MongoDB | `POST` y `GET` responden `503`; nada se acepta sin guardarse | Timeout de 2 s por operación (pendiente de implementar); `/health` informa la falla |
+| notificaciones | MongoDB | `POST` y `GET` responden `503`; nada se acepta sin guardarse | Timeout de 2 s por operación; `/health` informa la falla |
 | notificaciones | Servidor de correo (SMTP) | El `POST` sigue respondiendo `202`; las notificaciones quedan `pendiente` | Envío en segundo plano con timeout de 10 s por envío; tras el primer intento, 3 reintentos con espera exponencial (30, 60 y 120 s) y después `fallida`; si el servidor rechaza el mensaje o el destinatario de forma definitiva (5xx), pasa a `fallida` sin reintentos; alerta de [ADR-006](ADR-006-observabilidad.md) |
 | pedidos | productos | No se crea el pedido: "no pudimos tomar el pedido, probá en un rato" | Timeout de 1 s y 2 reintentos ([ADR-003](ADR-003-comunicacion-entre-servicios.md)) |
 | pedidos | inventario (otro grupo) | El pedido queda `pendiente_confirmacion` | Timeout de 1,5 s y circuit breaker ([ADR-010](ADR-010-consumo-de-inventario.md)) |
