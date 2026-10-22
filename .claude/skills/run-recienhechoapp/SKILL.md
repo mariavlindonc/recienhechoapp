@@ -63,4 +63,5 @@ Integración contra el MongoDB que levanta `arrancar` (sin `MONGO_URI_TEST` los 
 - **Con Mailpit caído la notificación tarda unos 3,5 minutos en pasar a `fallida`** (reintentos a los 30, 60 y 120 s). `caida` solo muestra el `pendiente`.
 - **Los logs todavía son texto**, mezcla de `[GIN-debug]` y `slog` sin JSON ni `trace_id` (eso llega con el paso 3).
 - **No hay `jq` en Git Bash**: el script saca `id` y `estado` del JSON con `sed`.
+- **`smoke.sh` se baja siempre en LF** por el `.gitattributes` de esta carpeta. Con `core.autocrlf=true` llegaba con CRLF: Git Bash lo tolera, pero bash en Linux o WSL no.
 - **`kill` desde Git Bash sí cierra el `.exe` de Windows.** Después de `detener`, `/health` deja de responder y `tasklist` no lo muestra.
