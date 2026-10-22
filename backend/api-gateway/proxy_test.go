@@ -139,19 +139,6 @@ func TestHealthDelGateway(prueba *testing.T) {
 	}
 }
 
-func TestParsearInstancias(prueba *testing.T) {
-	instancias, err := parsearInstancias(" http://notificaciones-1:8084 , http://notificaciones-2:8084,")
-	if err != nil || len(instancias) != 2 || instancias[1].Host != "notificaciones-2:8084" {
-		prueba.Fatalf("instancias = %v, err = %v", instancias, err)
-	}
-
-	for _, invalido := range []string{"", " , ", "notificaciones:8084", "ftp://notificaciones:8084", "http://"} {
-		if _, err := parsearInstancias(invalido); err == nil {
-			prueba.Errorf("%q tenía que dar error", invalido)
-		}
-	}
-}
-
 func comprobarNoDisponible(prueba *testing.T, respuesta *httptest.ResponseRecorder) {
 	prueba.Helper()
 	if respuesta.Code != http.StatusServiceUnavailable {

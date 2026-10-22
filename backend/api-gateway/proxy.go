@@ -3,12 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -102,25 +100,4 @@ func responderNoDisponible(escritor http.ResponseWriter) {
 		"codigo":  "no_disponible",
 		"mensaje": "Servicio temporalmente no disponible.",
 	})
-}
-
-// parsearInstancias lee una lista de URLs separadas por comas, como la de
-// NOTIFICACIONES_URLS: "http://notificaciones-1:8084,http://notificaciones-2:8084".
-func parsearInstancias(texto string) ([]*url.URL, error) {
-	var instancias []*url.URL
-	for _, parte := range strings.Split(texto, ",") {
-		parte = strings.TrimSpace(parte)
-		if parte == "" {
-			continue
-		}
-		direccion, err := url.Parse(parte)
-		if err != nil || (direccion.Scheme != "http" && direccion.Scheme != "https") || direccion.Host == "" {
-			return nil, fmt.Errorf("instancia %q inválida: tiene que ser una URL http://host:puerto", parte)
-		}
-		instancias = append(instancias, direccion)
-	}
-	if len(instancias) == 0 {
-		return nil, fmt.Errorf("no hay ninguna instancia configurada")
-	}
-	return instancias, nil
 }
