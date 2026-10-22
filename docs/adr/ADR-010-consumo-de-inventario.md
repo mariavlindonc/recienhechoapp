@@ -32,9 +32,9 @@ type ReservadorDeInsumos interface {
 | Reserva OK | Pedido `confirmado` | "Pedido confirmado" |
 | Sin stock (respuesta de negocio del proveedor) | Libera el cupo del día y cancela el pedido | "No tenemos insumos para esa fecha, probá con otra" |
 | Timeout (1,5 s), 5xx o sin conexión | Pedido `pendiente_confirmacion`, cupo reservado | "Recibimos tu pedido, te avisamos por mail cuando se confirme" |
-| 4xx inesperado (error nuestro o cambio de contrato) | Pedido `pendiente_confirmacion`, cupo reservado; no se reintenta solo y se loguea como error para revisarlo | Igual que timeout |
+| 4xx inesperado (error nuestro o cambio de contrato) | Pedido `pendiente_confirmacion`, cupo reservado; se loguea como error para revisarlo. Si se reintenta o queda frenado: **pendiente de decidir** ([#23](https://github.com/mariavlindonc/recienhechoapp/issues/23)) | Igual que timeout |
 
-**Reconfirmación en segundo plano:** un proceso de `pedidos` reintenta las reservas de los pedidos `pendiente_confirmacion` por timeout, 5xx o falta de conexión, con espera exponencial desde 1 minuto hasta un máximo de 10. Cuando confirma, cambia el estado y publica el evento (el comprador recibe el mail por `notificaciones`). Si a las 24 h no se pudo confirmar, el pedido se marca en el calendario del vendedor para que decida, sin cambiar de estado.
+**Reconfirmación en segundo plano:** un proceso de `pedidos` vuelve a intentar las reservas de los pedidos `pendiente_confirmacion`. Cuando confirma, cambia el estado y publica el evento (el comprador recibe el mail por `notificaciones`). Cada cuánto reintenta y qué pasa si después de 24 h sigue sin confirmarse: **pendiente de decidir** ([#23](https://github.com/mariavlindonc/recienhechoapp/issues/23)).
 
 **Circuit breaker** sobre el adaptador ([ADR-011](ADR-011-resiliencia.md)): con 5 fallas seguidas se abre por 30 s y los pedidos van directo a `pendiente_confirmacion` sin esperar el timeout.
 
