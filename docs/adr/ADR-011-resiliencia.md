@@ -35,7 +35,7 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 - **Reintentos con espera exponencial** solo en operaciones idempotentes y errores transitorios ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
 - **Circuit breaker** (`sony/gobreaker`) en las llamadas de `pedidos` al inventario: abre con 5 fallas seguidas, espera 30 s y deja pasar una llamada de prueba. Su estado se expone como métrica.
 - **Trabajo en segundo plano** donde el usuario no necesita esperar: envío de mails, reconfirmación de pedidos, actualización del índice.
-- **Health checks:** cada servicio expone `/health`, que verifica sus dependencias obligatorias (por ejemplo, `notificaciones` hace ping a MongoDB). El gateway lo usa para sacar instancias caídas.
+- **Health checks:** cada servicio expone `/health`, que verifica sus dependencias obligatorias (por ejemplo, `notificaciones` hace ping a MongoDB). Para sacar instancias caídas del balanceo, el gateway usa otro chequeo más liviano, `/vivo`, que no mira dependencias ([ADR-012](ADR-012-balanceo-de-carga.md)).
 - **Límite de uso** en `notificaciones`: 60 solicitudes por minuto por grupo (todas las claves de un grupo suman), para que un grupo consumidor no tumbe el servicio. El contador está en la memoria de cada instancia ([ADR-012](ADR-012-balanceo-de-carga.md)).
 
 **Caídas previstas para el POSTMORTEM (Entrega 2):**

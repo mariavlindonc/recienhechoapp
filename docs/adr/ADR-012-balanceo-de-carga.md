@@ -4,7 +4,7 @@
 
 Aceptado (Entrega 2; se implementa para la presentación)
 
-Implementación: todavía no hay balanceo. El api-gateway solo expone `/health` y el compose tiene una sola instancia de `notificaciones`. Lo que ya cumple `notificaciones` es el `/health` que el gateway va a consultar.
+Implementación: todavía no hay balanceo. El api-gateway solo expone `/health` y el compose tiene una sola instancia de `notificaciones`. A `notificaciones` le falta el endpoint `/vivo` que el gateway va a consultar.
 
 ## Contexto
 
@@ -26,7 +26,8 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 
 **Verificación de disponibilidad:**
 
-- Activa: el gateway llama a `GET /health` de cada instancia cada 5 s, con timeout de 3 s (el ping a MongoDB que hace `/health` espera hasta 2 s). Dos fallas seguidas la sacan del balanceo; una respuesta OK la vuelve a sumar.
+- Activa: el gateway llama a `GET /vivo` de cada instancia cada 5 s, con timeout de 1 s. Dos fallas seguidas la sacan del balanceo; una respuesta OK la vuelve a sumar.
+- `/vivo` es un chequeo liviano: responde `200` si el proceso atiende, sin consultar MongoDB. `/health`, que sí hace ping a MongoDB, queda para personas y para el compose. Las dos instancias comparten el mismo MongoDB: si el gateway usara `/health`, una falla de MongoDB sacaría a las dos a la vez, y con MongoDB lento podrían entrar y salir del balanceo sin parar. El balanceo solo tiene que sacar la instancia que se cayó; la caída de MongoDB ya está tratada en [ADR-011](ADR-011-resiliencia.md).
 - Pasiva: si una solicitud a una instancia falla por conexión o timeout, se marca como caída sin esperar al próximo chequeo. El gateway no reintenta ([ADR-003](ADR-003-comunicacion-entre-servicios.md)): esa solicitud responde `503` y el consumidor reintenta con la misma `Idempotency-Key`, como indica el contrato, y el reintento ya va a la otra instancia.
 - Sin instancias sanas: `503 no_disponible`.
 
@@ -43,6 +44,7 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 |---|---|---|
 | **Balanceo en el api-gateway (elegida)** | No suma contenedores; las métricas por instancia salen del mismo lugar que el resto del ruteo; se explica con código propio | Hay que escribir el round-robin y los health checks (unas decenas de líneas) |
 | **Nginx o Traefik delante de las instancias** | Probado, con health checks configurables | Un salto y un componente más; en Nginx libre los health checks activos son limitados |
+| **Chequear `/health` (con ping a MongoDB) en lugar de `/vivo`** | No suma un endpoint | Ante una falla de MongoDB saca a todas las instancias juntas, y el ping de hasta 2 s obliga a un timeout más largo |
 | **DNS de Docker (`deploy.replicas`)** | Cero código | No detecta instancias caídas ni da métricas por instancia |
 | **Balancear `pedidos`** | Es el servicio con más lógica | No va a tener lógica hasta la presentación; no hay forma de demostrarlo en la Entrega 2 |
 
