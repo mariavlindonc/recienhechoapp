@@ -6,8 +6,11 @@ services:
     container_name: recienhecho-api-gateway
     environment:
       PORT: ${API_GATEWAY_PORT}
+      # Instancias de notificaciones entre las que reparte el gateway (ADR-012).
+      NOTIFICACIONES_URLS: http://notificaciones:${NOTIFICACIONES_PORT}
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
+    depends_on: [notificaciones]
     networks: [interna]
 
   usuarios:
