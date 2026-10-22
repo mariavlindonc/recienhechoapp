@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,8 +21,9 @@ const nombreServicio = "api-gateway"
 // tiempoMaximoServicios es el timeout del gateway hacia los servicios internos (ADR-003).
 const tiempoMaximoServicios = 3 * time.Second
 
-// esperaTrazasAlApagar es cuánto se espera para mandar los últimos spans.
-const esperaTrazasAlApagar = 5 * time.Second
+// esperaAlApagar es cuánto se espera, al apagar, para terminar las solicitudes en
+// curso y mandar los últimos spans (igual que en notificaciones).
+const esperaAlApagar = 10 * time.Second
 
 func main() {
 	// Todos los logs del gateway salen en JSON con el nombre del servicio (ADR-006).
@@ -40,30 +45,63 @@ func ejecutar() error {
 		return fmt.Errorf("NOTIFICACIONES_URLS: %w", err)
 	}
 
-	apagarTrazas, err := iniciarTrazas(context.Background(), nombreServicio)
+	// El contexto se cancela cuando Docker pide apagar el servicio (SIGTERM) o con Ctrl+C.
+	contexto, cancelar := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancelar()
+
+	apagarTrazas, err := iniciarTrazas(contexto, nombreServicio)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		contextoTrazas, cancelarTrazas := context.WithTimeout(context.Background(), esperaTrazasAlApagar)
+		// Al apagar, manda los spans que hayan quedado pendientes.
+		contextoTrazas, cancelarTrazas := context.WithTimeout(context.Background(), esperaAlApagar)
 		defer cancelarTrazas()
 		apagarTrazas(contextoTrazas)
 	}()
 
 	medidor := nuevasMetricas()
+	proxyNotificaciones := nuevoProxyBalanceado("notificaciones", instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
+	servidor := &http.Server{
+		Addr:              ":" + puerto,
+		Handler:           nuevoRouter(proxyNotificaciones, medidor.medirSolicitudes()),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	var procesos sync.WaitGroup
+	procesos.Add(1)
 	go func() {
+		defer procesos.Done()
 		// Sin métricas el gateway sigue atendiendo: el problema queda en el log.
-		if err := medidor.servir(context.Background(), puertoMetricas()); err != nil {
+		if err := medidor.servir(contexto, puertoMetricas()); err != nil {
 			slog.Error("no se pudieron publicar las métricas", "error", err)
 		}
 	}()
 
-	proxyNotificaciones := nuevoProxyBalanceado("notificaciones", instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
-	router := nuevoRouter(proxyNotificaciones, medidor.medirSolicitudes())
-	slog.Info("api-gateway escuchando", "puerto", puerto, "instancias_notificaciones", len(instanciasNotificaciones))
-	if err := router.Run(":" + puerto); err != nil {
+	errorDelServidor := make(chan error, 1)
+	go func() {
+		slog.Info("api-gateway escuchando", "puerto", puerto, "instancias_notificaciones", len(instanciasNotificaciones))
+		if err := servidor.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errorDelServidor <- err
+		}
+		close(errorDelServidor)
+	}()
+
+	select {
+	case err := <-errorDelServidor:
+		cancelar()
+		procesos.Wait()
 		return fmt.Errorf("servidor HTTP: %w", err)
+	case <-contexto.Done():
 	}
+
+	slog.Info("apagando api-gateway")
+	contextoApagado, cancelarApagado := context.WithTimeout(context.Background(), esperaAlApagar)
+	defer cancelarApagado()
+	if err := servidor.Shutdown(contextoApagado); err != nil {
+		return fmt.Errorf("apagar el servidor HTTP: %w", err)
+	}
+	procesos.Wait()
 	return nil
 }
 
