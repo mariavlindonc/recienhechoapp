@@ -1,27 +1,123 @@
 package main
 
 import (
-	"log"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 const nombreServicio = "api-gateway"
 
+// tiempoMaximoServicios es el timeout del gateway hacia los servicios internos (ADR-003).
+const tiempoMaximoServicios = 3 * time.Second
+
+// esperaAlApagar es cuánto se espera, al apagar, para terminar las solicitudes en
+// curso y mandar los últimos spans (igual que en notificaciones).
+const esperaAlApagar = 10 * time.Second
+
 func main() {
-	puerto := os.Getenv("PORT")
-	if puerto == "" {
-		puerto = "8080"
+	// Todos los logs del gateway salen en JSON con el nombre del servicio (ADR-006).
+	slog.SetDefault(nuevoLogger(os.Stdout, nombreServicio))
+
+	if err := ejecutar(); err != nil {
+		slog.Error("el api-gateway terminó con error", "error", err)
+		os.Exit(1)
+	}
+}
+
+func ejecutar() error {
+	configuracion, err := leerConfiguracion(os.Getenv)
+	if err != nil {
+		return err
 	}
 
-	router := gin.Default()
+	// El contexto se cancela cuando Docker pide apagar el servicio (SIGTERM) o con Ctrl+C.
+	contexto, cancelar := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancelar()
+
+	apagarTrazas, err := iniciarTrazas(contexto, nombreServicio)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		// Al apagar, manda los spans que hayan quedado pendientes.
+		contextoTrazas, cancelarTrazas := context.WithTimeout(context.Background(), esperaAlApagar)
+		defer cancelarTrazas()
+		apagarTrazas(contextoTrazas)
+	}()
+
+	medidor := nuevasMetricas()
+	proxyNotificaciones := nuevoProxyBalanceado("notificaciones", configuracion.instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
+	servidor := &http.Server{
+		Addr:              ":" + configuracion.puerto,
+		Handler:           nuevoRouter(proxyNotificaciones, medidor.medirSolicitudes()),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	var procesos sync.WaitGroup
+	procesos.Add(1)
+	go func() {
+		defer procesos.Done()
+		// Sin métricas el gateway sigue atendiendo: el problema queda en el log.
+		if err := medidor.servir(contexto, configuracion.puertoMetricas); err != nil {
+			slog.Error("no se pudieron publicar las métricas", "error", err)
+		}
+	}()
+
+	errorDelServidor := make(chan error, 1)
+	go func() {
+		slog.Info("api-gateway escuchando", "puerto", configuracion.puerto, "instancias_notificaciones", len(configuracion.instanciasNotificaciones))
+		if err := servidor.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errorDelServidor <- err
+		}
+		close(errorDelServidor)
+	}()
+
+	select {
+	case err := <-errorDelServidor:
+		cancelar()
+		procesos.Wait()
+		return fmt.Errorf("servidor HTTP: %w", err)
+	case <-contexto.Done():
+	}
+
+	slog.Info("apagando api-gateway")
+	contextoApagado, cancelarApagado := context.WithTimeout(context.Background(), esperaAlApagar)
+	defer cancelarApagado()
+	if err := servidor.Shutdown(contextoApagado); err != nil {
+		return fmt.Errorf("apagar el servidor HTTP: %w", err)
+	}
+	procesos.Wait()
+	return nil
+}
+
+// nuevoRouter arma las rutas públicas. Todo lo que empieza con /notificaciones va
+// al servicio de notificaciones tal cual llega (headers, cuerpo y respuesta).
+func nuevoRouter(notificaciones http.Handler, extras ...gin.HandlerFunc) *gin.Engine {
+	router := gin.New()
+	// otelgin va primero: abre el span de la solicitud y así el middleware de logs
+	// ya ve el trace_id.
+	router.Use(otelgin.Middleware(nombreServicio, otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registrarSolicitudes(slog.Default()))
+	router.Use(extras...)
 	router.GET("/health", func(contexto *gin.Context) {
 		contexto.JSON(http.StatusOK, gin.H{"status": "ok", "service": nombreServicio})
 	})
+	router.Any("/notificaciones", gin.WrapH(notificaciones))
+	router.Any("/notificaciones/*resto", gin.WrapH(notificaciones))
+	return router
+}
 
-	if err := router.Run(":" + puerto); err != nil {
-		log.Fatal(err)
-	}
+// sinChequeosDeSalud evita trazar /health, que no aporta nada en Jaeger.
+func sinChequeosDeSalud(pedido *http.Request) bool {
+	return pedido.URL.Path != "/health"
 }

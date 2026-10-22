@@ -1,6 +1,6 @@
 # Especificación
 
-Alcance y requisitos de Recién hecho. Versión preliminar (Entrega 1).
+Alcance y requisitos de Recién hecho. Versión de la Entrega 2: suma los desafíos adicionales anunciados (B1 y B2). Las funcionalidades y reglas siguen siendo las de la Entrega 1; en esta entrega está implementada la capacidad de notificaciones.
 
 ## Descripción
 
@@ -102,3 +102,29 @@ Valores preliminares; se ajustan con los tests de carga.
 | RNF6 | Logs estructurados, métricas y un tablero permiten seguir un pedido de punta a punta. |
 | RNF7 | Todo el sistema se levanta con un solo comando (`docker compose up`), sin configuración manual. |
 | RNF8 | Las contraseñas se guardan hasheadas y nunca se devuelven en una respuesta. Los secretos van en variables de entorno, fuera del repositorio. |
+
+## Desafíos adicionales (bonus)
+
+Anunciados en la Entrega 2, como pide el enunciado (sección 7: hasta dos desafíos). Decisión del grupo (María, Athina y Agustín, 22/10/2026). Para que cuenten, cada uno tiene que estar integrado al sistema, documentado, testeado y defendido.
+
+| Id | Desafío | Qué incluye |
+|---|---|---|
+| B1 | **Tests de punta a punta (e2e)** | Pruebas automáticas que recorren el sistema completo levantado con `docker compose`, entrando por el api-gateway como lo haría un usuario o el grupo consumidor |
+| B2 | **Actualizaciones en tiempo real con WebSocket** | El comprador ve los cambios de estado de su pedido en la interfaz sin recargar la página |
+
+La herramienta de los tests e2e y dónde vive el WebSocket (qué servicio mantiene la conexión con el navegador) se deciden en sus ADRs, antes de implementarlos (regla 5 de AGENTS.md).
+
+**Criterios de aceptación**
+
+**B1. Tests e2e**
+- Dado el sistema levantado con un solo comando, cuando se corren los tests e2e, entonces recorren por el api-gateway al menos:
+  - una notificación que se crea y queda `enviada`, con el mail en el buzón de prueba;
+  - un reintento con la misma `Idempotency-Key`, que no crea otra notificación ni manda otro mail;
+  - el flujo principal del comprador (registrarse, encargar un pedido y recibir el aviso), cuando esos servicios estén implementados.
+- Dado que un test e2e falla, cuando se mira el resultado, entonces dice en qué paso falló.
+- Los tests e2e se corren antes de cada release.
+
+**B2. Tiempo real**
+- Dado un comprador con la página de sus pedidos abierta, cuando el vendedor pasa uno de sus pedidos a `listo`, entonces el comprador ve el nuevo estado sin recargar la página.
+- Dado un comprador, cuando se conecta, entonces solo recibe los cambios de **sus** pedidos.
+- Dado que se corta la conexión, cuando vuelve, entonces la página se reconecta sola y muestra el estado actual.

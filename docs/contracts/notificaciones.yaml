@@ -13,7 +13,7 @@ servers:
   - url: http://localhost:4010
     description: Mock local (Prism, `docker compose up`)
   - url: http://localhost:8080
-    description: API Gateway local (implementación real, pendiente)
+    description: API Gateway local (implementación real)
 
 security:
   - claveApi: []

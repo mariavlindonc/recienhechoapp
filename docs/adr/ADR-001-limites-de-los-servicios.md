@@ -46,5 +46,16 @@ Relaciones:
 ## Consecuencias
 
 - No hay consultas que crucen bases: las vistas que juntan datos de varios servicios se arman con llamadas o con copias, y aceptan consistencia eventual.
-- `pedidos` concentra la lógica más compleja y es el candidato a tener balanceo de carga.
-- Los límites son preliminares: se validan en la Entrega 2 con el sistema funcionando.
+- `pedidos` concentra la lógica más compleja.
+- El servicio con balanceo de carga es `notificaciones` ([ADR-012](ADR-012-balanceo-de-carga.md)).
+
+## Validación (Entrega 2)
+
+Con `notificaciones` implementado, los límites se sostienen:
+
+- `notificaciones` se implementó sin leer ni escribir datos de otro servicio: solo su MongoDB, su servidor de correo y el contrato publicado. El `POST` no espera al servidor de correo, así que una falla del correo no se propaga a quien lo llama, que era el motivo para separarlo. Que su caída tampoco afecte las demás rutas del gateway quedó confirmado: el gateway enruta `/notificaciones*` y, con `notificaciones` detenido, responde `503 no_disponible` y sigue atendiendo `/health` ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
+- La arquitectura interna de cada servicio ([ADR-007](ADR-007-arquitectura-interna.md)) encaja con estos límites sin mover responsabilidades.
+- Escribir búsqueda, caché e inventario ([ADR-008](ADR-008-busqueda.md), [ADR-009](ADR-009-cache.md), [ADR-010](ADR-010-consumo-de-inventario.md)) no obligó a compartir datos: el índice y la caché son de `productos`, y el consumo de inventario queda en `pedidos`.
+- Lo que cambia: este ADR anticipaba a `pedidos` como candidato al balanceo de carga. Se balancea `notificaciones`, porque es el servicio que ya está implementado y el que va a recibir tráfico externo; los motivos están en [ADR-012](ADR-012-balanceo-de-carga.md).
+
+Queda por validar con `pedidos` funcionando que el calendario de producción no necesite separarse.

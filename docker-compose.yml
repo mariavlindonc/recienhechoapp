@@ -6,8 +6,15 @@ services:
     container_name: recienhecho-api-gateway
     environment:
       PORT: ${API_GATEWAY_PORT}
+      # Sin los mensajes de depuración de Gin: los logs quedan solo en JSON (ADR-006).
+      GIN_MODE: release
+      # Instancias de notificaciones entre las que reparte el gateway (ADR-012).
+      NOTIFICACIONES_URLS: http://notificaciones:${NOTIFICACIONES_PORT}
+      # Destino de las trazas (ADR-006). Si Jaeger no está, el gateway funciona igual.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
+    depends_on: [notificaciones]
     networks: [interna]
 
   usuarios:
@@ -15,8 +22,7 @@ services:
     container_name: recienhecho-usuarios
     environment:
       PORT: ${USUARIOS_PORT}
-    ports:
-      - "${USUARIOS_PORT}:${USUARIOS_PORT}"
+    # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
     networks: [interna]
 
   productos:
@@ -24,8 +30,7 @@ services:
     container_name: recienhecho-productos
     environment:
       PORT: ${PRODUCTOS_PORT}
-    ports:
-      - "${PRODUCTOS_PORT}:${PRODUCTOS_PORT}"
+    # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
     networks: [interna]
 
   pedidos:
@@ -33,8 +38,7 @@ services:
     container_name: recienhecho-pedidos
     environment:
       PORT: ${PEDIDOS_PORT}
-    ports:
-      - "${PEDIDOS_PORT}:${PEDIDOS_PORT}"
+    # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
     networks: [interna]
 
   notificaciones:
@@ -42,8 +46,92 @@ services:
     container_name: recienhecho-notificaciones
     environment:
       PORT: ${NOTIFICACIONES_PORT}
+      GIN_MODE: release
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      MONGO_URI: mongodb://${NOTIFICACIONES_MONGO_USUARIO}:${NOTIFICACIONES_MONGO_CLAVE}@mongo-notificaciones:27017/?authSource=admin
+      NOTIFICACIONES_CLAVES_API: ${NOTIFICACIONES_CLAVES_API}
+      # Mailpit en desarrollo; para Gmail se cambian estas variables en el .env (ADR-005).
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PUERTO: ${SMTP_PUERTO}
+      SMTP_USUARIO: ${SMTP_USUARIO}
+      SMTP_CLAVE: ${SMTP_CLAVE}
+      SMTP_REMITENTE: ${SMTP_REMITENTE}
+    # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
+    depends_on:
+      mongo-notificaciones:
+        condition: service_healthy
+    networks: [interna]
+
+  # Base propia de notificaciones (ADR-002): ningún otro servicio se conecta acá.
+  mongo-notificaciones:
+    image: mongo:8
+    container_name: recienhecho-mongo-notificaciones
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${NOTIFICACIONES_MONGO_USUARIO}
+      MONGO_INITDB_ROOT_PASSWORD: ${NOTIFICACIONES_MONGO_CLAVE}
+    volumes:
+      - mongo-notificaciones-datos:/data/db
     ports:
-      - "${NOTIFICACIONES_PORT}:${NOTIFICACIONES_PORT}"
+      # Solo desde esta compu (127.0.0.1): la clave de desarrollo no queda expuesta a la red local (ADR-006).
+      - "127.0.0.1:${NOTIFICACIONES_MONGO_PORT}:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [interna]
+
+  # Buzón falso para desarrollo y tests (ADR-005): atrapa los mails y los muestra en una web.
+  mailpit:
+    image: axllent/mailpit
+    container_name: recienhecho-mailpit
+    ports:
+      # Solo desde esta compu (127.0.0.1): la web muestra el contenido de los mails.
+      - "127.0.0.1:${MAILPIT_SMTP_PORT}:1025"
+      - "127.0.0.1:${MAILPIT_WEB_PORT}:8025"
+    networks: [interna]
+
+  # Recibe las trazas por OTLP y las muestra en una web (ADR-006). Ningún servicio
+  # depende de que esté arriba: sin Jaeger, solo se pierden las trazas.
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0
+    container_name: recienhecho-jaeger
+    ports:
+      # Solo desde esta compu (127.0.0.1), como Prometheus y Grafana (ADR-006).
+      - "127.0.0.1:${JAEGER_WEB_PORT}:16686"
+    networks: [interna]
+
+  # Lee /metrics de los servicios cada 15 s (puerto interno 9464) y evalúa las
+  # alertas de observabilidad/prometheus/alertas.yml (ADR-006).
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    container_name: recienhecho-prometheus
+    volumes:
+      - ./observabilidad/prometheus:/etc/prometheus:ro
+    ports:
+      # Solo desde esta compu (127.0.0.1): no se expone a la red local.
+      - "127.0.0.1:${PROMETHEUS_WEB_PORT}:9090"
+    networks: [interna]
+
+  # Tablero con las métricas de Prometheus y acceso a las trazas de Jaeger. Las
+  # fuentes y el tablero salen de observabilidad/grafana: no hay que configurar nada a mano.
+  grafana:
+    image: grafana/grafana:13.2.3
+    container_name: recienhecho-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_CLAVE}
+      # Cualquiera puede ver el tablero sin iniciar sesión, pero no editarlo.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/tableros/recien-hecho.json
+    volumes:
+      - ./observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observabilidad/grafana/tableros:/var/lib/grafana/tableros:ro
+    ports:
+      # Solo desde esta compu (127.0.0.1): el acceso anónimo no llega a la red local.
+      - "127.0.0.1:${GRAFANA_WEB_PORT}:3000"
+    depends_on: [prometheus]
     networks: [interna]
 
   # Mock del contrato publicado (docs/contracts/notificaciones.yaml), ver ADR-004.
@@ -54,8 +142,12 @@ services:
     volumes:
       - ./docs/contracts:/contrato:ro
     ports:
-      - "${NOTIFICACIONES_MOCK_PORT}:${NOTIFICACIONES_MOCK_PORT}"
+      # Solo desde esta compu (127.0.0.1), como las demás herramientas de desarrollo (ADR-006).
+      - "127.0.0.1:${NOTIFICACIONES_MOCK_PORT}:${NOTIFICACIONES_MOCK_PORT}"
     networks: [interna]
+
+volumes:
+  mongo-notificaciones-datos:
 
 networks:
   interna:

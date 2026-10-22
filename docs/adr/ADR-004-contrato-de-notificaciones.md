@@ -19,7 +19,7 @@ Publicamos **notificaciones**: otro sistema nos pide mandar un email a uno de su
 - **Idempotencia:** el header `Idempotency-Key` es obligatorio en el `POST`. Misma clave y mismo cuerpo devuelven la notificación existente; misma clave y otro cuerpo, `409`. Así el consumidor puede reintentar ante un timeout sin mandar el mail dos veces.
 - **Autenticación:** una clave por grupo en `X-API-Key`. Cada grupo solo ve sus notificaciones.
 - **Errores:** un único formato `{codigo, mensaje}`, con códigos estables documentados.
-- **Límite de uso:** 60 solicitudes por minuto por clave (`429` con `Retry-After`).
+- **Límite de uso:** 60 solicitudes por minuto por grupo; todas las claves de un grupo suman (`429` con `Retry-After`).
 - **Exposición:** a través del api-gateway, el único punto de entrada del sistema.
 - **Versionado:** versionado semántico en `info.version` del contrato, sin versión en la URL. Solo hacemos cambios compatibles (suben la versión menor); uno incompatible subiría la versión mayor y se acordaría antes con el grupo consumidor. Reglas completas en el [README de contratos](../contracts/README.md#versionado).
 - **Mock:** [Prism](https://stoplight.io/open-source/prism) (`stoplight/prism:5`) levanta el contrato como servidor falso (`docker compose up -d notificaciones-mock`, puerto 4010). Valida los pedidos contra el contrato y responde con los ejemplos del YAML. Corre con `-m false` porque la versión 5 falla al arrancar con varios procesos.
@@ -37,4 +37,5 @@ Publicamos **notificaciones**: otro sistema nos pide mandar un email a uno de su
 - El consumidor tiene que hacer polling del `GET` si quiere saber el resultado final; un webhook de aviso se puede sumar después como cambio compatible.
 - Tenemos que guardar las claves de idempotencia (24 h) y las notificaciones por grupo ([ADR-002](ADR-002-persistencia.md)).
 - El mock no tiene estado: sirve para integrar formatos y errores, no para probar idempotencia.
-- Queda pendiente elegir el proveedor real de email (Entrega 2) y publicar la capacidad en una URL pública antes de la presentación.
+- El servidor de correo quedó definido en [ADR-005](ADR-005-envio-de-email.md) (Entrega 2): Mailpit en desarrollo y Gmail para la demo. El contrato no cambia, porque el servidor de correo no es visible para el consumidor.
+- Queda pendiente publicar la capacidad en una URL pública antes de la presentación.
