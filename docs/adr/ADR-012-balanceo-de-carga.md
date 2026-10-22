@@ -22,7 +22,7 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 
 **Quién balancea:** el **api-gateway**, que va a ser el proxy de `/notificaciones*`. Recibe la lista de instancias por variable de entorno (`NOTIFICACIONES_URLS=http://notificaciones-1:8084,http://notificaciones-2:8084`).
 
-**Estrategia:** round-robin entre las instancias sanas. Las solicitudes son cortas y parecidas entre sí, así que no hace falta ponderar por carga.
+**Estrategia:** round-robin entre las instancias sanas. Decisión del grupo (María, Athina y Agustín, 22/10/2026), después de comparar las estrategias de reparto (ver "Estrategias de reparto consideradas"): round-robin es simple y alcanza para el sistema actual y su alcance. Hay dos instancias iguales, las solicitudes son cortas y parecidas (p95 de ~5 ms en notificaciones) y no hay estado entre solicitudes. Además, reparte parejo y predecible, que es la evidencia más clara de distribución en el tablero. **Se considera pasar a "menos conexiones"** si los tests de carga ([ADR-013](ADR-013-capacidad-y-costos.md)) muestran que una instancia se pone lenta bajo carga: es la situación en la que round-robin le sigue mandando la mitad del tráfico y "menos conexiones" se adapta sola.
 
 **Verificación de disponibilidad:**
 
@@ -47,6 +47,20 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 | **Chequear `/health` (con ping a MongoDB) en lugar de `/vivo`** | No suma un endpoint | Ante una falla de MongoDB saca a todas las instancias juntas, y el ping de hasta 2 s obliga a un timeout más largo |
 | **DNS de Docker (`deploy.replicas`)** | Cero código | No detecta instancias caídas ni da métricas por instancia |
 | **Balancear `pedidos`** | Es el servicio con más lógica | No va a tener lógica hasta la presentación; no hay forma de demostrarlo en la Entrega 2 |
+
+**Estrategias de reparto consideradas** (dónde balancear está en la tabla de arriba; esta compara cómo repartir):
+
+| Estrategia | Cómo reparte | A favor, en nuestro caso | En contra, en nuestro caso |
+|---|---|---|---|
+| **Round-robin (elegida)** | Por turno: 1, 2, 1, 2... | La más simple; reparto parejo y predecible, ideal para mostrar la distribución en el tablero | Si una instancia está viva pero lenta, sigue recibiendo la mitad del tráfico |
+| **Menos conexiones** (*least connections*) | A la instancia con menos solicitudes en curso | Se adapta sola si una instancia se pone lenta: le llega menos tráfico | Con solicitudes de ~5 ms casi siempre las dos tienen 0 en curso y se comporta como round-robin; suma unas líneas de código. **Queda como evolución** si los tests de carga lo muestran necesario |
+| **Aleatoria** | Al azar | Simple | Reparto menos parejo con poco tráfico; peor evidencia de distribución |
+| **Dos opciones al azar** (*power of two choices*) | Elige dos al azar y manda a la menos cargada | Muy buena con muchas instancias | Con dos instancias equivale a "menos conexiones" |
+| **Ponderada** | Más tráfico a la instancia más potente | Útil si las máquinas son distintas | Las instancias son iguales: no aporta |
+| **Afinidad por grupo o IP** (*hash*) | Cada grupo siempre a la misma instancia | Haría exacto el límite de 60 solicitudes por minuto | Con un solo grupo consumidor, todo el tráfico externo iría a una sola instancia: no habría balanceo |
+| **Por latencia** | A la instancia que viene respondiendo más rápido | La que mejor se adapta | Compleja de implementar y de explicar; no la justifica el volumen esperado |
+
+Lo que más protege no es la estrategia sino la verificación de disponibilidad: con cualquiera de ellas, sin los chequeos de `/vivo`, una instancia caída se lleva su parte del tráfico.
 
 ## Consecuencias
 
