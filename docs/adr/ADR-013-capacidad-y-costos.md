@@ -50,15 +50,11 @@ En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de error
 
 El costo crece por el envío de mails y por la base administrada; el cómputo de los servicios en Go es lo más barato.
 
-**Dónde desplegar para la demo: posibilidades, sin decidir.** En las tres, la URL pública sale de un subdominio de un dominio propio de un integrante, que ya está en Cloudflare.
+**Dónde desplegar la demo (sin decidir):**
 
-| Opción | Cómo | Costo | A favor | En contra |
-|---|---|---|---|---|
-| VM en la nube | El `docker compose` tal como está, en una VM chica | Según el proveedor (sin elegir) | No hay que cambiar nada del compose | Hay que elegir proveedor; con 1 GB de RAM puede quedar justo |
-| Cloudflare Containers | Cada servicio como contenedor de Cloudflare, configurado con wrangler | 5 USD del plan Workers Paid por el mes de la demo, más el uso (para dos contenedores chicos, unos pocos dólares) | Nube real, escala a cero, el dominio ya está en la misma cuenta | El disco no es persistente: MongoDB tiene que ser externo; no está verificado que el contenedor pueda salir por SMTP a Gmail; hay que configurar cada servicio por separado |
-| Servidor propio de un integrante | Una notebook con Ubuntu (unos 3 GB de RAM) que ya corre Docker, publicada con un Cloudflare Tunnel | 0 | Gratis y disponible ya; el túnel no abre puertos | Hay que confirmar con la cátedra que cuente como "desplegada en la nube"; la máquina también da DNS a la casa, así que hay que limitar la memoria de los contenedores; depende de la luz y del Wi-Fi de la casa |
-
-Los costos de Cloudflare salen de su documentación de precios (octubre de 2026). El acceso a Containers se verificó con wrangler: la cuenta necesita el plan Workers Paid.
+- VM en la nube con el compose tal como está.
+- Cloudflare Containers: unos 5 USD por el mes de la demo. MongoDB tendría que ser externo.
+- Servidor propio con Cloudflare Tunnel: gratis. Falta confirmar con la cátedra que cuente como nube.
 
 ## Alternativas consideradas
 
