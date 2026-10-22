@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 	"unicode/utf8"
 
@@ -152,7 +153,7 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 			"id", notificacion.ID,
 			"intento", notificacion.Intentos,
 			"estado", notificacion.Estado,
-			"error", errEnvio,
+			"error", ocultarEmails(errEnvio.Error()),
 		)
 	}
 
@@ -163,6 +164,16 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 		return fmt.Errorf("actualizar notificación %s: %w", notificacion.ID, err)
 	}
 	return nil
+}
+
+// patronEmail reconoce cualquier cosa con forma de dirección de email.
+var patronEmail = regexp.MustCompile(`[^\s<>@"']+@[^\s<>@"']+`)
+
+// ocultarEmails tapa las direcciones de email de un texto antes de registrarlo:
+// algunos servidores de correo incluyen al destinatario en su respuesta
+// (por ejemplo, "550 <cliente@ejemplo.com> no existe").
+func ocultarEmails(texto string) string {
+	return patronEmail.ReplaceAllString(texto, "[email oculto]")
 }
 
 func validarClave(clave string) error {
