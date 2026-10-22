@@ -32,7 +32,19 @@ Cuerpo opcional explicando el porqué.
 ```
 
 - Tipos: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `build`, `ci`.
-- Alcance: el servicio (`usuarios`, `productos`, `pedidos`, `notificaciones`, `api-gateway`) o `infra`, `docs`.
+- Alcance (opcional): qué parte del repo cambia.
+
+  | Alcance | Para qué |
+  |---|---|
+  | `usuarios`, `productos`, `pedidos`, `notificaciones`, `api-gateway` | Código de ese servicio |
+  | `infra` | `docker-compose.yml`, Dockerfiles, `.env.example` |
+  | `observabilidad` | Logs, trazas, métricas, alertas y tableros, incluida la carpeta `observabilidad/` |
+  | `adr` | Registros de decisiones (`docs/adr/`) |
+  | `arquitectura` | `docs/ARCHITECTURE.md` |
+  | `readme` | `README.md` |
+  | `docs` | El resto de la documentación (SPEC, contratos, POSTMORTEM, CONTRIBUTING, AGENTS.md) |
+
+  Si un cambio toca varias partes, se usa la principal o se omite el alcance (`docs: ...`). Para el compose y los Dockerfiles se usa `infra`, no `docker`.
 - Cambios incompatibles: `!` después del tipo (`feat(pedidos)!: ...`) y un pie `BREAKING CHANGE:`.
 
 ## Varios agentes en paralelo: git worktrees
