@@ -53,7 +53,7 @@ Relaciones:
 
 Con `notificaciones` implementado, los límites se sostienen:
 
-- `notificaciones` se implementó sin leer ni escribir datos de otro servicio: solo su MongoDB, su servidor de correo y el contrato publicado. El `POST` no espera al servidor de correo, así que una falla del correo no se propaga a quien lo llama, que era el motivo para separarlo. Que su caída tampoco afecte las demás rutas del gateway se confirma cuando el gateway lo enrute (todavía solo expone `/health`).
+- `notificaciones` se implementó sin leer ni escribir datos de otro servicio: solo su MongoDB, su servidor de correo y el contrato publicado. El `POST` no espera al servidor de correo, así que una falla del correo no se propaga a quien lo llama, que era el motivo para separarlo. Que su caída tampoco afecte las demás rutas del gateway quedó confirmado: el gateway enruta `/notificaciones*` y, con `notificaciones` detenido, responde `503 no_disponible` y sigue atendiendo `/health` ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
 - La arquitectura interna de cada servicio ([ADR-007](ADR-007-arquitectura-interna.md)) encaja con estos límites sin mover responsabilidades.
 - Escribir búsqueda, caché e inventario ([ADR-008](ADR-008-busqueda.md), [ADR-009](ADR-009-cache.md), [ADR-010](ADR-010-consumo-de-inventario.md)) no obligó a compartir datos: el índice y la caché son de `productos`, y el consumo de inventario queda en `pedidos`.
 - Lo que cambia: este ADR anticipaba a `pedidos` como candidato al balanceo de carga. Se balancea `notificaciones`, porque es el servicio que ya está implementado y el que va a recibir tráfico externo; los motivos están en [ADR-012](ADR-012-balanceo-de-carga.md).
