@@ -62,4 +62,4 @@ Lo que cambió respecto de lo escrito antes:
 - La unicidad sale del `_id` de la clave y no necesita un índice aparte. El par que se controla es (grupo, `Idempotency-Key`); antes decíamos (clave de API, `Idempotency-Key`). Dos claves de API del mismo grupo comparten idempotencia y visibilidad.
 - Se sumó el índice `pendientes_por_fecha`, que este ADR no preveía.
 
-Cada operación contra MongoDB se corta a los 2 s ([ADR-011](ADR-011-resiliencia.md)); sin ese límite el driver esperaba 30 s. Sigue abierto que el compose todavía no levanta MongoDB, y las decisiones de `usuarios`, `productos` y `pedidos` siguen propuestas hasta implementar cada servicio.
+Cada operación contra MongoDB se corta a los 2 s ([ADR-011](ADR-011-resiliencia.md)); sin ese límite el driver esperaba 30 s. MongoDB ya corre en el compose (`mongo-notificaciones`), y las decisiones de `usuarios`, `productos` y `pedidos` siguen propuestas hasta implementar cada servicio.
