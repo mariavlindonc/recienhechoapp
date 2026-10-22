@@ -5,7 +5,7 @@
 - **Aceptado** para `api-gateway` y `notificaciones`, Entrega 2.
 - **Propuesto** para `pedidos` y `productos`: se acepta al implementar cada servicio.
 
-Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB, límite de uso y envío en segundo plano con reintentos. Faltan el proxy con timeout y el balanceo del api-gateway.
+Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB, límite de uso y envío en segundo plano con reintentos. El api-gateway ya tiene el proxy con timeout de 3 s y `503 no_disponible`. Falta el balanceo con chequeos de `/vivo` ([ADR-012](ADR-012-balanceo-de-carga.md)).
 
 ## Contexto
 
