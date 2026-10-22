@@ -33,6 +33,7 @@ for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet 
 - Errores manejados y devueltos con contexto (`fmt.Errorf("...: %w", err)`).
 - Configuración por variables de entorno; nada sensible en el código. Cada servicio las lee en su `configuracion.go`, con una función `leerConfiguracion` que valida todo al arrancar y avisa todos los problemas juntos.
 - Un servicio no importa código de otro.
+- Dependencias de Go e imágenes de Docker con versión exacta, nunca `latest` ni rangos, elegida entre las publicadas hace al menos dos semanas: las recién salidas tienen más riesgo de errores y de problemas de seguridad sin detectar. Se actualizan periódicamente.
 - Commits con [Conventional Commits](https://www.conventionalcommits.org/es/) en español: `feat(productos): agrega listado de catálogo`.
 - Ramas con git flow; detalle en [CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
