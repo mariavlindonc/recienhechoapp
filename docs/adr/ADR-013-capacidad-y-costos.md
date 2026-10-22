@@ -56,6 +56,8 @@ El costo crece por el envío de mails y por la base administrada; el cómputo de
 - Cloudflare Containers: unos 5 USD por el mes de la demo. MongoDB tendría que ser externo.
 - Servidor propio con Cloudflare Tunnel: gratis. Falta confirmar con la cátedra que cuente como nube.
 
+Sea cual sea el lugar, Grafana se publica por HTTPS, sin acceso anónimo y con una cuenta por persona: el equipo como Admin o Editor, la cátedra y el cliente como Viewer ([ADR-006](ADR-006-observabilidad.md)).
+
 ## Alternativas consideradas
 
 - **JMeter.** Muy completo, pero pesado y con scripts en XML difíciles de revisar en un PR.

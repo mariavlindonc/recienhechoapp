@@ -41,6 +41,11 @@ El primer flujo que funciona de punta a punta es el de la capacidad publicada: `
 - Prometheus lee `/metrics` de cada servicio cada 15 s.
 - Grafana usa Prometheus y Jaeger como fuentes de datos. Las fuentes y el tablero se cargan desde archivos del repositorio, sin configurarlos a mano.
 
+**Acceso al tablero.** Lo van a usar el equipo, la cátedra y, cuando el sistema pase a ser un proyecto real, el cliente. Se distinguen dos entornos:
+
+- **Desarrollo local** (el `docker compose up` de cada integrante): cada uno tiene su propia copia del sistema y su propio Grafana. Prometheus y Grafana publican sus puertos solo en `127.0.0.1`: se ven desde la propia computadora y no desde la red local (por ejemplo, el wifi de la facultad). Grafana permite entrar sin usuario, con permiso de solo lectura, porque solo llega quien está en esa computadora. Para mostrar el tablero en una reunión, se comparte pantalla.
+- **Despliegue** (la demo en la nube y después el proyecto real): un Grafana compartido, **sin acceso anónimo**, con una cuenta por persona y un rol según quién es: Admin o Editor para el equipo, Viewer (solo lectura) para la cátedra y el cliente. Se entra por HTTPS. Así se puede dar y quitar acceso a cada persona sin compartir contraseñas.
+
 **Objetivo de servicio (SLO) inicial:** el 99 % de los `POST /notificaciones` responden en menos de 300 ms, medido en el api-gateway sobre una ventana de 1 hora.
 
 **Alerta inicial:** más de 5 notificaciones pasan a `fallida` en 10 minutos (el servidor de correo está caído o rechazando envíos).
@@ -51,6 +56,9 @@ El primer flujo que funciona de punta a punta es el de la capacidad publicada: `
 - **Grafana Tempo en lugar de Jaeger.** Se integra mejor con Grafana, pero necesita más configuración. Jaeger es un solo contenedor que recibe OTLP directamente y trae su propia interfaz.
 - **Imagen todo-en-uno `grafana/otel-lgtm`.** Se levanta rápido, pero esconde las piezas y es más difícil de explicar qué hace cada una.
 - **Loki (o ELK) para centralizar logs.** Es útil para buscar logs desde Grafana, pero para la Entrega 2 alcanza con `docker compose logs`. Se evalúa para la presentación.
+- **Puertos de observabilidad abiertos a la red local en desarrollo** (lo que hace Docker por defecto). Un compañero en la misma red podría abrir el tablero desde su computadora, pero también cualquier otra persona de esa red, sin usuario. No resuelve el acceso compartido, porque cada integrante tiene su propia copia de los datos.
+- **Grafana Cloud** (servicio administrado con plan gratuito) para el despliegue. No hay que operar Grafana y las cuentas se invitan por mail, pero suma un proveedor externo y los datos salen del sistema. Se puede reconsiderar si operar Grafana resulta costoso.
+- **Tablero público de solo lectura** (función *public dashboard* de Grafana: un link sin login). Es lo más cómodo para mostrarle el sistema a la cátedra o al cliente, pero quien tenga el link ve el tablero y no hay control por persona.
 - **Logs con zap o zerolog.** Son más rápidos, pero `slog` viene con Go y alcanza para este volumen.
 
 ## Consecuencias
@@ -60,3 +68,5 @@ El primer flujo que funciona de punta a punta es el de la capacidad publicada: `
 - Mientras los logs no estén centralizados, para seguir una solicitud hay que buscar el `trace_id` en los logs de cada contenedor.
 - Jaeger guarda las trazas en memoria: se pierden al reiniciarlo. Alcanza para desarrollo y la demo.
 - El SLO y el umbral de la alerta son iniciales: se ajustan con los tests de carga (D13).
+- En desarrollo, el tablero no se puede ver desde otra computadora: para mostrarlo hay que compartir pantalla.
+- En el despliegue hay que administrar las cuentas de Grafana (alta, rol y baja de cada persona) y configurar HTTPS ([ADR-013](ADR-013-capacidad-y-costos.md)).
