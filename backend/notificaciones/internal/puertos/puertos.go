@@ -59,3 +59,18 @@ type Mensaje struct {
 type Remitente interface {
 	Enviar(contexto context.Context, mensaje Mensaje) error
 }
+
+// ResultadoEnvio es cómo terminó un intento de envío, para contarlo en las métricas.
+type ResultadoEnvio string
+
+const (
+	EnvioExitoso   ResultadoEnvio = "enviada"   // el servidor de correo aceptó el mail
+	EnvioReintento ResultadoEnvio = "reintento" // falló pero se vuelve a intentar
+	EnvioFallido   ResultadoEnvio = "fallida"   // falló y no se reintenta más
+)
+
+// Metricas recibe los hechos del negocio que conviene contar (ADR-006). La
+// implementa el adaptador de Prometheus; la aplicación no sabe cuál es.
+type Metricas interface {
+	EnvioTerminado(resultado ResultadoEnvio)
+}

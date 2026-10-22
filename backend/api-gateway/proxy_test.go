@@ -39,7 +39,7 @@ func instanciaFalsa(prueba *testing.T, nombre string, demora time.Duration) (*ur
 
 func routerDePrueba(instancias []*url.URL, tiempoMaximo time.Duration) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return nuevoRouter(nuevoProxyBalanceado("notificaciones", instancias, tiempoMaximo))
+	return nuevoRouter(nuevoProxyBalanceado("notificaciones", instancias, tiempoMaximo, nil))
 }
 
 func pedir(router http.Handler, metodo, ruta, cuerpo string) *httptest.ResponseRecorder {

@@ -19,7 +19,7 @@ func TestMiddlewareRegistraCadaSolicitudEnJSON(prueba *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(registrarSolicitudes(nuevoLogger(&salida, nombreServicio)))
-	router.Any("/notificaciones/*resto", gin.WrapH(nuevoProxyBalanceado("notificaciones", []*url.URL{instancia}, time.Second)))
+	router.Any("/notificaciones/*resto", gin.WrapH(nuevoProxyBalanceado("notificaciones", []*url.URL{instancia}, time.Second, nil)))
 
 	pedido := httptest.NewRequest(http.MethodGet, "/notificaciones/9f1c2a7e", nil)
 	pedido.Header.Set("X-API-Key", "clave-secreta")

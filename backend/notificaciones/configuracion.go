@@ -13,6 +13,7 @@ import (
 // configuracion reúne todo lo que el servicio lee de las variables de entorno.
 type configuracion struct {
 	puerto           string
+	puertoMetricas   string
 	direccionMongo   string
 	baseMongo        string
 	clavesAPI        map[string]string
@@ -56,6 +57,7 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 
 	leida := configuracion{
 		puerto:           conValorPorDefecto("PORT", "8084"),
+		puertoMetricas:   conValorPorDefecto("METRICAS_PORT", "9464"),
 		direccionMongo:   obligatoria("MONGO_URI"),
 		baseMongo:        conValorPorDefecto("MONGO_BASE", "notificaciones"),
 		limitePorMinuto:  entero("NOTIFICACIONES_LIMITE_POR_MINUTO", "60"),
