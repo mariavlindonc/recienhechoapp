@@ -22,8 +22,7 @@ services:
     container_name: recienhecho-usuarios
     environment:
       PORT: ${USUARIOS_PORT}
-    ports:
-      - "${USUARIOS_PORT}:${USUARIOS_PORT}"
+    # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
     networks: [interna]
 
   productos:
@@ -31,8 +30,7 @@ services:
     container_name: recienhecho-productos
     environment:
       PORT: ${PRODUCTOS_PORT}
-    ports:
-      - "${PRODUCTOS_PORT}:${PRODUCTOS_PORT}"
+    # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
     networks: [interna]
 
   pedidos:
@@ -40,8 +38,7 @@ services:
     container_name: recienhecho-pedidos
     environment:
       PORT: ${PEDIDOS_PORT}
-    ports:
-      - "${PEDIDOS_PORT}:${PEDIDOS_PORT}"
+    # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
     networks: [interna]
 
   notificaciones:
@@ -59,8 +56,7 @@ services:
       SMTP_USUARIO: ${SMTP_USUARIO}
       SMTP_CLAVE: ${SMTP_CLAVE}
       SMTP_REMITENTE: ${SMTP_REMITENTE}
-    ports:
-      - "${NOTIFICACIONES_PORT}:${NOTIFICACIONES_PORT}"
+    # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
     depends_on:
       mongo-notificaciones:
         condition: service_healthy
@@ -146,7 +142,8 @@ services:
     volumes:
       - ./docs/contracts:/contrato:ro
     ports:
-      - "${NOTIFICACIONES_MOCK_PORT}:${NOTIFICACIONES_MOCK_PORT}"
+      # Solo desde esta compu (127.0.0.1), como las demás herramientas de desarrollo (ADR-006).
+      - "127.0.0.1:${NOTIFICACIONES_MOCK_PORT}:${NOTIFICACIONES_MOCK_PORT}"
     networks: [interna]
 
 volumes:

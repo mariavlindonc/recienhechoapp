@@ -52,7 +52,6 @@ Levanta los cuatro servicios, el api-gateway, MongoDB, Mailpit, el mock del cont
 | Qué | URL local |
 |---|---|
 | api-gateway, entrada del sistema (`/notificaciones`) | http://localhost:8080 |
-| `notificaciones` (directo, sin pasar por el gateway) | http://localhost:8084 |
 | Grafana, tablero de métricas (sin usuario, solo lectura) | http://localhost:3000 |
 | Prometheus, métricas y alertas | http://localhost:9090 |
 | Jaeger, trazas | http://localhost:16686 |
