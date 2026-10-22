@@ -27,6 +27,8 @@ import (
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/trazas"
 )
 
+const nombreServicio = "notificaciones"
+
 const (
 	esperaAlArrancar = 30 * time.Second // para conectar con MongoDB y crear los índices
 	esperaSalud      = 2 * time.Second
@@ -36,7 +38,7 @@ const (
 func main() {
 	// Todos los logs del servicio (incluidos los de los paquetes internos, que usan
 	// slog.Default) salen en JSON con el nombre del servicio (ADR-006).
-	slog.SetDefault(registro.NuevoLogger(os.Stdout, "notificaciones"))
+	slog.SetDefault(registro.NuevoLogger(os.Stdout, nombreServicio))
 
 	if err := ejecutar(); err != nil {
 		slog.Error("el servicio de notificaciones terminó con error", "error", err)
@@ -54,7 +56,7 @@ func ejecutar() error {
 	contexto, cancelar := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancelar()
 
-	apagarTrazas, err := trazas.Iniciar(contexto, "notificaciones")
+	apagarTrazas, err := trazas.Iniciar(contexto, nombreServicio)
 	if err != nil {
 		return err
 	}
@@ -88,7 +90,7 @@ func ejecutar() error {
 	router := gin.New()
 	// otelgin va primero: abre el span de la solicitud (o continúa la traza que llega
 	// en traceparent) y así el middleware de logs ya ve el trace_id.
-	router.Use(otelgin.Middleware("notificaciones", otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registro.Solicitudes(slog.Default()), medidor.Solicitudes())
+	router.Use(otelgin.Middleware(nombreServicio, otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registro.Solicitudes(slog.Default()), medidor.Solicitudes())
 	api.Registrar(router, servicio, api.Configuracion{
 		ClavesAPI:       configuracion.clavesAPI,
 		LimitePorMinuto: configuracion.limitePorMinuto,
