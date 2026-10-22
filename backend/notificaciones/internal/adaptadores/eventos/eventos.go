@@ -45,6 +45,20 @@ func (eventos *Eventos) EnvioIntentado(contexto context.Context, intento puertos
 	)
 }
 
+// CircuitoDelCorreoCambio deja en el log cada cambio de estado del disyuntor del
+// servidor de correo: como WARN cuando se abre (el correo está caído) y como INFO
+// en los demás casos. La métrica y la alerta del estado van en la #33 (Athina).
+func (eventos *Eventos) CircuitoDelCorreoCambio(contexto context.Context, anterior, nuevo puertos.EstadoCircuito) {
+	nivel := slog.LevelInfo
+	if nuevo == puertos.CircuitoAbierto {
+		nivel = slog.LevelWarn
+	}
+	eventos.logger.Log(contexto, nivel, "cambió el estado del disyuntor del servidor de correo",
+		"anterior", anterior,
+		"nuevo", nuevo,
+	)
+}
+
 // patronEmail reconoce cualquier cosa con forma de dirección de email.
 var patronEmail = regexp.MustCompile(`[^\s<>@"']+@[^\s<>@"']+`)
 

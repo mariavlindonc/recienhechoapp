@@ -27,7 +27,7 @@ func TestLeerConfiguracionUsaValoresPorDefecto(prueba *testing.T) {
 	if leida.puerto != "8084" || leida.puertoMetricas != "9464" || leida.baseMongo != "notificaciones" || leida.limitePorMinuto != 60 {
 		prueba.Errorf("valores por defecto incorrectos: %+v", leida)
 	}
-	if leida.intervaloDeEnvio != 5*time.Second || leida.smtp.Puerto != 587 || leida.smtp.TiempoMaximo != 10*time.Second {
+	if leida.intervaloDeEnvio != 5*time.Second || leida.smtp.Puerto != 587 || leida.smtp.TiempoMaximo != 10*time.Second || leida.smtp.TiempoMaximoConexion != 2*time.Second {
 		prueba.Errorf("valores por defecto incorrectos: %+v", leida)
 	}
 	if leida.clavesAPI["clave-a"] != "grupo-a" {

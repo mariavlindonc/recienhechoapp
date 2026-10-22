@@ -33,6 +33,9 @@ type Configuracion struct {
 	Remitente string
 	// TiempoMaximo es cuánto puede tardar un envío completo antes de cortarlo.
 	TiempoMaximo time.Duration
+	// TiempoMaximoConexion es cuánto se espera para conectar con el servidor. Es
+	// más corto que TiempoMaximo para que un servidor caído falle rápido (ADR-011).
+	TiempoMaximoConexion time.Duration
 }
 
 // Remitente cumple puertos.Remitente.
@@ -49,8 +52,8 @@ func NuevoRemitente(configuracion Configuracion) (*Remitente, error) {
 	if configuracion.Host == "" || configuracion.Puerto <= 0 {
 		return nil, fmt.Errorf("configuración SMTP: faltan el host o el puerto")
 	}
-	if configuracion.TiempoMaximo <= 0 {
-		return nil, fmt.Errorf("configuración SMTP: el tiempo máximo tiene que ser positivo")
+	if configuracion.TiempoMaximo <= 0 || configuracion.TiempoMaximoConexion <= 0 {
+		return nil, fmt.Errorf("configuración SMTP: los tiempos máximos tienen que ser positivos")
 	}
 	remitente, err := mail.ParseAddress(configuracion.Remitente)
 	if err != nil {
@@ -67,7 +70,7 @@ func (remitente *Remitente) Enviar(contexto context.Context, mensaje puertos.Men
 	defer cancelar()
 
 	direccion := net.JoinHostPort(remitente.configuracion.Host, strconv.Itoa(remitente.configuracion.Puerto))
-	var marcador net.Dialer
+	marcador := net.Dialer{Timeout: remitente.configuracion.TiempoMaximoConexion}
 	conexion, err := marcador.DialContext(contexto, "tcp", direccion)
 	if err != nil {
 		return fmt.Errorf("conectar con el servidor de correo: %w", err)

@@ -79,3 +79,25 @@ func TestElLogTapaLosEmailsDelError(prueba *testing.T) {
 		prueba.Errorf("el resto del error se tiene que mantener: %s", salida.String())
 	}
 }
+
+func TestLosCambiosDelCircuitoQuedanEnElLog(prueba *testing.T) {
+	adaptador, _, salida := nuevoAdaptador()
+
+	adaptador.CircuitoDelCorreoCambio(context.Background(), puertos.CircuitoCerrado, puertos.CircuitoAbierto)
+	adaptador.CircuitoDelCorreoCambio(context.Background(), puertos.CircuitoSemiabierto, puertos.CircuitoCerrado)
+
+	lineas := strings.Split(strings.TrimSpace(salida.String()), "\n")
+	if len(lineas) != 2 {
+		prueba.Fatalf("se esperaban 2 líneas, hubo %d: %s", len(lineas), salida.String())
+	}
+	casos := []struct{ nivel, anterior, nuevo string }{{"WARN", "cerrado", "abierto"}, {"INFO", "semiabierto", "cerrado"}}
+	for indice, caso := range casos {
+		var linea map[string]any
+		if err := json.Unmarshal([]byte(lineas[indice]), &linea); err != nil {
+			prueba.Fatalf("la línea no es JSON: %q", lineas[indice])
+		}
+		if linea["level"] != caso.nivel || linea["anterior"] != caso.anterior || linea["nuevo"] != caso.nuevo {
+			prueba.Errorf("línea %d = %v, se esperaba %s de %s a %s", indice+1, linea, caso.nivel, caso.anterior, caso.nuevo)
+		}
+	}
+}

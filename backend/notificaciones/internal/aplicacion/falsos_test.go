@@ -147,3 +147,6 @@ type eventosFalsos struct {
 func (eventos *eventosFalsos) EnvioIntentado(_ context.Context, intento puertos.IntentoDeEnvio) {
 	eventos.intentos = append(eventos.intentos, intento)
 }
+
+func (eventos *eventosFalsos) CircuitoDelCorreoCambio(context.Context, puertos.EstadoCircuito, puertos.EstadoCircuito) {
+}

@@ -17,6 +17,10 @@ import (
 // largoMaximoClave es el máximo de la Idempotency-Key según el contrato.
 const largoMaximoClave = 100
 
+// esperaSinCorreo es cuánto se posterga una notificación cuando el servidor de
+// correo no está disponible: lo mismo que el disyuntor queda abierto (ADR-011).
+const esperaSinCorreo = 30 * time.Second
+
 // tiempoApartado es cuánto queda reservada una notificación para la instancia que
 // la tomó. Si esa instancia se cae a mitad del envío, pasado este tiempo otra la
 // vuelve a tomar.
@@ -118,15 +122,25 @@ func (servicio *Servicio) ProcesarPendientes(contexto context.Context) (int, err
 		if !encontrada {
 			return procesadas, nil
 		}
-		if err := servicio.enviar(contexto, &notificacion); err != nil {
+		seguir, err := servicio.enviar(contexto, &notificacion)
+		if err != nil {
 			return procesadas, err
+		}
+		if !seguir {
+			// El correo no está disponible: no tiene sentido tomar más pendientes ahora.
+			return procesadas, nil
 		}
 		procesadas++
 	}
 }
 
-// enviar intenta un envío y guarda el resultado según el tipo de error.
-func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio.Notificacion) error {
+// enviar intenta un envío y guarda el resultado según el tipo de error. Devuelve
+// false cuando el servidor de correo no está disponible: la vuelta tiene que cortar.
+func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio.Notificacion) (bool, error) {
+	if notificacion.Vencida(servicio.ahora()) {
+		return true, servicio.vencer(contexto, notificacion)
+	}
+
 	errEnvio := servicio.remitente.Enviar(contexto, puertos.Mensaje{
 		Destinatario: notificacion.Destinatario,
 		Asunto:       notificacion.Asunto,
@@ -134,6 +148,17 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 	})
 
 	ahora := servicio.ahora()
+	if errors.Is(errEnvio, puertos.ErrCorreoNoDisponible) {
+		// No fue un intento: se posterga sin gastar los reintentos de la notificación.
+		if err := notificacion.Postergar(ahora.Add(esperaSinCorreo)); err != nil {
+			return false, fmt.Errorf("postergar notificación %s: %w", notificacion.ID, err)
+		}
+		if err := servicio.repositorio.Actualizar(contexto, *notificacion); err != nil {
+			return false, fmt.Errorf("actualizar notificación %s: %w", notificacion.ID, err)
+		}
+		return false, nil
+	}
+
 	var err error
 	switch {
 	case errEnvio == nil:
@@ -144,20 +169,38 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 		err = notificacion.RegistrarFalloTransitorio(errEnvio.Error(), ahora)
 	}
 	if err != nil {
-		return fmt.Errorf("registrar resultado del envío de %s: %w", notificacion.ID, err)
+		return true, fmt.Errorf("registrar resultado del envío de %s: %w", notificacion.ID, err)
 	}
 
 	// Si el mail salió pero esto falla, la notificación se vuelve a tomar cuando
 	// vence el apartado y el mail puede salir dos veces: se prefiere duplicar un
 	// aviso antes que perderlo (entrega "al menos una vez").
 	if err := servicio.repositorio.Actualizar(contexto, *notificacion); err != nil {
-		return fmt.Errorf("actualizar notificación %s: %w", notificacion.ID, err)
+		return true, fmt.Errorf("actualizar notificación %s: %w", notificacion.ID, err)
 	}
 	servicio.eventos.EnvioIntentado(contexto, puertos.IntentoDeEnvio{
 		IDNotificacion: notificacion.ID,
 		Numero:         notificacion.Intentos,
 		Resultado:      resultadoDelEnvio(errEnvio, notificacion.Estado),
 		Error:          errEnvio,
+	})
+	return true, nil
+}
+
+// vencer pasa a fallida una notificación que lleva 24 h pendiente (el correo
+// estuvo caído todo ese tiempo) y lo avisa como un envío fallido.
+func (servicio *Servicio) vencer(contexto context.Context, notificacion *dominio.Notificacion) error {
+	if err := notificacion.MarcarVencida(); err != nil {
+		return fmt.Errorf("vencer notificación %s: %w", notificacion.ID, err)
+	}
+	if err := servicio.repositorio.Actualizar(contexto, *notificacion); err != nil {
+		return fmt.Errorf("actualizar notificación %s: %w", notificacion.ID, err)
+	}
+	servicio.eventos.EnvioIntentado(contexto, puertos.IntentoDeEnvio{
+		IDNotificacion: notificacion.ID,
+		Numero:         notificacion.Intentos,
+		Resultado:      puertos.EnvioFallido,
+		Error:          errors.New(dominio.MotivoVencida),
 	})
 	return nil
 }

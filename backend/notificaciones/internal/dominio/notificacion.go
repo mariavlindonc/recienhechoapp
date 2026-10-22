@@ -41,6 +41,14 @@ const ReintentosMaximos = 3
 // esperaBaseReintento es la espera antes del primer reintento; se duplica en cada uno.
 const esperaBaseReintento = 30 * time.Second
 
+// VidaMaximaPendiente es cuánto puede quedar pendiente una notificación. Con los
+// reintentos normales nunca se llega; pasa cuando el servidor de correo estuvo
+// caído y la notificación se fue postergando (ADR-011).
+const VidaMaximaPendiente = 24 * time.Hour
+
+// MotivoVencida es el motivo de una notificación que venció sin poder enviarse.
+const MotivoVencida = "El servidor de correo no estuvo disponible durante 24 horas."
+
 // Solicitud es lo que pide el consumidor en el POST /notificaciones.
 type Solicitud struct {
 	Canal        Canal
@@ -166,6 +174,31 @@ func (notificacion *Notificacion) RegistrarRechazo(motivo string) error {
 	notificacion.Intentos++
 	notificacion.Estado = EstadoFallida
 	notificacion.Motivo = motivo
+	return nil
+}
+
+// Postergar corre el próximo intento sin contarlo como intento: se usa cuando el
+// envío ni se intentó porque el servidor de correo no está disponible.
+func (notificacion *Notificacion) Postergar(hasta time.Time) error {
+	if notificacion.Estado != EstadoPendiente {
+		return fmt.Errorf("%w: no se puede postergar una notificación %s", ErrTransicionInvalida, notificacion.Estado)
+	}
+	notificacion.ProximoIntento = hasta
+	return nil
+}
+
+// Vencida indica si la notificación lleva pendiente más de VidaMaximaPendiente.
+func (notificacion Notificacion) Vencida(ahora time.Time) bool {
+	return notificacion.Estado == EstadoPendiente && ahora.Sub(notificacion.CreadaEn) >= VidaMaximaPendiente
+}
+
+// MarcarVencida pasa a fallida una notificación que no se pudo enviar a tiempo.
+func (notificacion *Notificacion) MarcarVencida() error {
+	if notificacion.Estado != EstadoPendiente {
+		return fmt.Errorf("%w: de %s a %s", ErrTransicionInvalida, notificacion.Estado, EstadoFallida)
+	}
+	notificacion.Estado = EstadoFallida
+	notificacion.Motivo = MotivoVencida
 	return nil
 }
 
