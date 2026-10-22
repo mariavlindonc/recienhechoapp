@@ -141,3 +141,12 @@ Pendiente (D11, Entrega 2): logs estructurados con id de correlación, métricas
 |---|---|---|---|
 | Notificaciones | Publicamos | notificaciones (vía api-gateway) | Contrato + mock ([docs/contracts](contracts/README.md), [ADR-004](adr/ADR-004-contrato-de-notificaciones.md)) |
 | Inventario | Consumimos | pedidos | Esperando el contrato del otro grupo (D9) |
+
+## Limitaciones conocidas y deuda técnica
+
+Soluciones más simples que la ideal, elegidas a conciencia. Cada una dice qué impacto tiene, por qué se acepta hoy y cómo se resolvería.
+
+| Limitación | Impacto | Por qué se acepta | Cómo se resuelve |
+|---|---|---|---|
+| **El límite de 60 solicitudes por minuto se cuenta por instancia.** `notificaciones` lleva el contador en la memoria de cada instancia. | Con dos instancias balanceadas (D12), cada una cuenta por separado y un grupo podría hacer hasta 120 por minuto. Siempre falla para el lado permisivo: nunca se rechaza a un grupo que respetó el límite. Con una sola instancia, el límite se cumple exacto. | El límite protege al servicio de abusos y, con el tráfico esperado, el doble no pone en riesgo nada. Un contador compartido (por ejemplo, en MongoDB) suma una escritura a la base en cada solicitud. | Mover el control de tráfico al api-gateway, que ve todas las solicitudes antes de repartirlas. El enunciado lo pide para la presentación. |
+| **Los avisos se entregan "al menos una vez".** Si el servidor de correo acepta un mail pero falla el guardado del estado `enviada`, la notificación se vuelve a tomar cuando vence el apartado (2 minutos) y el mail sale dos veces. | El destinatario puede recibir un mail repetido, solo cuando MongoDB falla justo después de un envío exitoso. | Entre duplicar un aviso y perderlo, es preferible duplicarlo. Garantizar "exactamente una vez" con un servidor SMTP externo no es posible: el servidor no participa de nuestras transacciones. | No hay una solución completa. Se puede reducir la ventana reintentando el guardado del estado antes de soltar la notificación. |
