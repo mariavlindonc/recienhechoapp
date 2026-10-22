@@ -2,7 +2,7 @@
 
 ## Estado
 
-- **Aceptado** para la comunicación síncrona del api-gateway, Entrega 2 (se confirma cuando el gateway enrute `/notificaciones*`).
+- **Aceptado** para la comunicación síncrona del api-gateway, Entrega 2 (validado con el proxy de `/notificaciones*`).
 - **Propuesto** para el resto (llamadas de `pedidos` y mensajería con RabbitMQ): se acepta al implementar `pedidos`, para la presentación.
 
 ## Contexto
@@ -66,7 +66,7 @@ Que el evento se publique sí o sí después de guardar el cambio (sin perderlo 
 
 ## Validación (Entrega 2)
 
-- **Gateway → servicios:** se mantiene lo decidido (timeout de 3 s, sin reintentos, `503 no_disponible` si el servicio no responde). Todavía no se puede validar: el gateway solo expone `/health`. Se confirma cuando enrute `/notificaciones*`.
+- **Gateway → servicios:** se mantiene lo decidido (timeout de 3 s, sin reintentos, `503 no_disponible` si el servicio no responde). Validado: el gateway reenvía `/notificaciones*` con `httputil.ReverseProxy`, corta a los 3 s y no reintenta. Con `docker compose stop notificaciones`, un `POST` a `localhost:8080/notificaciones` responde `503 no_disponible` a los 3 s y el gateway sigue atendiendo `/health`.
 - **Asíncrono en el flujo propio de notificaciones:** el `POST` responde `202` y el envío del mail pasa en segundo plano, con 3 reintentos tras el primer intento y espera exponencial (30, 60 y 120 s). Confirma la idea de este ADR de no hacer esperar al que pide por una dependencia lenta, aunque todavía sin broker.
 - **RabbitMQ** queda para la presentación, cuando exista `pedidos` para publicar `pedido.estado_cambiado`.
 - Los mecanismos de protección y la tabla de dependencias de cada servicio están en [ADR-011](ADR-011-resiliencia.md); el circuit breaker hacia inventario en [ADR-010](ADR-010-consumo-de-inventario.md).
