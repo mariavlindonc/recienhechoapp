@@ -16,6 +16,9 @@ const nombreServicio = "api-gateway"
 const tiempoMaximoServicios = 3 * time.Second
 
 func main() {
+	// Todos los logs del gateway salen en JSON con el nombre del servicio (ADR-006).
+	slog.SetDefault(nuevoLogger(os.Stdout, nombreServicio))
+
 	if err := ejecutar(); err != nil {
 		slog.Error("el api-gateway terminó con error", "error", err)
 		os.Exit(1)
@@ -43,7 +46,8 @@ func ejecutar() error {
 // nuevoRouter arma las rutas públicas. Todo lo que empieza con /notificaciones va
 // al servicio de notificaciones tal cual llega (headers, cuerpo y respuesta).
 func nuevoRouter(notificaciones http.Handler) *gin.Engine {
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery(), registrarSolicitudes(slog.Default()))
 	router.GET("/health", func(contexto *gin.Context) {
 		contexto.JSON(http.StatusOK, gin.H{"status": "ok", "service": nombreServicio})
 	})

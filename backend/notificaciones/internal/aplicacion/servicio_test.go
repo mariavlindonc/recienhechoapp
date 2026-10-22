@@ -1,8 +1,11 @@
 package aplicacion_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -295,5 +298,32 @@ func TestRechazoDelDestinatarioFallaSinReintentar(prueba *testing.T) {
 	}
 	if len(entorno.remitente.enviados) != 1 {
 		prueba.Errorf("se intentó %d veces, se esperaba 1", len(entorno.remitente.enviados))
+	}
+}
+
+func TestEnvioFallidoQuedaEnElLogSinDatosDelMail(prueba *testing.T) {
+	var salida bytes.Buffer
+	anterior := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&salida, nil)))
+	prueba.Cleanup(func() { slog.SetDefault(anterior) })
+
+	entorno := nuevoEscenario()
+	entorno.remitente.errores = []error{errors.New("servidor de correo caído")}
+	creada, _ := entorno.servicio.Crear(contexto, "grupo-a", "clave-1", solicitudValida())
+
+	entorno.servicio.ProcesarPendientes(contexto)
+
+	var linea map[string]any
+	if err := json.Unmarshal(salida.Bytes(), &linea); err != nil {
+		prueba.Fatalf("se esperaba una línea JSON, llegó %q (%v)", salida.String(), err)
+	}
+	if linea["id"] != creada.ID || linea["intento"] != float64(1) || linea["estado"] != "pendiente" {
+		prueba.Errorf("faltan datos del fallo: %v", linea)
+	}
+	if !strings.Contains(salida.String(), "servidor de correo caído") {
+		prueba.Errorf("falta el error: %s", salida.String())
+	}
+	if strings.Contains(salida.String(), "cliente@ejemplo.com") || strings.Contains(salida.String(), "retirarlo") {
+		prueba.Errorf("el log no puede incluir el destinatario ni el contenido: %s", salida.String())
 	}
 }

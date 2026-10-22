@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 	"unicode/utf8"
 
@@ -144,6 +145,15 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 	}
 	if err != nil {
 		return fmt.Errorf("registrar resultado del envío de %s: %w", notificacion.ID, err)
+	}
+	if errEnvio != nil {
+		// Sin destinatario ni contenido del mail: solo lo necesario para seguir el problema.
+		slog.WarnContext(contexto, "envío de notificación fallido",
+			"id", notificacion.ID,
+			"intento", notificacion.Intentos,
+			"estado", notificacion.Estado,
+			"error", errEnvio,
+		)
 	}
 
 	// Si el mail salió pero esto falla, la notificación se vuelve a tomar cuando
