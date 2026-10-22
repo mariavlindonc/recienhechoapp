@@ -6,6 +6,8 @@ services:
     container_name: recienhecho-api-gateway
     environment:
       PORT: ${API_GATEWAY_PORT}
+      # Sin los mensajes de depuración de Gin: los logs quedan solo en JSON (ADR-006).
+      GIN_MODE: release
       # Instancias de notificaciones entre las que reparte el gateway (ADR-012).
       NOTIFICACIONES_URLS: http://notificaciones:${NOTIFICACIONES_PORT}
     ports:
@@ -45,6 +47,7 @@ services:
     container_name: recienhecho-notificaciones
     environment:
       PORT: ${NOTIFICACIONES_PORT}
+      GIN_MODE: release
       MONGO_URI: mongodb://${NOTIFICACIONES_MONGO_USUARIO}:${NOTIFICACIONES_MONGO_CLAVE}@mongo-notificaciones:27017/?authSource=admin
       NOTIFICACIONES_CLAVES_API: ${NOTIFICACIONES_CLAVES_API}
       # Mailpit en desarrollo; para Gmail se cambian estas variables en el .env (ADR-005).

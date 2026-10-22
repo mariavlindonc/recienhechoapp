@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"regexp"
 	"time"
 	"unicode/utf8"
 
@@ -145,6 +147,15 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 	if err != nil {
 		return fmt.Errorf("registrar resultado del envío de %s: %w", notificacion.ID, err)
 	}
+	if errEnvio != nil {
+		// Sin destinatario ni contenido del mail: solo lo necesario para seguir el problema.
+		slog.WarnContext(contexto, "envío de notificación fallido",
+			"id", notificacion.ID,
+			"intento", notificacion.Intentos,
+			"estado", notificacion.Estado,
+			"error", ocultarEmails(errEnvio.Error()),
+		)
+	}
 
 	// Si el mail salió pero esto falla, la notificación se vuelve a tomar cuando
 	// vence el apartado y el mail puede salir dos veces: se prefiere duplicar un
@@ -153,6 +164,16 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 		return fmt.Errorf("actualizar notificación %s: %w", notificacion.ID, err)
 	}
 	return nil
+}
+
+// patronEmail reconoce cualquier cosa con forma de dirección de email.
+var patronEmail = regexp.MustCompile(`[^\s<>@"']+@[^\s<>@"']+`)
+
+// ocultarEmails tapa las direcciones de email de un texto antes de registrarlo:
+// algunos servidores de correo incluyen al destinatario en su respuesta
+// (por ejemplo, "550 <cliente@ejemplo.com> no existe").
+func ocultarEmails(texto string) string {
+	return patronEmail.ReplaceAllString(texto, "[email oculto]")
 }
 
 func validarClave(clave string) error {

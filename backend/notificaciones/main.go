@@ -21,6 +21,7 @@ import (
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/mongodb"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/smtp"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/aplicacion"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/registro"
 )
 
 const (
@@ -30,6 +31,10 @@ const (
 )
 
 func main() {
+	// Todos los logs del servicio (incluidos los de los paquetes internos, que usan
+	// slog.Default) salen en JSON con el nombre del servicio (ADR-006).
+	slog.SetDefault(registro.NuevoLogger(os.Stdout, "notificaciones"))
+
 	if err := ejecutar(); err != nil {
 		slog.Error("el servicio de notificaciones terminó con error", "error", err)
 		os.Exit(1)
@@ -66,7 +71,7 @@ func ejecutar() error {
 	servicio := aplicacion.NuevoServicio(repositorio, remitente, ahora, nuevoUUID)
 
 	router := gin.New()
-	router.Use(gin.Recovery())
+	router.Use(gin.Recovery(), registro.Solicitudes(slog.Default()))
 	api.Registrar(router, servicio, api.Configuracion{
 		ClavesAPI:       configuracion.clavesAPI,
 		LimitePorMinuto: configuracion.limitePorMinuto,
