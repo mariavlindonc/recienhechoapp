@@ -69,8 +69,17 @@ const (
 	EnvioFallido   ResultadoEnvio = "fallida"   // falló y no se reintenta más
 )
 
-// Metricas recibe los hechos del negocio que conviene contar (ADR-006). La
-// implementa el adaptador de Prometheus; la aplicación no sabe cuál es.
-type Metricas interface {
-	EnvioTerminado(resultado ResultadoEnvio)
+// IntentoDeEnvio describe cómo terminó un intento de envío de una notificación.
+type IntentoDeEnvio struct {
+	IDNotificacion string
+	Numero         int // intentos hechos, contando este
+	Resultado      ResultadoEnvio
+	Error          error // nil si el mail salió
+}
+
+// Eventos recibe los hechos del negocio que interesan fuera de la aplicación. La
+// aplicación solo avisa qué pasó; el adaptador decide qué loguear y qué contar en
+// las métricas (ADR-006, ADR-007).
+type Eventos interface {
+	EnvioIntentado(contexto context.Context, intento IntentoDeEnvio)
 }

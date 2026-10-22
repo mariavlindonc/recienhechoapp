@@ -44,9 +44,9 @@ func leerMetricas(prueba *testing.T, metricas *metricas.Metricas) string {
 
 func TestLosEnviosSeCuentanPorResultado(prueba *testing.T) {
 	registro := metricas.Nuevas()
-	registro.EnvioTerminado(puertos.EnvioExitoso)
-	registro.EnvioTerminado(puertos.EnvioExitoso)
-	registro.EnvioTerminado(puertos.EnvioReintento)
+	registro.ContarEnvio(puertos.EnvioExitoso)
+	registro.ContarEnvio(puertos.EnvioExitoso)
+	registro.ContarEnvio(puertos.EnvioReintento)
 
 	publicado := leerMetricas(prueba, registro)
 
