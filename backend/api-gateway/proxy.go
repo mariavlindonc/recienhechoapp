@@ -25,13 +25,16 @@ type proxyBalanceado struct {
 	siguiente    atomic.Uint64
 	tiempoMaximo time.Duration
 	proxy        *httputil.ReverseProxy
+	// alTerminar se llama después de cada reenvío con la instancia y el estado de
+	// la respuesta (para las métricas). Puede ser nil.
+	alTerminar func(instancia string, estado int)
 }
 
 // claveInstancia guarda en el contexto de la solicitud la instancia elegida.
 type claveInstancia struct{}
 
-func nuevoProxyBalanceado(servicio string, instancias []*url.URL, tiempoMaximo time.Duration) *proxyBalanceado {
-	balanceador := &proxyBalanceado{servicio: servicio, instancias: instancias, tiempoMaximo: tiempoMaximo}
+func nuevoProxyBalanceado(servicio string, instancias []*url.URL, tiempoMaximo time.Duration, alTerminar func(instancia string, estado int)) *proxyBalanceado {
+	balanceador := &proxyBalanceado{servicio: servicio, instancias: instancias, tiempoMaximo: tiempoMaximo, alTerminar: alTerminar}
 	balanceador.proxy = &httputil.ReverseProxy{
 		Rewrite: func(pedido *httputil.ProxyRequest) {
 			elegida := pedido.In.Context().Value(claveInstancia{}).(*url.URL)
@@ -51,7 +54,29 @@ func (balanceador *proxyBalanceado) ServeHTTP(escritor http.ResponseWriter, pedi
 	contexto, cancelar := context.WithTimeout(pedido.Context(), balanceador.tiempoMaximo)
 	defer cancelar()
 	contexto = context.WithValue(contexto, claveInstancia{}, elegida)
-	balanceador.proxy.ServeHTTP(escritor, pedido.WithContext(contexto))
+
+	conEstado := &escritorConEstado{ResponseWriter: escritor, estado: http.StatusOK}
+	balanceador.proxy.ServeHTTP(conEstado, pedido.WithContext(contexto))
+	if balanceador.alTerminar != nil {
+		balanceador.alTerminar(elegida.Host, conEstado.estado)
+	}
+}
+
+// escritorConEstado recuerda el código de estado de la respuesta para poder
+// contarlo después.
+type escritorConEstado struct {
+	http.ResponseWriter
+	estado int
+}
+
+func (escritor *escritorConEstado) WriteHeader(estado int) {
+	escritor.estado = estado
+	escritor.ResponseWriter.WriteHeader(estado)
+}
+
+// Unwrap deja que el proxy llegue al escritor original (por ejemplo, para Flush).
+func (escritor *escritorConEstado) Unwrap() http.ResponseWriter {
+	return escritor.ResponseWriter
 }
 
 // elegir devuelve la próxima instancia del turno.

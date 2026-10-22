@@ -10,6 +10,7 @@ Instrucciones para agentes de código (Claude Code, Antigravity, Codex, OpenCode
 backend/    api-gateway, usuarios, productos, pedidos, notificaciones (cada uno con su go.mod y Dockerfile)
 frontend/   pendiente
 docs/       arquitectura, ADRs, contratos, postmortems
+observabilidad/  configuración de Prometheus (lectura de métricas y alertas) y de Grafana (fuentes y tablero)
 ```
 
 ## Comandos
@@ -37,10 +38,14 @@ for servicio in backend/*/; do (cd "$servicio" && go test ./... && go vet ./...)
 
 Cada dependencia que se agregue se lista acá con su uso, puerto y URL local. Las demás bases, la caché y el broker están propuestos en [ADR-002](docs/adr/ADR-002-persistencia.md) y [ADR-003](docs/adr/ADR-003-comunicacion-entre-servicios.md), pero todavía no están en el compose.
 
+Las herramientas de desarrollo (MongoDB, Mailpit, Jaeger, Prometheus y Grafana) publican su puerto solo en `127.0.0.1`: se usan desde la propia computadora y no quedan expuestas a la red local ([ADR-006](docs/adr/ADR-006-observabilidad.md)).
+
 | Dependencia | Uso | Puerto | URL local |
 |---|---|---|---|
 | MongoDB (`mongo:8`) | Base de `notificaciones` ([ADR-002](docs/adr/ADR-002-persistencia.md)) | `NOTIFICACIONES_MONGO_PORT` (27017) | `mongodb://localhost:27017` (usuario y clave en `.env`) |
 | Mailpit (`axllent/mailpit`) | Buzón falso para desarrollo ([ADR-005](docs/adr/ADR-005-envio-de-email.md)) | `MAILPIT_SMTP_PORT` (1025) y `MAILPIT_WEB_PORT` (8025) | http://localhost:8025 |
+| Prometheus (`prom/prometheus:v3.15.0`) | Lee `/metrics` de los servicios (puerto interno 9464) y evalúa las alertas ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `PROMETHEUS_WEB_PORT` (9090) | http://localhost:9090 |
+| Grafana (`grafana/grafana:13.2.3`) | Tablero de métricas y acceso a las trazas ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `GRAFANA_WEB_PORT` (3000) | http://localhost:3000 (sin usuario, solo lectura; admin con `GRAFANA_ADMIN_CLAVE`) |
 | Jaeger (`jaegertracing/jaeger:2.22.0`) | Trazas de api-gateway y notificaciones por OTLP ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `JAEGER_WEB_PORT` (16686) | http://localhost:16686 |
 | Prism (`stoplight/prism:5`) | Mock del contrato de notificaciones ([ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md)) | `NOTIFICACIONES_MOCK_PORT` (4010) | http://localhost:4010/notificaciones |
 

@@ -1,0 +1,38 @@
+# Alertas y objetivo de servicio de ADR-006. Prometheus las evalúa y las muestra
+# en http://localhost:9090/alerts; Grafana las muestra en el tablero.
+groups:
+  - name: notificaciones
+    rules:
+      # Fracción de POST /notificaciones que el gateway respondió en menos de 300 ms
+      # en la última hora. El objetivo es 99 % (ADR-006).
+      - record: slo:notificaciones_post_rapidas:ratio_1h
+        expr: |
+          sum(rate(duracion_solicitud_http_segundos_bucket{job="api-gateway", metodo="POST", ruta="/notificaciones", le="0.3"}[1h]))
+          /
+          sum(rate(duracion_solicitud_http_segundos_count{job="api-gateway", metodo="POST", ruta="/notificaciones"}[1h]))
+
+      - alert: NotificacionesFallidas
+        expr: sum(increase(notificaciones_envios_total{resultado="fallida"}[10m])) > 5
+        labels:
+          severidad: aviso
+        annotations:
+          resumen: Más de 5 notificaciones fallidas en 10 minutos
+          descripcion: El servidor de correo está caído o rechazando envíos. Revisar Mailpit/Gmail y los logs "envío de notificación fallido".
+
+      - alert: ObjetivoDeLatenciaIncumplido
+        expr: slo:notificaciones_post_rapidas:ratio_1h < 0.99
+        for: 5m
+        labels:
+          severidad: aviso
+        annotations:
+          resumen: Menos del 99 % de los POST /notificaciones respondió en menos de 300 ms
+          descripcion: "Fracción actual: {{ $value | humanizePercentage }}. Revisar la latencia por servicio en el tablero y las trazas lentas en Jaeger."
+
+      - alert: ServicioSinMetricas
+        expr: up == 0
+        for: 1m
+        labels:
+          severidad: critica
+        annotations:
+          resumen: "Prometheus no puede leer las métricas de {{ $labels.job }}"
+          descripcion: El servicio está caído o no responde en el puerto de métricas.

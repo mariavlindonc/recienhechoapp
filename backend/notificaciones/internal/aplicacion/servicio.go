@@ -28,14 +28,15 @@ const tiempoApartado = 2 * time.Minute
 type Servicio struct {
 	repositorio puertos.Repositorio
 	remitente   puertos.Remitente
+	metricas    puertos.Metricas
 	ahora       func() time.Time
 	nuevoID     func() string
 }
 
 // NuevoServicio arma el servicio. El reloj y el generador de ids se reciben de
 // afuera para que los tests puedan controlarlos.
-func NuevoServicio(repositorio puertos.Repositorio, remitente puertos.Remitente, ahora func() time.Time, nuevoID func() string) *Servicio {
-	return &Servicio{repositorio: repositorio, remitente: remitente, ahora: ahora, nuevoID: nuevoID}
+func NuevoServicio(repositorio puertos.Repositorio, remitente puertos.Remitente, metricas puertos.Metricas, ahora func() time.Time, nuevoID func() string) *Servicio {
+	return &Servicio{repositorio: repositorio, remitente: remitente, metricas: metricas, ahora: ahora, nuevoID: nuevoID}
 }
 
 // Crear registra una notificación pendiente para el grupo. Repetir el pedido con
@@ -163,7 +164,20 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 	if err := servicio.repositorio.Actualizar(contexto, *notificacion); err != nil {
 		return fmt.Errorf("actualizar notificación %s: %w", notificacion.ID, err)
 	}
+	servicio.metricas.EnvioTerminado(resultadoDelEnvio(errEnvio, notificacion.Estado))
 	return nil
+}
+
+// resultadoDelEnvio resume cómo terminó un intento de envío para las métricas.
+func resultadoDelEnvio(errEnvio error, estado dominio.Estado) puertos.ResultadoEnvio {
+	switch {
+	case errEnvio == nil:
+		return puertos.EnvioExitoso
+	case estado == dominio.EstadoFallida:
+		return puertos.EnvioFallido
+	default:
+		return puertos.EnvioReintento
+	}
 }
 
 // patronEmail reconoce cualquier cosa con forma de dirección de email.

@@ -76,7 +76,8 @@ services:
     volumes:
       - mongo-notificaciones-datos:/data/db
     ports:
-      - "${NOTIFICACIONES_MONGO_PORT}:27017"
+      # Solo desde esta compu (127.0.0.1): la clave de desarrollo no queda expuesta a la red local (ADR-006).
+      - "127.0.0.1:${NOTIFICACIONES_MONGO_PORT}:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 5s
@@ -89,8 +90,9 @@ services:
     image: axllent/mailpit
     container_name: recienhecho-mailpit
     ports:
-      - "${MAILPIT_SMTP_PORT}:1025"
-      - "${MAILPIT_WEB_PORT}:8025"
+      # Solo desde esta compu (127.0.0.1): la web muestra el contenido de los mails.
+      - "127.0.0.1:${MAILPIT_SMTP_PORT}:1025"
+      - "127.0.0.1:${MAILPIT_WEB_PORT}:8025"
     networks: [interna]
 
   # Recibe las trazas por OTLP y las muestra en una web (ADR-006). Ningún servicio
@@ -99,7 +101,41 @@ services:
     image: jaegertracing/jaeger:2.22.0
     container_name: recienhecho-jaeger
     ports:
-      - "${JAEGER_WEB_PORT}:16686"
+      # Solo desde esta compu (127.0.0.1), como Prometheus y Grafana (ADR-006).
+      - "127.0.0.1:${JAEGER_WEB_PORT}:16686"
+    networks: [interna]
+
+  # Lee /metrics de los servicios cada 15 s (puerto interno 9464) y evalúa las
+  # alertas de observabilidad/prometheus/alertas.yml (ADR-006).
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    container_name: recienhecho-prometheus
+    volumes:
+      - ./observabilidad/prometheus:/etc/prometheus:ro
+    ports:
+      # Solo desde esta compu (127.0.0.1): no se expone a la red local.
+      - "127.0.0.1:${PROMETHEUS_WEB_PORT}:9090"
+    networks: [interna]
+
+  # Tablero con las métricas de Prometheus y acceso a las trazas de Jaeger. Las
+  # fuentes y el tablero salen de observabilidad/grafana: no hay que configurar nada a mano.
+  grafana:
+    image: grafana/grafana:13.2.3
+    container_name: recienhecho-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_CLAVE}
+      # Cualquiera puede ver el tablero sin iniciar sesión, pero no editarlo.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/tableros/recien-hecho.json
+    volumes:
+      - ./observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observabilidad/grafana/tableros:/var/lib/grafana/tableros:ro
+    ports:
+      # Solo desde esta compu (127.0.0.1): el acceso anónimo no llega a la red local.
+      - "127.0.0.1:${GRAFANA_WEB_PORT}:3000"
+    depends_on: [prometheus]
     networks: [interna]
 
   # Mock del contrato publicado (docs/contracts/notificaciones.yaml), ver ADR-004.

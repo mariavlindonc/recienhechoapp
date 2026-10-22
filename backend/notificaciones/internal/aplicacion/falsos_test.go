@@ -138,3 +138,12 @@ func (generador *generadorDeIDs) nuevoID() string {
 	generador.contador++
 	return fmt.Sprintf("id-%d", generador.contador)
 }
+
+// metricasFalsas cumple puertos.Metricas: cuenta los resultados de envío.
+type metricasFalsas struct {
+	resultados []puertos.ResultadoEnvio
+}
+
+func (metricas *metricasFalsas) EnvioTerminado(resultado puertos.ResultadoEnvio) {
+	metricas.resultados = append(metricas.resultados, resultado)
+}

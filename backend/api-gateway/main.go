@@ -50,7 +50,16 @@ func ejecutar() error {
 		apagarTrazas(contextoTrazas)
 	}()
 
-	router := nuevoRouter(nuevoProxyBalanceado("notificaciones", instanciasNotificaciones, tiempoMaximoServicios))
+	medidor := nuevasMetricas()
+	go func() {
+		// Sin métricas el gateway sigue atendiendo: el problema queda en el log.
+		if err := medidor.servir(context.Background(), puertoMetricas()); err != nil {
+			slog.Error("no se pudieron publicar las métricas", "error", err)
+		}
+	}()
+
+	proxyNotificaciones := nuevoProxyBalanceado("notificaciones", instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
+	router := nuevoRouter(proxyNotificaciones, medidor.medirSolicitudes())
 	slog.Info("api-gateway escuchando", "puerto", puerto, "instancias_notificaciones", len(instanciasNotificaciones))
 	if err := router.Run(":" + puerto); err != nil {
 		return fmt.Errorf("servidor HTTP: %w", err)
@@ -60,11 +69,12 @@ func ejecutar() error {
 
 // nuevoRouter arma las rutas públicas. Todo lo que empieza con /notificaciones va
 // al servicio de notificaciones tal cual llega (headers, cuerpo y respuesta).
-func nuevoRouter(notificaciones http.Handler) *gin.Engine {
+func nuevoRouter(notificaciones http.Handler, extras ...gin.HandlerFunc) *gin.Engine {
 	router := gin.New()
 	// otelgin va primero: abre el span de la solicitud y así el middleware de logs
 	// ya ve el trace_id.
 	router.Use(otelgin.Middleware(nombreServicio, otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registrarSolicitudes(slog.Default()))
+	router.Use(extras...)
 	router.GET("/health", func(contexto *gin.Context) {
 		contexto.JSON(http.StatusOK, gin.H{"status": "ok", "service": nombreServicio})
 	})
@@ -76,4 +86,12 @@ func nuevoRouter(notificaciones http.Handler) *gin.Engine {
 // sinChequeosDeSalud evita trazar /health, que no aporta nada en Jaeger.
 func sinChequeosDeSalud(pedido *http.Request) bool {
 	return pedido.URL.Path != "/health"
+}
+
+// puertoMetricas es el puerto interno donde se publica /metrics para Prometheus.
+func puertoMetricas() string {
+	if puerto := os.Getenv("METRICAS_PORT"); puerto != "" {
+		return puerto
+	}
+	return "9464"
 }

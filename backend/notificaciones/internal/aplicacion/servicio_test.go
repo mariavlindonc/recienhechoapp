@@ -21,18 +21,21 @@ type escenario struct {
 	servicio    *aplicacion.Servicio
 	repositorio *repositorioEnMemoria
 	remitente   *remitenteFalso
+	metricas    *metricasFalsas
 	reloj       *relojFalso
 }
 
 func nuevoEscenario() escenario {
 	repositorio := nuevoRepositorioEnMemoria()
 	remitente := &remitenteFalso{}
+	metricas := &metricasFalsas{}
 	reloj := &relojFalso{momento: time.Date(2026, 10, 21, 14, 30, 0, 0, time.UTC)}
 	generador := &generadorDeIDs{}
 	return escenario{
-		servicio:    aplicacion.NuevoServicio(repositorio, remitente, reloj.ahora, generador.nuevoID),
+		servicio:    aplicacion.NuevoServicio(repositorio, remitente, metricas, reloj.ahora, generador.nuevoID),
 		repositorio: repositorio,
 		remitente:   remitente,
+		metricas:    metricas,
 		reloj:       reloj,
 	}
 }
@@ -345,5 +348,45 @@ func TestElLogDelEnvioFallidoTapaLosEmailsDelError(prueba *testing.T) {
 	}
 	if !strings.Contains(salida.String(), "550 5.1.1 <[email oculto]>: la casilla no existe") {
 		prueba.Errorf("el resto del error se tiene que mantener: %s", salida.String())
+	}
+}
+
+func TestCadaEnvioSeCuentaEnLasMetricas(prueba *testing.T) {
+	caido := errors.New("servidor de correo caído")
+	casos := []struct {
+		nombre   string
+		errores  []error
+		esperado map[puertos.ResultadoEnvio]int
+	}{
+		{"sale bien", nil, map[puertos.ResultadoEnvio]int{puertos.EnvioExitoso: 1}},
+		{"rechazada", []error{puertos.ErrEnvioRechazado}, map[puertos.ResultadoEnvio]int{puertos.EnvioFallido: 1}},
+		{"se agotan los reintentos", []error{caido, caido, caido, caido}, map[puertos.ResultadoEnvio]int{puertos.EnvioReintento: 3, puertos.EnvioFallido: 1}},
+		{"sale en el segundo intento", []error{caido}, map[puertos.ResultadoEnvio]int{puertos.EnvioReintento: 1, puertos.EnvioExitoso: 1}},
+	}
+
+	for _, caso := range casos {
+		prueba.Run(caso.nombre, func(prueba *testing.T) {
+			entorno := nuevoEscenario()
+			entorno.remitente.errores = caso.errores
+			entorno.servicio.Crear(contexto, "grupo-a", "clave-1", solicitudValida())
+
+			for range dominio.ReintentosMaximos + 1 {
+				entorno.servicio.ProcesarPendientes(contexto)
+				entorno.reloj.adelantar(10 * time.Minute)
+			}
+
+			cuenta := map[puertos.ResultadoEnvio]int{}
+			for _, resultado := range entorno.metricas.resultados {
+				cuenta[resultado]++
+			}
+			if len(cuenta) != len(caso.esperado) {
+				prueba.Errorf("resultados = %v, se esperaba %v", cuenta, caso.esperado)
+			}
+			for resultado, cantidad := range caso.esperado {
+				if cuenta[resultado] != cantidad {
+					prueba.Errorf("%s: %d, se esperaban %d", resultado, cuenta[resultado], cantidad)
+				}
+			}
+		})
 	}
 }

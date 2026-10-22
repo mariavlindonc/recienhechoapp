@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/api"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/metricas"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/mongodb"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/smtp"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/aplicacion"
@@ -81,12 +82,13 @@ func ejecutar() error {
 	if err != nil {
 		return err
 	}
-	servicio := aplicacion.NuevoServicio(repositorio, remitente, ahora, nuevoUUID)
+	medidor := metricas.Nuevas()
+	servicio := aplicacion.NuevoServicio(repositorio, remitente, medidor, ahora, nuevoUUID)
 
 	router := gin.New()
 	// otelgin va primero: abre el span de la solicitud (o continúa la traza que llega
 	// en traceparent) y así el middleware de logs ya ve el trace_id.
-	router.Use(otelgin.Middleware("notificaciones", otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registro.Solicitudes(slog.Default()))
+	router.Use(otelgin.Middleware("notificaciones", otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registro.Solicitudes(slog.Default()), medidor.Solicitudes())
 	api.Registrar(router, servicio, api.Configuracion{
 		ClavesAPI:       configuracion.clavesAPI,
 		LimitePorMinuto: configuracion.limitePorMinuto,
@@ -104,10 +106,17 @@ func ejecutar() error {
 	}
 
 	var procesos sync.WaitGroup
-	procesos.Add(1)
+	procesos.Add(2)
 	go func() {
 		defer procesos.Done()
 		enviarPendientes(contexto, servicio, configuracion.intervaloDeEnvio)
+	}()
+	go func() {
+		defer procesos.Done()
+		// Sin métricas el servicio sigue atendiendo: el problema queda en el log.
+		if err := medidor.Servir(contexto, configuracion.puertoMetricas); err != nil {
+			slog.Error("no se pudieron publicar las métricas", "error", err)
+		}
 	}()
 
 	errorDelServidor := make(chan error, 1)
