@@ -32,7 +32,8 @@ for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet 
 - Identificadores, comentarios y mensajes en español, sin variables de una letra.
 - Errores manejados y devueltos con contexto (`fmt.Errorf("...: %w", err)`).
 - Configuración por variables de entorno; nada sensible en el código. Cada servicio las lee en su `configuracion.go`, con una función `leerConfiguracion` que valida todo al arrancar y avisa todos los problemas juntos.
-- Un servicio no importa código de otro.
+- Un servicio no importa código de otro. El código de logs, trazas y métricas se copia y respeta las convenciones de [ADR-006](docs/adr/ADR-006-observabilidad.md#convenciones-compartidas-entre-servicios).
+- Los servicios se arman igual siempre que su arquitectura lo permita: configuración en `configuracion.go`, apagado ordenado ante SIGTERM (`signal.NotifyContext` y `http.Server.Shutdown`) y el mismo orden de middlewares.
 - Dependencias de Go e imágenes de Docker con versión exacta, nunca `latest` ni rangos, elegida entre las publicadas hace al menos dos semanas: las recién salidas tienen más riesgo de errores y de problemas de seguridad sin detectar. Se actualizan periódicamente.
 - Commits con [Conventional Commits](https://www.conventionalcommits.org/es/) en español: `feat(productos): agrega listado de catálogo`.
 - Ramas con git flow; detalle en [CONTRIBUTING.md](docs/CONTRIBUTING.md).
