@@ -170,10 +170,11 @@ func enviarPendientes(contexto context.Context, servicio *aplicacion.Servicio, i
 	}
 }
 
-// sinChequeosDeSalud evita trazar /health, que el compose consulta seguido y no
-// aporta nada en Jaeger.
+// sinChequeosDeSalud evita trazar los chequeos de salud (/health y /vivo): los
+// consultan máquinas (el balanceador, un orquestador), cada pocos segundos y
+// siempre igual, así que no aportan información y tapan las trazas útiles (ADR-006).
 func sinChequeosDeSalud(pedido *http.Request) bool {
-	return pedido.URL.Path != "/health"
+	return pedido.URL.Path != "/health" && pedido.URL.Path != "/vivo"
 }
 
 // ahora es el reloj del servicio. Se trunca a milisegundos porque es la precisión

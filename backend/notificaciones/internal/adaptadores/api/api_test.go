@@ -292,6 +292,21 @@ func TestSalud(prueba *testing.T) {
 	}
 }
 
+func TestVivoNoDependeDeMongoNiDeLaClave(prueba *testing.T) {
+	actual := nuevoEntorno(1)
+	actual.salud = errors.New("mongo caído")
+
+	// Sin X-API-Key y más veces que el límite de uso (1 por minuto en este entorno).
+	for intento := range 3 {
+		if respuesta := actual.pedir(http.MethodGet, "/vivo", "", nil); respuesta.Code != http.StatusOK {
+			prueba.Fatalf("intento %d: estado = %d, se esperaba 200 aunque MongoDB esté caído", intento+1, respuesta.Code)
+		}
+	}
+	if respuesta := actual.pedir(http.MethodGet, "/health", "", nil); respuesta.Code != http.StatusServiceUnavailable {
+		prueba.Errorf("/health tiene que seguir informando la falla de MongoDB; dio %d", respuesta.Code)
+	}
+}
+
 func TestParsearClavesAPI(prueba *testing.T) {
 	claves, err := api.ParsearClavesAPI(" grupo-a:clave1 , grupo-b:clave2,")
 	if err != nil {
