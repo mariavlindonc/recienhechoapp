@@ -1,11 +1,8 @@
 package aplicacion_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -21,21 +18,21 @@ type escenario struct {
 	servicio    *aplicacion.Servicio
 	repositorio *repositorioEnMemoria
 	remitente   *remitenteFalso
-	metricas    *metricasFalsas
+	eventos     *eventosFalsos
 	reloj       *relojFalso
 }
 
 func nuevoEscenario() escenario {
 	repositorio := nuevoRepositorioEnMemoria()
 	remitente := &remitenteFalso{}
-	metricas := &metricasFalsas{}
+	eventos := &eventosFalsos{}
 	reloj := &relojFalso{momento: time.Date(2026, 10, 21, 14, 30, 0, 0, time.UTC)}
 	generador := &generadorDeIDs{}
 	return escenario{
-		servicio:    aplicacion.NuevoServicio(repositorio, remitente, metricas, reloj.ahora, generador.nuevoID),
+		servicio:    aplicacion.NuevoServicio(repositorio, remitente, eventos, reloj.ahora, generador.nuevoID),
 		repositorio: repositorio,
 		remitente:   remitente,
-		metricas:    metricas,
+		eventos:     eventos,
 		reloj:       reloj,
 	}
 }
@@ -304,54 +301,24 @@ func TestRechazoDelDestinatarioFallaSinReintentar(prueba *testing.T) {
 	}
 }
 
-func TestEnvioFallidoQuedaEnElLogSinDatosDelMail(prueba *testing.T) {
-	var salida bytes.Buffer
-	anterior := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&salida, nil)))
-	prueba.Cleanup(func() { slog.SetDefault(anterior) })
-
+func TestElEnvioFallidoSeAvisaComoEvento(prueba *testing.T) {
 	entorno := nuevoEscenario()
-	entorno.remitente.errores = []error{errors.New("servidor de correo caído")}
+	caido := errors.New("servidor de correo caído")
+	entorno.remitente.errores = []error{caido}
 	creada, _ := entorno.servicio.Crear(contexto, "grupo-a", "clave-1", solicitudValida())
 
 	entorno.servicio.ProcesarPendientes(contexto)
 
-	var linea map[string]any
-	if err := json.Unmarshal(salida.Bytes(), &linea); err != nil {
-		prueba.Fatalf("se esperaba una línea JSON, llegó %q (%v)", salida.String(), err)
+	if len(entorno.eventos.intentos) != 1 {
+		prueba.Fatalf("se esperaba 1 evento, hubo %d", len(entorno.eventos.intentos))
 	}
-	if linea["id"] != creada.ID || linea["intento"] != float64(1) || linea["estado"] != "pendiente" {
-		prueba.Errorf("faltan datos del fallo: %v", linea)
-	}
-	if !strings.Contains(salida.String(), "servidor de correo caído") {
-		prueba.Errorf("falta el error: %s", salida.String())
-	}
-	if strings.Contains(salida.String(), "cliente@ejemplo.com") || strings.Contains(salida.String(), "retirarlo") {
-		prueba.Errorf("el log no puede incluir el destinatario ni el contenido: %s", salida.String())
+	intento := entorno.eventos.intentos[0]
+	if intento.IDNotificacion != creada.ID || intento.Numero != 1 || intento.Resultado != puertos.EnvioReintento || !errors.Is(intento.Error, caido) {
+		prueba.Errorf("evento = %+v", intento)
 	}
 }
 
-func TestElLogDelEnvioFallidoTapaLosEmailsDelError(prueba *testing.T) {
-	var salida bytes.Buffer
-	anterior := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&salida, nil)))
-	prueba.Cleanup(func() { slog.SetDefault(anterior) })
-
-	entorno := nuevoEscenario()
-	entorno.remitente.errores = []error{errors.New("indicar el destinatario (550 5.1.1 <cliente@ejemplo.com>: la casilla no existe)")}
-	entorno.servicio.Crear(contexto, "grupo-a", "clave-1", solicitudValida())
-
-	entorno.servicio.ProcesarPendientes(contexto)
-
-	if strings.Contains(salida.String(), "cliente@ejemplo.com") {
-		prueba.Errorf("el log incluye la dirección: %s", salida.String())
-	}
-	if !strings.Contains(salida.String(), "550 5.1.1 <[email oculto]>: la casilla no existe") {
-		prueba.Errorf("el resto del error se tiene que mantener: %s", salida.String())
-	}
-}
-
-func TestCadaEnvioSeCuentaEnLasMetricas(prueba *testing.T) {
+func TestCadaIntentoDeEnvioSeAvisaConSuResultado(prueba *testing.T) {
 	caido := errors.New("servidor de correo caído")
 	casos := []struct {
 		nombre   string
@@ -376,8 +343,8 @@ func TestCadaEnvioSeCuentaEnLasMetricas(prueba *testing.T) {
 			}
 
 			cuenta := map[puertos.ResultadoEnvio]int{}
-			for _, resultado := range entorno.metricas.resultados {
-				cuenta[resultado]++
+			for _, intento := range entorno.eventos.intentos {
+				cuenta[intento.Resultado]++
 			}
 			if len(cuenta) != len(caso.esperado) {
 				prueba.Errorf("resultados = %v, se esperaba %v", cuenta, caso.esperado)

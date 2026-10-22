@@ -7,8 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"regexp"
 	"time"
 	"unicode/utf8"
 
@@ -28,15 +26,15 @@ const tiempoApartado = 2 * time.Minute
 type Servicio struct {
 	repositorio puertos.Repositorio
 	remitente   puertos.Remitente
-	metricas    puertos.Metricas
+	eventos     puertos.Eventos
 	ahora       func() time.Time
 	nuevoID     func() string
 }
 
 // NuevoServicio arma el servicio. El reloj y el generador de ids se reciben de
 // afuera para que los tests puedan controlarlos.
-func NuevoServicio(repositorio puertos.Repositorio, remitente puertos.Remitente, metricas puertos.Metricas, ahora func() time.Time, nuevoID func() string) *Servicio {
-	return &Servicio{repositorio: repositorio, remitente: remitente, metricas: metricas, ahora: ahora, nuevoID: nuevoID}
+func NuevoServicio(repositorio puertos.Repositorio, remitente puertos.Remitente, eventos puertos.Eventos, ahora func() time.Time, nuevoID func() string) *Servicio {
+	return &Servicio{repositorio: repositorio, remitente: remitente, eventos: eventos, ahora: ahora, nuevoID: nuevoID}
 }
 
 // Crear registra una notificación pendiente para el grupo. Repetir el pedido con
@@ -148,15 +146,6 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 	if err != nil {
 		return fmt.Errorf("registrar resultado del envío de %s: %w", notificacion.ID, err)
 	}
-	if errEnvio != nil {
-		// Sin destinatario ni contenido del mail: solo lo necesario para seguir el problema.
-		slog.WarnContext(contexto, "envío de notificación fallido",
-			"id", notificacion.ID,
-			"intento", notificacion.Intentos,
-			"estado", notificacion.Estado,
-			"error", ocultarEmails(errEnvio.Error()),
-		)
-	}
 
 	// Si el mail salió pero esto falla, la notificación se vuelve a tomar cuando
 	// vence el apartado y el mail puede salir dos veces: se prefiere duplicar un
@@ -164,11 +153,16 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 	if err := servicio.repositorio.Actualizar(contexto, *notificacion); err != nil {
 		return fmt.Errorf("actualizar notificación %s: %w", notificacion.ID, err)
 	}
-	servicio.metricas.EnvioTerminado(resultadoDelEnvio(errEnvio, notificacion.Estado))
+	servicio.eventos.EnvioIntentado(contexto, puertos.IntentoDeEnvio{
+		IDNotificacion: notificacion.ID,
+		Numero:         notificacion.Intentos,
+		Resultado:      resultadoDelEnvio(errEnvio, notificacion.Estado),
+		Error:          errEnvio,
+	})
 	return nil
 }
 
-// resultadoDelEnvio resume cómo terminó un intento de envío para las métricas.
+// resultadoDelEnvio resume cómo terminó un intento de envío.
 func resultadoDelEnvio(errEnvio error, estado dominio.Estado) puertos.ResultadoEnvio {
 	switch {
 	case errEnvio == nil:
@@ -178,16 +172,6 @@ func resultadoDelEnvio(errEnvio error, estado dominio.Estado) puertos.ResultadoE
 	default:
 		return puertos.EnvioReintento
 	}
-}
-
-// patronEmail reconoce cualquier cosa con forma de dirección de email.
-var patronEmail = regexp.MustCompile(`[^\s<>@"']+@[^\s<>@"']+`)
-
-// ocultarEmails tapa las direcciones de email de un texto antes de registrarlo:
-// algunos servidores de correo incluyen al destinatario en su respuesta
-// (por ejemplo, "550 <cliente@ejemplo.com> no existe").
-func ocultarEmails(texto string) string {
-	return patronEmail.ReplaceAllString(texto, "[email oculto]")
 }
 
 func validarClave(clave string) error {

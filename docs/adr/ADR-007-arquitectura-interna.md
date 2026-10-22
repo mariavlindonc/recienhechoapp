@@ -29,9 +29,10 @@ internal/puertos/       interfaces (Repositorio, Remitente, ReservadorDeInsumos,
 internal/adaptadores/   api (Gin), mongodb, mysql, smtp, rabbitmq, inventario, meilisearch, redis
 ```
 
-- En `notificaciones` los puertos son `Repositorio` y `Remitente`. Cambiar Mailpit por Gmail o agregar el consumidor de RabbitMQ es sumar o cambiar un adaptador, sin tocar el dominio.
+- En `notificaciones` los puertos son `Repositorio`, `Remitente` y `Eventos`. Cambiar Mailpit por Gmail o agregar el consumidor de RabbitMQ es sumar o cambiar un adaptador, sin tocar el dominio.
 - En `pedidos` el puerto `ReservadorDeInsumos` es la capa anticorrupción frente al inventario del otro grupo ([ADR-010](ADR-010-consumo-de-inventario.md)).
 - En `productos` los puertos son `Repositorio` (MySQL), `Buscador` (Meilisearch) y `Cache` (Redis). Cambiar de motor de búsqueda es cambiar el adaptador, como prevé [ADR-008](ADR-008-busqueda.md).
+- **Logs y métricas también van por un puerto** (revisión del 22/10/2026, decisión de Athina a partir de la revisión del código). La aplicación no importa `slog` ni Prometheus: avisa hechos del negocio por el puerto `Eventos` (por ejemplo, `EnvioIntentado` con el id, el número de intento, el resultado y el error), y el adaptador `eventos` decide qué se cuenta en las métricas y qué se loguea, incluido tapar los emails. Así la regla es una sola: la aplicación habla con el exterior solo por puertos. Las alternativas eran dejar que la aplicación usara `slog` directo (es librería estándar) o pasarle un logger por parámetro; las dos dejaban dos criterios distintos para algo muy parecido.
 - Los tests unitarios usan puertos falsos en memoria. Los adaptadores se prueban según lo que cuesta tener la dependencia real: el de MongoDB corre contra un MongoDB de verdad (`MONGO_URI_TEST`), el de SMTP contra un servidor falso en el mismo proceso y el de la API contra casos de uso falsos.
 
 **Capas en `usuarios`:** handler (Gin) → servicio → repositorio (MySQL). Cada capa solo llama a la de abajo. El servicio concentra las validaciones y el repositorio las consultas SQL.

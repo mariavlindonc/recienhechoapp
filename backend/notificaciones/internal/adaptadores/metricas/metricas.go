@@ -31,8 +31,6 @@ type Metricas struct {
 	envios      *prometheus.CounterVec
 }
 
-var _ puertos.Metricas = (*Metricas)(nil)
-
 // Nuevas crea las métricas, además de las del proceso y del runtime de Go
 // (memoria, goroutines, CPU).
 func Nuevas() *Metricas {
@@ -64,8 +62,8 @@ func Nuevas() *Metricas {
 	return metricas
 }
 
-// EnvioTerminado cumple puertos.Metricas.
-func (metricas *Metricas) EnvioTerminado(resultado puertos.ResultadoEnvio) {
+// ContarEnvio suma un intento de envío terminado con ese resultado.
+func (metricas *Metricas) ContarEnvio(resultado puertos.ResultadoEnvio) {
 	metricas.envios.WithLabelValues(string(resultado)).Inc()
 }
 
