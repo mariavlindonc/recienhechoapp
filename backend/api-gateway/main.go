@@ -36,13 +36,9 @@ func main() {
 }
 
 func ejecutar() error {
-	puerto := os.Getenv("PORT")
-	if puerto == "" {
-		puerto = "8080"
-	}
-	instanciasNotificaciones, err := parsearInstancias(os.Getenv("NOTIFICACIONES_URLS"))
+	configuracion, err := leerConfiguracion(os.Getenv)
 	if err != nil {
-		return fmt.Errorf("NOTIFICACIONES_URLS: %w", err)
+		return err
 	}
 
 	// El contexto se cancela cuando Docker pide apagar el servicio (SIGTERM) o con Ctrl+C.
@@ -61,9 +57,9 @@ func ejecutar() error {
 	}()
 
 	medidor := nuevasMetricas()
-	proxyNotificaciones := nuevoProxyBalanceado("notificaciones", instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
+	proxyNotificaciones := nuevoProxyBalanceado("notificaciones", configuracion.instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
 	servidor := &http.Server{
-		Addr:              ":" + puerto,
+		Addr:              ":" + configuracion.puerto,
 		Handler:           nuevoRouter(proxyNotificaciones, medidor.medirSolicitudes()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -73,14 +69,14 @@ func ejecutar() error {
 	go func() {
 		defer procesos.Done()
 		// Sin métricas el gateway sigue atendiendo: el problema queda en el log.
-		if err := medidor.servir(contexto, puertoMetricas()); err != nil {
+		if err := medidor.servir(contexto, configuracion.puertoMetricas); err != nil {
 			slog.Error("no se pudieron publicar las métricas", "error", err)
 		}
 	}()
 
 	errorDelServidor := make(chan error, 1)
 	go func() {
-		slog.Info("api-gateway escuchando", "puerto", puerto, "instancias_notificaciones", len(instanciasNotificaciones))
+		slog.Info("api-gateway escuchando", "puerto", configuracion.puerto, "instancias_notificaciones", len(configuracion.instanciasNotificaciones))
 		if err := servidor.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errorDelServidor <- err
 		}
@@ -124,12 +120,4 @@ func nuevoRouter(notificaciones http.Handler, extras ...gin.HandlerFunc) *gin.En
 // sinChequeosDeSalud evita trazar /health, que no aporta nada en Jaeger.
 func sinChequeosDeSalud(pedido *http.Request) bool {
 	return pedido.URL.Path != "/health"
-}
-
-// puertoMetricas es el puerto interno donde se publica /metrics para Prometheus.
-func puertoMetricas() string {
-	if puerto := os.Getenv("METRICAS_PORT"); puerto != "" {
-		return puerto
-	}
-	return "9464"
 }
