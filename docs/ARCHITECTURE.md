@@ -133,7 +133,10 @@ Exchange `pedidos` (topic), cola `notificaciones.pedidos`, DLQ `notificaciones.f
 
 ## Observabilidad
 
-Pendiente (D11, Entrega 2): logs estructurados con id de correlación, métricas, trazas y tablero.
+Decisiones en [ADR-006](adr/ADR-006-observabilidad.md) (D11).
+
+- **Logs:** api-gateway y notificaciones escriben una línea JSON por evento en la salida estándar (`docker compose logs`), con `servicio` y, cuando hay una traza activa, `trace_id` y `span_id`. Cada solicitud HTTP deja una línea con `metodo`, `ruta`, `estado` y `duracion_ms`, y cada envío fallido de una notificación, una con `id`, `intento`, `estado` y `error`. No se registran claves de API, claves de idempotencia, destinatarios ni contenidos de mails.
+- **Trazas, métricas y tablero:** pendientes (Jaeger, Prometheus y Grafana).
 
 ## Integraciones externas
 
