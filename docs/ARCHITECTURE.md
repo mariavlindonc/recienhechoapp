@@ -116,7 +116,7 @@ Los pedidos especiales pasan antes por `solicitado` → `cotizado` y de ahí a `
 | usuarios | MySQL | Datos tabulares, email único |
 | productos | MySQL + Redis | Filtros sobre el catálogo; se lee mucho y cambia poco |
 | pedidos | MongoDB | Pedido como documento con sus ítems; campos libres en pedidos especiales |
-| notificaciones | MongoDB | Documentos simples, índice único de idempotencia |
+| notificaciones | MongoDB | Documentos simples, clave de idempotencia única por grupo |
 
 Montos siempre en centavos (`int64`). Detalle y limitaciones en [ADR-002](adr/ADR-002-persistencia.md).
 
