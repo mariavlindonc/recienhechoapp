@@ -1,0 +1,10 @@
+# Tableros de Grafana, cargados desde observabilidad/grafana/tableros (ADR-006). Se
+# editan en el repo: los cambios hechos en la web no se guardan.
+apiVersion: 1
+
+providers:
+  - name: recien-hecho
+    type: file
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/tableros
