@@ -23,7 +23,7 @@ El enunciado pide tests de carga con resultados documentados y analizados, el pr
 
 | Escenario | Qué hace | Carga |
 |---|---|---|
-| Notificaciones (Entrega 2) | `POST` con claves de idempotencia nuevas y `GET` de las creadas, con varias claves de API | Rampa de 10 a 200 usuarios virtuales en 5 min, después 5 min sostenido |
+| Notificaciones (Entrega 2) | `POST` con claves de idempotencia nuevas y `GET` de las creadas, con claves de API de varios grupos (el límite de 60 por minuto es por grupo) o con `NOTIFICACIONES_LIMITE_POR_MINUTO` más alto en el entorno de carga | Rampa de 10 a 200 usuarios virtuales en 5 min, después 5 min sostenido |
 | Catálogo (presentación) | Listado por categoría y detalle, con caché apagada y prendida ([ADR-009](ADR-009-cache.md)) | Igual |
 | Pedidos (presentación) | Crear pedidos para el mismo día hasta agotar el cupo, con el inventario falso en modo normal y lento | 50 usuarios virtuales |
 
@@ -31,7 +31,7 @@ En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de error
 
 **Límites esperados (a confirmar con los resultados):**
 
-1. **Servidor de correo.** Gmail permite unos 500 mails por día ([ADR-005](ADR-005-envio-de-email.md)). La API puede aceptar muchas más notificaciones de las que se pueden enviar: el límite real del servicio está en el envío, no en el `POST`. Con Mailpit no aparece, por eso se mide aparte el ritmo de envío.
+1. **Servidor de correo.** Gmail permite unos 500 mails por día ([ADR-005](ADR-005-envio-de-email.md)). La API puede aceptar muchas más notificaciones de las que se pueden enviar: el límite real del servicio está en el envío. Con Mailpit no aparece, por eso se mide aparte el ritmo de envío. Además, cada instancia envía de a una notificación por vez (revisa las pendientes cada 5 s y las manda en serie): con 200 ms por envío serían unas 5 por segundo por instancia, y el ritmo se multiplica con más instancias.
 2. **MongoDB de una sola instancia.** Todas las instancias de `notificaciones` escriben en la misma base; con el volumen de un grupo consumidor no debería ser el límite, pero es el siguiente punto único de falla.
 3. **Cupo de `pedidos`.** El update condicional sobre el documento del día serializa las reservas de ese día; es correcto por diseño y se mide cuánto tarda bajo contención.
 
@@ -45,7 +45,7 @@ En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de error
 
 | Escenario | Qué incluye | Costo estimado |
 |---|---|---|
-| Demo (lo que se despliega) | Una VM chica (2 vCPU, 2 a 4 GB) con `api-gateway`, 2 × `notificaciones` y MongoDB en Docker; Gmail | 10 a 25 |
+| Demo (lo que se despliega) | Una VM chica (2 vCPU, 4 GB) con `api-gateway`, 2 × `notificaciones`, MongoDB, Jaeger, Prometheus y Grafana en Docker; Gmail | 15 a 30 |
 | Producción chica | 2 VMs para los servicios, MongoDB administrado de nivel básico, proveedor de mail transaccional | 60 a 120 |
 
 El costo crece por el envío de mails y por la base administrada; el cómputo de los servicios en Go es lo más barato.

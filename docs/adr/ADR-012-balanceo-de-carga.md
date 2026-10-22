@@ -4,28 +4,30 @@
 
 Aceptado (Entrega 2; se implementa para la presentación)
 
+Implementación: todavía no hay balanceo. El api-gateway solo expone `/health` y el compose tiene una sola instancia de `notificaciones`. Lo que ya cumple `notificaciones` es el `/health` que el gateway va a consultar.
+
 ## Contexto
 
-El enunciado pide balanceo de carga sobre al menos un servicio con dos o más instancias, que el mecanismo detecte cuándo una instancia no está disponible, y que la distribución y el estado de las instancias se vean en la observabilidad (RNF5).
+El enunciado pide balanceo de carga sobre al menos un servicio con dos o más instancias, que el mecanismo detecte cuándo una instancia no está disponible, y que la distribución y el estado de las instancias se vean en la observabilidad (RNF5 y RNF6).
 
 [ADR-001](ADR-001-limites-de-los-servicios.md) anticipaba a `pedidos` como candidato. Al validar los límites en la Entrega 2 cambiamos a `notificaciones`:
 
-- Es el servicio que está funcionando de punta a punta y el único que recibe tráfico de otro grupo, que no controlamos.
-- Ya es apto para varias instancias: no guarda estado en memoria que importe (salvo el límite de uso, ver Consecuencias) y el worker toma cada notificación con un `findOneAndUpdate` atómico, así que dos instancias no envían el mismo mail.
-- `pedidos` todavía no existe. Se puede balancear también cuando esté, con el mismo mecanismo.
+- Es el servicio que ya está implementado y probado con tests, y el único que va a recibir tráfico de otro grupo, que no controlamos.
+- Ya es apto para varias instancias: no guarda estado en memoria que importe (salvo el límite de uso, ver Consecuencias) y el proceso de envío toma cada notificación con un `findOneAndUpdate` atómico que la aparta por 2 minutos, así que dos instancias no envían el mismo mail. La excepción es que venza el apartado antes de guardar el resultado: el mail puede salir dos veces ([limitaciones conocidas](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
+- `pedidos` todavía es un esqueleto que solo expone `/health`. Se puede balancear también cuando esté implementado, con el mismo mecanismo.
 
 ## Decisión
 
-**Servicio:** `notificaciones`, con **2 instancias** en el `docker-compose` (`notificaciones-1` y `notificaciones-2`), mismo código y misma base MongoDB.
+**Servicio:** `notificaciones`, con **2 instancias** en el `docker-compose` (`notificaciones-1` y `notificaciones-2`), mismo código y misma base MongoDB. Las instancias no publican puerto al host: se entra solo por el api-gateway.
 
-**Quién balancea:** el **api-gateway**, que ya es el proxy de `/notificaciones*`. Recibe la lista de instancias por variable de entorno (`NOTIFICACIONES_URLS=http://notificaciones-1:8084,http://notificaciones-2:8084`).
+**Quién balancea:** el **api-gateway**, que va a ser el proxy de `/notificaciones*`. Recibe la lista de instancias por variable de entorno (`NOTIFICACIONES_URLS=http://notificaciones-1:8084,http://notificaciones-2:8084`).
 
 **Estrategia:** round-robin entre las instancias sanas. Las solicitudes son cortas y parecidas entre sí, así que no hace falta ponderar por carga.
 
 **Verificación de disponibilidad:**
 
-- Activa: el gateway llama a `GET /health` de cada instancia cada 5 s, con timeout de 1 s. Dos fallas seguidas la sacan del balanceo; una respuesta OK la vuelve a sumar.
-- Pasiva: si una solicitud a una instancia falla por conexión o timeout, se marca como caída sin esperar al próximo chequeo. El `POST` no se reintenta en otra instancia salvo que traiga `Idempotency-Key` (en nuestro contrato siempre la trae).
+- Activa: el gateway llama a `GET /health` de cada instancia cada 5 s, con timeout de 3 s (el ping a MongoDB que hace `/health` espera hasta 2 s). Dos fallas seguidas la sacan del balanceo; una respuesta OK la vuelve a sumar.
+- Pasiva: si una solicitud a una instancia falla por conexión o timeout, se marca como caída sin esperar al próximo chequeo. El gateway no reintenta ([ADR-003](ADR-003-comunicacion-entre-servicios.md)): esa solicitud responde `503` y el consumidor reintenta con la misma `Idempotency-Key`, como indica el contrato, y el reintento ya va a la otra instancia.
 - Sin instancias sanas: `503 no_disponible`.
 
 **Observabilidad:**
@@ -42,11 +44,11 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 | **Balanceo en el api-gateway (elegida)** | No suma contenedores; las métricas por instancia salen del mismo lugar que el resto del ruteo; se explica con código propio | Hay que escribir el round-robin y los health checks (unas decenas de líneas) |
 | **Nginx o Traefik delante de las instancias** | Probado, con health checks configurables | Un salto y un componente más; en Nginx libre los health checks activos son limitados |
 | **DNS de Docker (`deploy.replicas`)** | Cero código | No detecta instancias caídas ni da métricas por instancia |
-| **Balancear `pedidos`** | Es el servicio con más lógica | No va a existir hasta la presentación; no hay forma de demostrarlo en la Entrega 2 |
+| **Balancear `pedidos`** | Es el servicio con más lógica | No va a tener lógica hasta la presentación; no hay forma de demostrarlo en la Entrega 2 |
 
 ## Consecuencias
 
 - Cambia lo que anticipaba [ADR-001](ADR-001-limites-de-los-servicios.md) (se actualiza ahí).
-- El límite de 60 solicitudes por minuto vive en memoria de cada instancia: con 2 instancias un grupo podría llegar a 120. Se acepta por ahora; si hace falta un límite exacto, el contador pasa a Redis.
+- El límite de 60 solicitudes por minuto vive en memoria de cada instancia: con 2 instancias un grupo podría llegar a 120. Se acepta por ahora; si hace falta un límite exacto, el control de tráfico pasa al api-gateway, que ve todas las solicitudes antes de repartirlas (como ya dice [ARCHITECTURE](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
 - Para la caída controlada alcanza con `docker compose stop notificaciones-1`: el tráfico pasa a la otra instancia y se ve en el tablero.
 - Si se suman instancias, solo cambia `NOTIFICACIONES_URLS`.

@@ -38,10 +38,10 @@ El retraso máximo entre un cambio en `productos` y su aparición en la búsqued
 **Sincronización (outbox en MySQL):**
 
 1. Cada alta, baja o modificación de un producto escribe, en la misma transacción de MySQL, una fila en la tabla `indice_pendiente` (id de producto y operación).
-2. Un proceso dentro de `productos` lee esa tabla cada 2 segundos, manda los cambios a Meilisearch y borra las filas confirmadas.
+2. Un proceso dentro de `productos` lee esa tabla cada 2 segundos, manda los cambios a Meilisearch y borra las filas cuando Meilisearch completa la tarea de indexación (sus operaciones son asíncronas).
 3. Si Meilisearch no responde, las filas quedan y se reintentan en la vuelta siguiente: no se pierde ningún cambio.
 
-Así el retraso normal es de 2 a 3 segundos, dentro de los 10 de RNF1. Se mide con una métrica de la antigüedad de la fila más vieja en `indice_pendiente`.
+Así el retraso normal es de pocos segundos (la vuelta de 2 s más lo que tarde Meilisearch en indexar), dentro de los 10 de RNF1. Se mide con una métrica de la antigüedad de la fila más vieja en `indice_pendiente`.
 
 **Reconstrucción completa:** un comando `productos reindexar` carga todos los productos de MySQL en un índice nuevo y lo intercambia con el actual (operación de swap de Meilisearch), sin dejar la búsqueda vacía mientras corre. Se usa al cambiar la configuración del índice o si se sospecha que quedó desincronizado.
 
@@ -53,7 +53,7 @@ Así el retraso normal es de 2 a 3 segundos, dentro de los 10 de RNF1. Se mide c
 |---|---|---|
 | **Meilisearch (elegida)** | Tolerancia a errores de tipeo y tildes, filtros, orden y paginación de fábrica; un contenedor de unos 100 MB; configuración simple | Menos usado que Elasticsearch; sin agregaciones complejas (no las necesitamos) |
 | **Elasticsearch u OpenSearch** | Estándar de la industria, muy flexible | JVM y entre 1 y 2 GB de RAM para un catálogo de cientos de productos; más configuración para lograr la tolerancia a tildes |
-| **Typesense** | Parecido a Meilisearch | Cualquiera de los dos alcanza; el grupo eligió uno |
+| **Typesense** | Parecido a Meilisearch | Cualquiera de los dos cumple; la diferencia es de preferencia y el motor se puede cambiar sin tocar el diseño |
 | **`LIKE` o `FULLTEXT` de MySQL** | Sin contenedor extra | No tolera errores de tipeo y el enunciado pide un motor de búsqueda |
 | **Sincronizar justo después del commit, sin outbox** | Más simple | Si Meilisearch falla en ese momento, el cambio se pierde hasta la próxima reconstrucción |
 

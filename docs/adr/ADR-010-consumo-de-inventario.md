@@ -16,8 +16,8 @@ El enunciado pide que la integración salga del servicio responsable (no del fro
 
 ```go
 type ReservadorDeInsumos interface {
-    Reservar(ctx context.Context, idPedido string, insumos []Insumo) (ResultadoReserva, error)
-    Liberar(ctx context.Context, idPedido string) error
+    Reservar(contexto context.Context, idPedido string, insumos []Insumo) (ResultadoReserva, error)
+    Liberar(contexto context.Context, idPedido string) error
 }
 ```
 
@@ -30,11 +30,11 @@ type ReservadorDeInsumos interface {
 | Situación | Qué hace `pedidos` | Qué ve el comprador |
 |---|---|---|
 | Reserva OK | Pedido `confirmado` | "Pedido confirmado" |
-| Sin stock (respuesta de negocio del proveedor) | Libera el cupo del día y rechaza el pedido | "No tenemos insumos para esa fecha, probá con otra" |
+| Sin stock (respuesta de negocio del proveedor) | Libera el cupo del día y cancela el pedido | "No tenemos insumos para esa fecha, probá con otra" |
 | Timeout (1,5 s), 5xx o sin conexión | Pedido `pendiente_confirmacion`, cupo reservado | "Recibimos tu pedido, te avisamos por mail cuando se confirme" |
-| 4xx inesperado (error nuestro o cambio de contrato) | Igual que timeout, y se loguea como error para revisarlo | Igual que timeout |
+| 4xx inesperado (error nuestro o cambio de contrato) | Pedido `pendiente_confirmacion`, cupo reservado; no se reintenta solo y se loguea como error para revisarlo | Igual que timeout |
 
-**Reconfirmación en segundo plano:** un proceso de `pedidos` reintenta cada minuto las reservas de los pedidos `pendiente_confirmacion`. Cuando confirma, cambia el estado y publica el evento (el comprador recibe el mail por `notificaciones`). Si a las 24 h no se pudo confirmar, el pedido pasa a revisión del vendedor.
+**Reconfirmación en segundo plano:** un proceso de `pedidos` reintenta las reservas de los pedidos `pendiente_confirmacion` por timeout, 5xx o falta de conexión, con espera exponencial desde 1 minuto hasta un máximo de 10. Cuando confirma, cambia el estado y publica el evento (el comprador recibe el mail por `notificaciones`). Si a las 24 h no se pudo confirmar, el pedido se marca en el calendario del vendedor para que decida, sin cambiar de estado.
 
 **Circuit breaker** sobre el adaptador ([ADR-011](ADR-011-resiliencia.md)): con 5 fallas seguidas se abre por 30 s y los pedidos van directo a `pendiente_confirmacion` sin esperar el timeout.
 
@@ -45,7 +45,7 @@ type ReservadorDeInsumos interface {
 ## Alternativas consideradas
 
 - **Usar el cliente o los tipos del proveedor directo en el dominio.** Menos código, pero cualquier cambio del proveedor obliga a tocar las reglas de negocio.
-- **Rechazar el pedido si el proveedor no responde.** Más simple, pero contradice R3 y RNF4: una caída del proveedor frenaría las ventas.
+- **Cancelar el pedido si el proveedor no responde.** Más simple, pero contradice R3 y RNF4: una caída del proveedor frenaría las ventas.
 - **Confirmar sin reservar y reconciliar después.** Vende siempre, pero se pueden prometer pedidos sin insumos.
 - **Reservar por mensajería.** Desacopla más, pero depende de que el proveedor publique eventos y no sabemos si lo hará.
 

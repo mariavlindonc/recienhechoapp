@@ -26,11 +26,11 @@ La búsqueda de texto no se cachea: la resuelve Meilisearch ([ADR-008](ADR-008-b
 
 **Vigencia e invalidación:**
 
-- TTL de **60 segundos** en todas las claves, como red de seguridad.
+- TTL de **60 segundos** en todas las claves menos `catalogo:version`, que no vence: si se reiniciara el contador, podrían reaparecer páginas viejas. El TTL es la red de seguridad.
 - Al modificar o borrar un producto, `productos` borra `producto:{id}` e incrementa `catalogo:version`. Las páginas con la versión vieja dejan de leerse y vencen solas por TTL. Así no hace falta buscar y borrar cada página.
 - La invalidación se hace después del commit en MySQL.
 
-**Si Redis falla o tarda:** timeout de 50 ms en cada operación con Redis. Si falla, se lee de MySQL y se registra en logs y métricas; el comprador no lo nota más que en la latencia. Redis no es una dependencia obligatoria de `productos`.
+**Si Redis falla o tarda:** timeout de 50 ms en cada operación con Redis. Si falla, se lee de MySQL y se registra en logs y métricas; el comprador solo nota la latencia. Redis no es una dependencia obligatoria de `productos`.
 
 **Precios y pedidos:** `pedidos` nunca usa la caché para el precio que cobra; le pregunta a `productos` por un endpoint interno que lee MySQL directo.
 
