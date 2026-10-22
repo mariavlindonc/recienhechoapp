@@ -55,7 +55,8 @@ Integración contra el MongoDB que levanta `arrancar` (sin `MONGO_URI_TEST` los 
 
 ## Trampas
 
-- **`docker compose up` no sirve todavía para notificaciones**: el compose solo le pasa `PORT`, y el servicio exige `MONGO_URI`, `NOTIFICACIONES_CLAVES_API`, `SMTP_HOST` y `SMTP_REMITENTE` (issue #17). Por eso el script corre el binario directo.
+- **`docker compose up --build -d` también levanta notificaciones** (con `cp .env.example .env` antes), con Mongo, Mailpit y las claves de desarrollo del `.env.example`. `smoke.sh` corre el binario directo para no depender de Docker en el build y para tener dos grupos de claves.
+- **En Windows el Docker de WSL se apaga por inactividad** cuando termina el comando de `wsl`, y con él los contenedores del compose (salen con código 0 tras un apagado ordenado). Para una prueba larga con compose, meter todo en un solo `wsl -e bash script.sh`, y desde Git Bash usar `MSYS_NO_PATHCONV=1` para que no cambie las rutas `/mnt/c/...`.
 - **`SMTP_PUERTO` por defecto es 587.** Contra Mailpit hay que poner `1025` o el envío falla.
 - **El envío sondea cada 5 s.** El script pone `NOTIFICACIONES_INTERVALO_DE_ENVIO=1s` para que `enviada` llegue en uno o dos segundos.
 - **Mongo va en 27018**, como en el comentario de `repositorio_test.go`, para no chocar con un Mongo local en 27017.
