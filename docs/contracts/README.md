@@ -9,7 +9,7 @@ Recién hecho le ofrece a otros grupos el envío de notificaciones por email a s
 | Contrato | [notificaciones.yaml](notificaciones.yaml) (OpenAPI 3.1) |
 | Versión vigente | **1.0.0** |
 | URL pública | Pendiente (se publica antes de la presentación) |
-| Estado | Mock disponible; implementación real pendiente (Entrega 2) |
+| Estado | Implementación real disponible en `http://localhost:8080` (por el api-gateway); mock en `http://localhost:4010` |
 | Decisión | [ADR-004](../adr/ADR-004-contrato-de-notificaciones.md) |
 
 ### Operaciones
@@ -46,6 +46,22 @@ Todos los errores tienen la forma `{"codigo": "...", "mensaje": "..."}`. El prog
 | 503 | `no_disponible` | El servicio está caído o saturado | Reintentar con espera exponencial y **la misma** `Idempotency-Key` |
 
 Recomendamos un timeout de 3 segundos del lado del consumidor. Si el `POST` se corta por timeout, no se sabe si quedó creado: reintentar con la misma clave lo resuelve.
+
+### Probar contra la implementación real
+
+Levantar todo con `cp .env.example .env && docker compose up --build -d`. La clave de desarrollo está en `.env` (`NOTIFICACIONES_CLAVES_API`) y el mail aparece en Mailpit (http://localhost:8025).
+
+```bash
+curl -i -X POST http://localhost:8080/notificaciones   -H "X-API-Key: una-clave-larga-de-desarrollo"   -H "Idempotency-Key: 2b0e8f4a-7c1d-4f3e-8a9b-1c2d3e4f5a6b"   -H "Content-Type: application/json"   -d '{"canal":"email","destinatario":"cliente@ejemplo.com","asunto":"Tu pedido está listo","cuerpo":"Ya podés retirarlo."}'
+```
+
+Con el `id` de la respuesta:
+
+```bash
+curl -H "X-API-Key: una-clave-larga-de-desarrollo" http://localhost:8080/notificaciones/<id>
+```
+
+Repetir el `POST` devuelve el mismo `id`; con la misma `Idempotency-Key` y otro cuerpo responde `409`; sin `X-API-Key` responde `401`.
 
 ### Probar contra el mock
 
