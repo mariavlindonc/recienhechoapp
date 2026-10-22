@@ -1,6 +1,6 @@
 # Especificación
 
-Alcance y requisitos de Recién hecho. Versión preliminar (Entrega 1).
+Alcance y requisitos de Recién hecho. Versión de la Entrega 2: suma los desafíos adicionales anunciados (B1 y B2). Las funcionalidades y reglas siguen siendo las de la Entrega 1; en esta entrega está implementada la capacidad de notificaciones.
 
 ## Descripción
 

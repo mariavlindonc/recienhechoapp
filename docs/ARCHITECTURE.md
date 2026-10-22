@@ -1,6 +1,6 @@
 # Arquitectura
 
-Versión preliminar (Entrega 1). Las decisiones que la sostienen están en [docs/adr/](adr/).
+Versión de la Entrega 2. Las decisiones que la sostienen están en [docs/adr/](adr/).
 
 ## Visión general
 
@@ -17,7 +17,7 @@ flowchart TB
     sistema["<b>Recién hecho</b><br/>e-commerce de pastelería a pedido"]
     consumidor["<b>Sistema de otro grupo</b><br/>consumidor de notificaciones"]
     inventario["<b>Sistema de inventario</b><br/>de otro grupo (proveedor)"]
-    correo["Servidor de correo<br/>(a definir)"]
+    correo["Servidor de correo<br/>(Mailpit en desarrollo, Gmail en la demo)"]
 
     comprador -- "usa (web)" --> sistema
     vendedor -- "usa (web)" --> sistema
@@ -28,7 +28,9 @@ flowchart TB
 
 ### Diagrama de contenedores
 
-Las bases, la caché y el broker están propuestos ([ADR-002](adr/ADR-002-persistencia.md), [ADR-003](adr/ADR-003-comunicacion-entre-servicios.md)) y todavía no están en el `docker-compose`.
+Los componentes con borde continuo ya están en el `docker-compose` (Entrega 2). Los de borde punteado están decididos en los ADRs y se suman para la presentación ([ADR-002](adr/ADR-002-persistencia.md), [ADR-003](adr/ADR-003-comunicacion-entre-servicios.md), [ADR-008](adr/ADR-008-busqueda.md), [ADR-009](adr/ADR-009-cache.md)). `usuarios`, `productos` y `pedidos` existen, pero por ahora solo responden `/health`.
+
+Desde afuera solo se entra por el api-gateway (`localhost:8080`). Los servicios no publican puerto, y las herramientas de desarrollo (MongoDB, Mailpit, Jaeger, Prometheus, Grafana) se ven solo desde la propia computadora ([ADR-006](adr/ADR-006-observabilidad.md), [ADR-012](adr/ADR-012-balanceo-de-carga.md)).
 
 ```mermaid
 flowchart TB
@@ -37,23 +39,29 @@ flowchart TB
     consumidor["Sistema de otro grupo"]
 
     subgraph rh["Recién hecho"]
-        frontend["Frontend web<br/>(pendiente)"]
-        gateway["api-gateway<br/>Go + Gin<br/>entrada, autenticación, ruteo"]
+        frontend["Frontend web"]
+        gateway["api-gateway<br/>Go + Gin<br/>entrada, proxy con timeout, ruteo"]
         usuarios["usuarios<br/>Go + Gin"]
         productos["productos<br/>Go + Gin"]
         pedidos["pedidos<br/>Go + Gin"]
-        notificaciones["notificaciones<br/>Go + Gin"]
-        busqueda[("Motor de búsqueda<br/>(D6)")]
+        notificaciones["notificaciones<br/>Go + Gin, hexagonal"]
+        busqueda[("Meilisearch<br/>búsqueda")]
         myU[("MySQL<br/>usuarios")]
         myP[("MySQL<br/>productos")]
         redis[("Redis<br/>caché de catálogo")]
         mongoPed[("MongoDB<br/>pedidos")]
         mongoNot[("MongoDB<br/>notificaciones")]
         rabbit{{"RabbitMQ"}}
+
+        subgraph obs["Observabilidad"]
+            jaeger["Jaeger<br/>trazas"]
+            prometheus["Prometheus<br/>métricas y alertas"]
+            grafana["Grafana<br/>tablero"]
+        end
     end
 
     inventario["Inventario<br/>(otro grupo)"]
-    correo["Servidor de correo"]
+    correo["Servidor de correo<br/>Mailpit en desarrollo, Gmail en la demo"]
 
     comprador --> frontend
     vendedor --> frontend
@@ -62,7 +70,7 @@ flowchart TB
     gateway --> usuarios
     gateway --> productos
     gateway --> pedidos
-    gateway --> notificaciones
+    gateway -- "/notificaciones" --> notificaciones
     usuarios --> myU
     productos --> myP
     productos --> redis
@@ -73,7 +81,16 @@ flowchart TB
     pedidos -- "publica pedido.*" --> rabbit
     rabbit -- "consume pedido.*" --> notificaciones
     notificaciones --> mongoNot
-    notificaciones --> correo
+    notificaciones -- "SMTP" --> correo
+    gateway -. "trazas (OTLP)" .-> jaeger
+    notificaciones -. "trazas (OTLP)" .-> jaeger
+    prometheus -. "lee /metrics" .-> gateway
+    prometheus -. "lee /metrics" .-> notificaciones
+    grafana --> prometheus
+    grafana --> jaeger
+
+    classDef propuesto stroke-dasharray: 5 5
+    class frontend,busqueda,myU,myP,redis,mongoPed,rabbit propuesto
 ```
 
 ## Servicios
@@ -90,7 +107,7 @@ Cada servicio es el único dueño de sus datos ([ADR-001](adr/ADR-001-limites-de
 
 La capacidad de producción vive en `pedidos` porque reservar el cupo y crear el pedido tienen que ser una sola operación atómica: es la operación del sistema que no puede duplicar ni perder información.
 
-Estructura de cada servicio, hoy: `backend/<servicio>/` con su propio `go.mod`, `main.go` (solo `/health`) y `Dockerfile`. Ningún servicio importa código de otro. La arquitectura interna de cada uno (D2) se define en la Entrega 2.
+Cada servicio vive en `backend/<servicio>/`, con su propio `go.mod` y `Dockerfile`, y ningún servicio importa código de otro. `notificaciones` es hexagonal (dominio, aplicación, puertos y adaptadores) y el api-gateway es un proxy sin dominio; la arquitectura interna de cada uno está en [ADR-007](adr/ADR-007-arquitectura-interna.md). `usuarios`, `productos` y `pedidos` por ahora solo responden `/health`. El puerto de la tabla es el interno: desde afuera solo se entra por el api-gateway.
 
 ### Estados de un pedido
 
@@ -129,7 +146,7 @@ Valores y reglas en [ADR-003](adr/ADR-003-comunicacion-entre-servicios.md).
 
 ## Mensajería y eventos
 
-Exchange `pedidos` (topic), cola `notificaciones.pedidos`, DLQ `notificaciones.fallidos`, consumidor idempotente por `idEvento`. Se implementa en la Entrega 2.
+Exchange `pedidos` (topic), cola `notificaciones.pedidos`, DLQ `notificaciones.fallidos`, consumidor idempotente por `idEvento`. Pendiente para la presentación: hace falta `pedidos`, que publica los eventos.
 
 ## Observabilidad
 
@@ -146,7 +163,7 @@ Decisiones en [ADR-006](adr/ADR-006-observabilidad.md) (D11).
 
 | Integración | Rol | Servicio responsable | Estado |
 |---|---|---|---|
-| Notificaciones | Publicamos | notificaciones (vía api-gateway) | Contrato + mock ([docs/contracts](contracts/README.md), [ADR-004](adr/ADR-004-contrato-de-notificaciones.md)) |
+| Notificaciones | Publicamos | notificaciones (vía api-gateway) | Implementada en local (`localhost:8080`), con el mock del contrato para probar formatos. Falta publicarla en una URL pública ([docs/contracts](contracts/README.md), [ADR-004](adr/ADR-004-contrato-de-notificaciones.md)) |
 | Inventario | Consumimos | pedidos | Esperando el contrato del otro grupo (D9) |
 
 ## Limitaciones conocidas y deuda técnica
