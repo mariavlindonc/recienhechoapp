@@ -47,11 +47,15 @@ Requisitos: Docker con Compose.
 cp .env.example .env && docker compose up --build -d
 ```
 
-Levanta los cuatro servicios, el api-gateway, MongoDB, Mailpit y el mock del contrato. Para bajarlo: `docker compose down`.
+Levanta los cuatro servicios, el api-gateway, MongoDB, Mailpit, el mock del contrato y la observabilidad (Jaeger, Prometheus y Grafana). Para bajarlo: `docker compose down`.
 
 | Qué | URL local |
 |---|---|
-| `notificaciones` (directo, el gateway todavía no la expone) | http://localhost:8084 |
+| api-gateway, entrada del sistema (`/notificaciones`) | http://localhost:8080 |
+| `notificaciones` (directo, sin pasar por el gateway) | http://localhost:8084 |
+| Grafana, tablero de métricas (sin usuario, solo lectura) | http://localhost:3000 |
+| Prometheus, métricas y alertas | http://localhost:9090 |
+| Jaeger, trazas | http://localhost:16686 |
 | Mailpit, buzón falso donde llegan los mails | http://localhost:8025 |
 | Mock del contrato de notificaciones | http://localhost:4010/notificaciones |
 | MongoDB de notificaciones | `mongodb://localhost:27017` (usuario y clave en `.env`) |
@@ -59,7 +63,7 @@ Levanta los cuatro servicios, el api-gateway, MongoDB, Mailpit y el mock del con
 Probar el envío con el servicio real (la clave de desarrollo está en `.env`, variable `NOTIFICACIONES_CLAVES_API`):
 
 ```bash
-curl -i -X POST http://localhost:8084/notificaciones   -H "X-API-Key: una-clave-larga-de-desarrollo"   -H "Idempotency-Key: prueba-1"   -H "Content-Type: application/json"   -d '{"canal":"email","destinatario":"cliente@ejemplo.com","asunto":"Hola","cuerpo":"Prueba."}'
+curl -i -X POST http://localhost:8080/notificaciones   -H "X-API-Key: una-clave-larga-de-desarrollo"   -H "Idempotency-Key: prueba-1"   -H "Content-Type: application/json"   -d '{"canal":"email","destinatario":"cliente@ejemplo.com","asunto":"Hola","cuerpo":"Prueba."}'
 ```
 
 El `GET /notificaciones/{id}` pasa de `pendiente` a `enviada` en unos segundos y el mail aparece en Mailpit. Contrato completo y prueba contra el mock: [docs/contracts](docs/contracts/README.md#probar-contra-el-mock).
