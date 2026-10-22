@@ -136,7 +136,8 @@ Exchange `pedidos` (topic), cola `notificaciones.pedidos`, DLQ `notificaciones.f
 Decisiones en [ADR-006](adr/ADR-006-observabilidad.md) (D11).
 
 - **Logs:** api-gateway y notificaciones escriben una línea JSON por evento en la salida estándar (`docker compose logs`), con `servicio` y, cuando hay una traza activa, `trace_id` y `span_id`. Cada solicitud HTTP deja una línea con `metodo`, `ruta`, `estado` y `duracion_ms`, y cada envío fallido de una notificación, una con `id`, `intento`, `estado` y `error`. No se registran claves de API, claves de idempotencia, destinatarios ni contenidos de mails.
-- **Trazas, métricas y tablero:** pendientes (Jaeger, Prometheus y Grafana).
+- **Trazas:** OpenTelemetry en api-gateway y notificaciones, exportadas por OTLP a Jaeger (http://localhost:16686). Una solicitud a `POST /notificaciones` por el gateway queda como una sola traza: api-gateway → reenvío HTTP → notificaciones → comandos de MongoDB. Los logs de esa solicitud llevan el mismo `trace_id`. Si Jaeger está caído, los servicios siguen funcionando y solo se pierden las trazas.
+- **Métricas y tablero:** pendientes (Prometheus y Grafana).
 
 ## Integraciones externas
 

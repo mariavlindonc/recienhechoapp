@@ -29,7 +29,9 @@ El primer flujo que funciona de punta a punta es el de la capacidad publicada: `
 **Trazas: OpenTelemetry (SDK de Go) exportando por OTLP directo a Jaeger.**
 
 - OpenTelemetry es la librería que genera las trazas en un formato estándar (OTLP); Jaeger las guarda y las muestra en una web.
-- Instrumentación: `otelgin` en la entrada HTTP de cada servicio, `otelhttp` en las llamadas salientes del api-gateway (propaga el header `traceparent`, que es lo que une los tramos de distintos servicios en una sola traza) y `otelmongo` en el acceso a MongoDB.
+- Instrumentación: `otelgin` en la entrada HTTP de cada servicio, `otelhttp` en las llamadas salientes del api-gateway (propaga el header `traceparent`, que es lo que une los tramos de distintos servicios en una sola traza) y un monitor de comandos en el acceso a MongoDB.
+- **Nota de implementación (Entrega 2):** la instrumentación oficial `otelmongo` no tiene versión publicada para `mongo-driver/v2` (solo un commit en desarrollo), así que `notificaciones` usa un monitor de comandos propio (`internal/trazas`) que crea un span por comando con la librería de trazas de OpenTelemetry. Además, solo traza los comandos que son parte de una solicitud con traza: el proceso de envío consulta MongoDB cada 5 s y, si no, llenaría Jaeger de trazas sueltas. Cuando `otelmongo` publique una versión para el driver v2, se puede reemplazar sin cambiar el resto.
+- `/health` no se traza: lo consulta el compose seguido y no aporta nada.
 - El envío SMTP, que pasa en segundo plano, abre su propio span vinculado a la traza de la solicitud que creó la notificación.
 - El destino se configura con `OTEL_EXPORTER_OTLP_ENDPOINT`; el código no conoce a Jaeger.
 
