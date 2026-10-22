@@ -12,7 +12,14 @@ Trabajo Práctico Integrador de Arquitectura de Software 2026, Facultad de Ingen
 
 ## Estado
 
-Versión 0.1.0, Entrega 1: diseño y contrato con mock. Los servicios todavía solo exponen `/health`; la funcionalidad se implementa a partir de la Entrega 2.
+Entrega 2 en curso, sobre la versión 0.1.1 (Entrega 1: diseño y contrato con mock).
+
+| Componente | Estado |
+|---|---|
+| `notificaciones` | Implementado: `POST` y `GET /notificaciones` del contrato, idempotencia, clave de API por grupo, límite de uso, envío de mails en segundo plano con reintentos, MongoDB y SMTP |
+| `api-gateway`, `usuarios`, `productos`, `pedidos` | Esqueletos que solo exponen `/health`. El gateway todavía no enruta |
+| Frontend | Pendiente |
+| Logs JSON con `trace_id`, trazas, métricas y balanceo | Decididos en los ADR, sin implementar |
 
 ## Objetivo
 
@@ -40,9 +47,34 @@ Requisitos: Docker con Compose.
 cp .env.example .env && docker compose up --build -d
 ```
 
-Cómo probar el mock del contrato de notificaciones: [docs/contracts](docs/contracts/README.md#probar-contra-el-mock).
+Levanta los cuatro servicios, el api-gateway, MongoDB, Mailpit y el mock del contrato. Para bajarlo: `docker compose down`.
 
-Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar en una URL pública antes de la presentación, y el link va a estar acá.
+| Qué | URL local |
+|---|---|
+| `notificaciones` (directo, el gateway todavía no la expone) | http://localhost:8084 |
+| Mailpit, buzón falso donde llegan los mails | http://localhost:8025 |
+| Mock del contrato de notificaciones | http://localhost:4010/notificaciones |
+| MongoDB de notificaciones | `mongodb://localhost:27017` (usuario y clave en `.env`) |
+
+Probar el envío con el servicio real (la clave de desarrollo está en `.env`, variable `NOTIFICACIONES_CLAVES_API`):
+
+```bash
+curl -i -X POST http://localhost:8084/notificaciones   -H "X-API-Key: una-clave-larga-de-desarrollo"   -H "Idempotency-Key: prueba-1"   -H "Content-Type: application/json"   -d '{"canal":"email","destinatario":"cliente@ejemplo.com","asunto":"Hola","cuerpo":"Prueba."}'
+```
+
+El `GET /notificaciones/{id}` pasa de `pendiente` a `enviada` en unos segundos y el mail aparece en Mailpit. Contrato completo y prueba contra el mock: [docs/contracts](docs/contracts/README.md#probar-contra-el-mock).
+
+Tests y lint (en Windows, con Git Bash):
+
+```bash
+for servicio in backend/*/; do (cd "$servicio" && go test ./... && go vet ./...) || break; done; gofmt -l backend
+```
+
+El test de integración contra MongoDB corre solo si existe `MONGO_URI_TEST`; ver [AGENTS.md](AGENTS.md) y `.claude/skills/run-recienhechoapp/`.
+
+### Despliegue
+
+Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar en una URL pública antes de la presentación, y el link va a estar acá. Las opciones están en [ADR-013](docs/adr/ADR-013-capacidad-y-costos.md); todavía no se eligió ninguna.
 
 ## Documentación
 
@@ -53,6 +85,8 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 | [docs/adr/](docs/adr/) | Decisiones de arquitectura |
 | [docs/contracts/](docs/contracts/README.md) | Contrato publicado (notificaciones) y consumido (inventario) |
 | [docs/POSTMORTEM.md](docs/POSTMORTEM.md) | Informe de la caída controlada (pendiente) |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Flujo de ramas, commits y pull requests |
+| [AGENTS.md](AGENTS.md) | Convenciones y reglas para quien trabaje en el código, personas o agentes |
 
 ### Decisiones
 
@@ -69,5 +103,5 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 | D7 Caché | [ADR-009](docs/adr/ADR-009-cache.md) | Propuesto |
 | D9 Consumo del proveedor | [ADR-010](docs/adr/ADR-010-consumo-de-inventario.md) | Propuesto |
 | D10 Resiliencia | [ADR-011](docs/adr/ADR-011-resiliencia.md) | Aceptado para gateway y notificaciones; propuesto para el resto |
-| D12 Balanceo de carga | [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md) | Aceptado |
+| D12 Balanceo de carga | [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md) | Aceptado (se implementa para la presentación) |
 | D13 Capacidad y costos | [ADR-013](docs/adr/ADR-013-capacidad-y-costos.md) | Propuesto |
