@@ -20,9 +20,11 @@ cp .env.example .env                 # una sola vez
 docker compose up --build -d         # levantar
 docker compose down                  # bajar
 
-# Tests y lint, desde la raíz (en Windows, con Git Bash). gofmt no tiene que listar nada.
-for servicio in backend/*/; do (cd "$servicio" && go test ./... && go vet ./...) || break; done; gofmt -l backend
+# Tests (con detector de carreras) y lint, desde la raíz (en Windows, con Git Bash). gofmt no tiene que listar nada.
+for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet ./...) || break; done; gofmt -l backend
 ```
+
+`-race` activa el detector de carreras de Go: avisa si dos goroutines usan el mismo dato al mismo tiempo sin protección. Necesita un compilador de C (`gcc`) y `CGO_ENABLED=1`, que es el valor por defecto. En Windows se instala con [MSYS2](https://www.msys2.org/) (`pacman -S mingw-w64-ucrt-x86_64-gcc`), agregando su carpeta `ucrt64/bin` al `PATH`; en macOS viene con las herramientas de Xcode (`xcode-select --install`).
 
 ## Convenciones
 
