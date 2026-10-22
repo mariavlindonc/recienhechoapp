@@ -41,7 +41,7 @@ En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de error
 - MongoDB: réplica de 3 nodos para disponibilidad; sharding no hace falta con este volumen.
 - `productos`: la caché absorbe las lecturas; si no alcanza, más instancias.
 
-**Estimación de costos en la nube** (orden de magnitud, en dólares por mes; se ajusta con el proveedor que se elija para desplegar `notificaciones`):
+**Estimación de costos en la nube** (orden de magnitud, en dólares por mes). **Estimación a confirmar:** los números no salen de precios publicados de ningún proveedor; se confirman cuando el grupo elija dónde desplegar `notificaciones`.
 
 | Escenario | Qué incluye | Costo estimado |
 |---|---|---|
