@@ -21,7 +21,16 @@ const (
 
 	// vigenciaClaves es cuánto se recuerda una Idempotency-Key, según el contrato.
 	vigenciaClaves = 24 * time.Hour
+
+	// esperaPorOperacion es lo máximo que tarda cada operación contra MongoDB (ADR-011).
+	// Sin este límite, con MongoDB caído el driver espera unos 30 s por operación.
+	esperaPorOperacion = 2 * time.Second
 )
+
+// conLimite acota una operación contra MongoDB a esperaPorOperacion.
+func conLimite(contexto context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(contexto, esperaPorOperacion)
+}
 
 // Repositorio cumple puertos.Repositorio con dos colecciones: las notificaciones y
 // las claves de idempotencia. Están separadas para que la clave venza a las 24 h
@@ -95,6 +104,8 @@ type documentoNotificacion struct {
 // ReservarClave inserta la clave; si el _id ya existe, la inserción falla en forma
 // atómica y se devuelve la que estaba guardada.
 func (repositorio *Repositorio) ReservarClave(contexto context.Context, clave puertos.ClaveIdempotencia) (puertos.ClaveIdempotencia, bool, error) {
+	contexto, cancelar := conLimite(contexto)
+	defer cancelar()
 	documento := documentoClave{
 		ID:             idClave{Grupo: clave.Grupo, Clave: clave.Clave},
 		Huella:         clave.Huella,
@@ -124,6 +135,8 @@ func (repositorio *Repositorio) ReservarClave(contexto context.Context, clave pu
 
 // CrearSiNoExiste inserta la notificación; si ya hay una con ese id, no hace nada.
 func (repositorio *Repositorio) CrearSiNoExiste(contexto context.Context, notificacion dominio.Notificacion) error {
+	contexto, cancelar := conLimite(contexto)
+	defer cancelar()
 	_, err := repositorio.notificaciones.InsertOne(contexto, aDocumento(notificacion))
 	if err != nil && !mongo.IsDuplicateKeyError(err) {
 		return fmt.Errorf("insertar notificación: %w", err)
@@ -133,6 +146,8 @@ func (repositorio *Repositorio) CrearSiNoExiste(contexto context.Context, notifi
 
 // Buscar filtra por id y por grupo: la notificación de otro grupo no se encuentra.
 func (repositorio *Repositorio) Buscar(contexto context.Context, grupo, id string) (dominio.Notificacion, error) {
+	contexto, cancelar := conLimite(contexto)
+	defer cancelar()
 	var documento documentoNotificacion
 	err := repositorio.notificaciones.FindOne(contexto, bson.D{{Key: "_id", Value: id}, {Key: "grupo", Value: grupo}}).Decode(&documento)
 	if errors.Is(err, mongo.ErrNoDocuments) {
@@ -147,6 +162,8 @@ func (repositorio *Repositorio) Buscar(contexto context.Context, grupo, id strin
 // TomarPendiente busca y aparta una pendiente en una sola operación atómica
 // (findOneAndUpdate): si dos instancias la piden al mismo tiempo, solo una la obtiene.
 func (repositorio *Repositorio) TomarPendiente(contexto context.Context, ahora, hasta time.Time) (dominio.Notificacion, bool, error) {
+	contexto, cancelar := conLimite(contexto)
+	defer cancelar()
 	filtro := bson.D{
 		{Key: "estado", Value: string(dominio.EstadoPendiente)},
 		{Key: "proximoIntento", Value: bson.D{{Key: "$lte", Value: ahora}}},
@@ -169,6 +186,8 @@ func (repositorio *Repositorio) TomarPendiente(contexto context.Context, ahora, 
 
 // Actualizar reemplaza el documento entero con el estado nuevo.
 func (repositorio *Repositorio) Actualizar(contexto context.Context, notificacion dominio.Notificacion) error {
+	contexto, cancelar := conLimite(contexto)
+	defer cancelar()
 	resultado, err := repositorio.notificaciones.ReplaceOne(contexto, bson.D{{Key: "_id", Value: notificacion.ID}}, aDocumento(notificacion))
 	if err != nil {
 		return fmt.Errorf("actualizar notificación: %w", err)
