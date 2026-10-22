@@ -38,7 +38,7 @@ for servicio in backend/*/; do (cd "$servicio" && go test ./... && go vet ./...)
 
 Cada dependencia que se agregue se lista acá con su uso, puerto y URL local. Las demás bases, la caché y el broker están propuestos en [ADR-002](docs/adr/ADR-002-persistencia.md) y [ADR-003](docs/adr/ADR-003-comunicacion-entre-servicios.md), pero todavía no están en el compose.
 
-Las herramientas de desarrollo (MongoDB, Mailpit, Jaeger, Prometheus y Grafana) publican su puerto solo en `127.0.0.1`: se usan desde la propia computadora y no quedan expuestas a la red local ([ADR-006](docs/adr/ADR-006-observabilidad.md)).
+Las herramientas de desarrollo (MongoDB, Mailpit, Jaeger, Prometheus, Grafana y el mock de Prism) publican su puerto solo en `127.0.0.1`: se usan desde la propia computadora y no quedan expuestas a la red local ([ADR-006](docs/adr/ADR-006-observabilidad.md)). Los servicios no publican puerto: se entra solo por el api-gateway, en `localhost:8080` ([ADR-001](docs/adr/ADR-001-limites-de-los-servicios.md), [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md)).
 
 | Dependencia | Uso | Puerto | URL local |
 |---|---|---|---|
