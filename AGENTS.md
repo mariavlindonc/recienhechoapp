@@ -57,3 +57,4 @@ Las herramientas de desarrollo (MongoDB, Mailpit, Jaeger, Prometheus y Grafana) 
 4. Correr tests y lint antes de cada commit.
 5. No elegir tecnologías por cuenta propia: cada dependencia nueva necesita un ADR aceptado en `docs/adr/`.
 6. Actualizar `docs/` cuando un cambio afecte la arquitectura o los contratos.
+7. **Las decisiones las toma el equipo, no la IA.** Un agente de código puede analizar, comparar alternativas y recomendar una, pero no decide. Ante cualquier decisión con alternativas (tecnología, diseño, seguridad, acceso, estructura del repo, alcance), presenta las opciones con sus ventajas y desventajas y espera a que un integrante elija. La decisión y quién la tomó quedan en el ADR o en la issue correspondiente. Si un agente aplicó algo sin preguntar, lo dice en el PR para que el equipo lo confirme o lo revierta.
