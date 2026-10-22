@@ -100,7 +100,12 @@ func (manejador *manejador) crear(contexto *gin.Context) {
 	}
 	cuerpo, err := leerCuerpo(contexto)
 	if err != nil {
-		responderError(contexto, http.StatusBadRequest, "solicitud_invalida", err.Error())
+		var problema errorDelPedido
+		if errors.As(err, &problema) {
+			responderError(contexto, http.StatusBadRequest, "solicitud_invalida", problema.mensaje)
+			return
+		}
+		responderErrorDeDominio(contexto, err)
 		return
 	}
 
@@ -127,26 +132,37 @@ func (manejador *manejador) obtener(contexto *gin.Context) {
 	contexto.JSON(http.StatusOK, aRespuesta(notificacion))
 }
 
+// errorDelPedido es un problema del pedido HTTP que se le explica al consumidor:
+// su mensaje es el texto que va en la respuesta del contrato, por eso va con
+// mayúscula y punto, a diferencia de los errores internos de Go.
+type errorDelPedido struct {
+	mensaje string
+}
+
+func (problema errorDelPedido) Error() string {
+	return problema.mensaje
+}
+
 // leerCuerpo decodifica el JSON con las mismas reglas que el contrato: tiene que
 // ser application/json y no admite campos desconocidos (additionalProperties: false).
 func leerCuerpo(contexto *gin.Context) (cuerpoNuevaNotificacion, error) {
 	tipo, _, err := mime.ParseMediaType(contexto.GetHeader("Content-Type"))
 	if err != nil || tipo != "application/json" {
-		return cuerpoNuevaNotificacion{}, errors.New("El cuerpo tiene que ser JSON (Content-Type: application/json).")
+		return cuerpoNuevaNotificacion{}, errorDelPedido{"El cuerpo tiene que ser JSON (Content-Type: application/json)."}
 	}
 
 	contenido, err := io.ReadAll(http.MaxBytesReader(contexto.Writer, contexto.Request.Body, largoMaximoCuerpoHTTP))
 	if err != nil {
-		return cuerpoNuevaNotificacion{}, fmt.Errorf("El cuerpo supera los %d KiB.", largoMaximoCuerpoHTTP>>10)
+		return cuerpoNuevaNotificacion{}, errorDelPedido{fmt.Sprintf("El cuerpo supera los %d KiB.", largoMaximoCuerpoHTTP>>10)}
 	}
 	decodificador := json.NewDecoder(bytes.NewReader(contenido))
 	decodificador.DisallowUnknownFields()
 	var cuerpo cuerpoNuevaNotificacion
 	if err := decodificador.Decode(&cuerpo); err != nil {
-		return cuerpoNuevaNotificacion{}, fmt.Errorf("JSON inválido: %v", err)
+		return cuerpoNuevaNotificacion{}, errorDelPedido{fmt.Sprintf("JSON inválido: %v.", err)}
 	}
 	if decodificador.More() {
-		return cuerpoNuevaNotificacion{}, errors.New("JSON inválido: hay contenido después del objeto.")
+		return cuerpoNuevaNotificacion{}, errorDelPedido{"JSON inválido: hay contenido después del objeto."}
 	}
 	return cuerpo, nil
 }
