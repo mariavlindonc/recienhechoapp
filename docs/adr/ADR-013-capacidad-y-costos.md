@@ -50,6 +50,12 @@ En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de error
 
 El costo crece por el envío de mails y por la base administrada; el cómputo de los servicios en Go es lo más barato.
 
+**Dónde desplegar la demo (sin decidir):**
+
+- VM en la nube con el compose tal como está.
+- Cloudflare Containers: unos 5 USD por el mes de la demo. MongoDB tendría que ser externo.
+- Servidor propio con Cloudflare Tunnel: gratis. Falta confirmar con la cátedra que cuente como nube.
+
 ## Alternativas consideradas
 
 - **JMeter.** Muy completo, pero pesado y con scripts en XML difíciles de revisar en un PR.
