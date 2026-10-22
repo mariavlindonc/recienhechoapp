@@ -41,6 +41,7 @@ Cada dependencia que se agregue se lista acá con su uso, puerto y URL local. La
 |---|---|---|---|
 | MongoDB (`mongo:8`) | Base de `notificaciones` ([ADR-002](docs/adr/ADR-002-persistencia.md)) | `NOTIFICACIONES_MONGO_PORT` (27017) | `mongodb://localhost:27017` (usuario y clave en `.env`) |
 | Mailpit (`axllent/mailpit`) | Buzón falso para desarrollo ([ADR-005](docs/adr/ADR-005-envio-de-email.md)) | `MAILPIT_SMTP_PORT` (1025) y `MAILPIT_WEB_PORT` (8025) | http://localhost:8025 |
+| Jaeger (`jaegertracing/jaeger:2.22.0`) | Trazas de api-gateway y notificaciones por OTLP ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `JAEGER_WEB_PORT` (16686) | http://localhost:16686 |
 | Prism (`stoplight/prism:5`) | Mock del contrato de notificaciones ([ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md)) | `NOTIFICACIONES_MOCK_PORT` (4010) | http://localhost:4010/notificaciones |
 
 ## Reglas

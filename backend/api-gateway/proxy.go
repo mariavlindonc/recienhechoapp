@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // proxyBalanceado reenvía las solicitudes a las instancias de un servicio,
@@ -37,6 +39,9 @@ func nuevoProxyBalanceado(servicio string, instancias []*url.URL, tiempoMaximo t
 			pedido.SetXForwarded()
 		},
 		ErrorHandler: balanceador.responderFalla,
+		// otelhttp abre un span por cada reenvío y agrega el header traceparent:
+		// así notificaciones continúa la misma traza (traza distribuida).
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
 	return balanceador
 }

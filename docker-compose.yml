@@ -10,6 +10,8 @@ services:
       GIN_MODE: release
       # Instancias de notificaciones entre las que reparte el gateway (ADR-012).
       NOTIFICACIONES_URLS: http://notificaciones:${NOTIFICACIONES_PORT}
+      # Destino de las trazas (ADR-006). Si Jaeger no está, el gateway funciona igual.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
     depends_on: [notificaciones]
@@ -48,6 +50,7 @@ services:
     environment:
       PORT: ${NOTIFICACIONES_PORT}
       GIN_MODE: release
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       MONGO_URI: mongodb://${NOTIFICACIONES_MONGO_USUARIO}:${NOTIFICACIONES_MONGO_CLAVE}@mongo-notificaciones:27017/?authSource=admin
       NOTIFICACIONES_CLAVES_API: ${NOTIFICACIONES_CLAVES_API}
       # Mailpit en desarrollo; para Gmail se cambian estas variables en el .env (ADR-005).
@@ -88,6 +91,15 @@ services:
     ports:
       - "${MAILPIT_SMTP_PORT}:1025"
       - "${MAILPIT_WEB_PORT}:8025"
+    networks: [interna]
+
+  # Recibe las trazas por OTLP y las muestra en una web (ADR-006). Ningún servicio
+  # depende de que esté arriba: sin Jaeger, solo se pierden las trazas.
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0
+    container_name: recienhecho-jaeger
+    ports:
+      - "${JAEGER_WEB_PORT}:16686"
     networks: [interna]
 
   # Mock del contrato publicado (docs/contracts/notificaciones.yaml), ver ADR-004.

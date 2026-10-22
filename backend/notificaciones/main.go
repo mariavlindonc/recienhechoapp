@@ -16,12 +16,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/api"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/mongodb"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/smtp"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/aplicacion"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/registro"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/trazas"
 )
 
 const (
@@ -51,7 +53,18 @@ func ejecutar() error {
 	contexto, cancelar := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancelar()
 
-	clienteMongo, err := mongo.Connect(options.Client().ApplyURI(configuracion.direccionMongo))
+	apagarTrazas, err := trazas.Iniciar(contexto, "notificaciones")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		// Al apagar, manda los spans que hayan quedado pendientes.
+		contextoTrazas, cancelarTrazas := context.WithTimeout(context.Background(), esperaAlApagar)
+		defer cancelarTrazas()
+		apagarTrazas(contextoTrazas)
+	}()
+
+	clienteMongo, err := mongo.Connect(options.Client().ApplyURI(configuracion.direccionMongo).SetMonitor(trazas.MonitorMongo()))
 	if err != nil {
 		return fmt.Errorf("configurar la conexión a MongoDB: %w", err)
 	}
@@ -71,7 +84,9 @@ func ejecutar() error {
 	servicio := aplicacion.NuevoServicio(repositorio, remitente, ahora, nuevoUUID)
 
 	router := gin.New()
-	router.Use(gin.Recovery(), registro.Solicitudes(slog.Default()))
+	// otelgin va primero: abre el span de la solicitud (o continúa la traza que llega
+	// en traceparent) y así el middleware de logs ya ve el trace_id.
+	router.Use(otelgin.Middleware("notificaciones", otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registro.Solicitudes(slog.Default()))
 	api.Registrar(router, servicio, api.Configuracion{
 		ClavesAPI:       configuracion.clavesAPI,
 		LimitePorMinuto: configuracion.limitePorMinuto,
@@ -141,6 +156,12 @@ func enviarPendientes(contexto context.Context, servicio *aplicacion.Servicio, i
 		case <-reloj.C:
 		}
 	}
+}
+
+// sinChequeosDeSalud evita trazar /health, que el compose consulta seguido y no
+// aporta nada en Jaeger.
+func sinChequeosDeSalud(pedido *http.Request) bool {
+	return pedido.URL.Path != "/health"
 }
 
 // ahora es el reloj del servicio. Se trunca a milisegundos porque es la precisión
