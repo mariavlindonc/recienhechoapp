@@ -117,7 +117,9 @@ func nuevoRouter(notificaciones http.Handler, extras ...gin.HandlerFunc) *gin.En
 	return router
 }
 
-// sinChequeosDeSalud evita trazar /health, que no aporta nada en Jaeger.
+// sinChequeosDeSalud evita trazar los chequeos de salud: los consultan máquinas,
+// cada pocos segundos y siempre igual, así que no aportan información y tapan las
+// trazas útiles (ADR-006).
 func sinChequeosDeSalud(pedido *http.Request) bool {
 	return pedido.URL.Path != "/health"
 }

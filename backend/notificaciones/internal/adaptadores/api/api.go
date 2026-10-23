@@ -56,6 +56,7 @@ func Registrar(router gin.IRouter, casos CasosDeUso, configuracion Configuracion
 	limite := nuevoLimitador(configuracion.LimitePorMinuto, time.Minute, configuracion.Ahora)
 
 	router.GET("/health", salud(configuracion.ChequearSalud))
+	router.GET("/vivo", vivo)
 
 	notificaciones := router.Group("/notificaciones", autenticar(configuracion.ClavesAPI), limitar(limite))
 	notificaciones.POST("", manejador.crear)
@@ -245,6 +246,13 @@ func salud(chequear func(contexto context.Context) error) gin.HandlerFunc {
 		}
 		contexto.JSON(http.StatusOK, gin.H{"status": "ok", "service": "notificaciones"})
 	}
+}
+
+// vivo responde si el proceso atiende, sin mirar ninguna dependencia. Lo usa el
+// gateway para sacar del balanceo a una instancia caída (ADR-012): si consultara
+// MongoDB, como /health, una falla de MongoDB sacaría a todas las instancias juntas.
+func vivo(contexto *gin.Context) {
+	contexto.JSON(http.StatusOK, gin.H{"status": "vivo", "service": "notificaciones"})
 }
 
 // ParsearClavesAPI lee la variable NOTIFICACIONES_CLAVES_API, con el formato

@@ -31,7 +31,7 @@ El primer flujo que funciona de punta a punta es el de la capacidad publicada: `
 - OpenTelemetry es la librería que genera las trazas en un formato estándar (OTLP); Jaeger las guarda y las muestra en una web.
 - Instrumentación: `otelgin` en la entrada HTTP de cada servicio, `otelhttp` en las llamadas salientes del api-gateway (propaga el header `traceparent`, que es lo que une los tramos de distintos servicios en una sola traza) y un monitor de comandos en el acceso a MongoDB.
 - **Nota de implementación (Entrega 2):** la instrumentación oficial `otelmongo` no tiene versión publicada para `mongo-driver/v2` (solo un commit en desarrollo), así que `notificaciones` usa un monitor de comandos propio (`internal/trazas`) que crea un span por comando con la librería de trazas de OpenTelemetry. Además, solo traza los comandos que son parte de una solicitud con traza: el proceso de envío consulta MongoDB cada 5 s y, si no, llenaría Jaeger de trazas sueltas. Cuando `otelmongo` publique una versión para el driver v2, se puede reemplazar sin cambiar el resto.
-- `/health` no se traza: lo consulta el compose seguido y no aporta nada.
+- Los chequeos de salud (`/health` y `/vivo`) no se trazan: los consultan máquinas (el balanceador, un orquestador), cada pocos segundos y siempre igual, así que no aportan información y tapan las trazas útiles. La contra es que, si un día `/health` tarda (hace ping a MongoDB), no hay traza que muestre dónde; el log de la solicitud igual registra la duración.
 - El envío SMTP, que pasa en segundo plano, abre su propio span vinculado a la traza de la solicitud que creó la notificación.
 - El destino se configura con `OTEL_EXPORTER_OTLP_ENDPOINT`; el código no conoce a Jaeger.
 
@@ -75,7 +75,7 @@ Si una copia se desvía, esa parte deja de funcionar para ese servicio **sin dar
 **Trazas**
 - SDK de OpenTelemetry con exportador OTLP/HTTP hacia `OTEL_EXPORTER_OTLP_ENDPOINT`, propagador W3C (`traceparent` y `baggage`) y `service.name` igual al nombre del servicio.
 - Sin `OTEL_EXPORTER_OTLP_ENDPOINT`, el servicio arranca igual y solo propaga la traza. Los errores de exportación van al log como `WARN`; nunca cortan una solicitud.
-- `/health` no se traza.
+- Los chequeos de salud (`/health` y `/vivo`) no se trazan.
 
 **Orden de los middlewares de Gin:** `otelgin` → `gin.Recovery()` → logs de solicitudes → métricas. `otelgin` va primero para que los demás ya vean el `trace_id`.
 
