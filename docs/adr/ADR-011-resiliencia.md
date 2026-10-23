@@ -5,7 +5,7 @@
 - **Aceptado** para `api-gateway` y `notificaciones`, Entrega 2.
 - **Propuesto** para `pedidos` y `productos`: se acepta al implementar cada servicio.
 
-Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementación pendiente en la issue #33.
+Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementado en la issue #33: el adaptador `internal/adaptadores/disyuntor` envuelve al remitente SMTP. Con el circuito abierto devuelve `ErrCorreoNoDisponible`, y la aplicación posterga la notificación sin gastar un intento. El disyuntor vive del lado de los adaptadores, como el de `pedidos` en ADR-010, porque la aplicación no importa tecnologías ([ADR-007](ADR-007-arquitectura-interna.md)). Falta la métrica y la alerta del estado del circuito (parte de Athina en la #33).
 
 Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB, límite de uso y envío en segundo plano con reintentos. El api-gateway ya tiene el proxy con timeout de 3 s y `503 no_disponible`. Falta el balanceo con chequeos de `/vivo` ([ADR-012](ADR-012-balanceo-de-carga.md)).
 
@@ -74,9 +74,14 @@ Como mientras el circuito está abierto no se gastan reintentos, una notificaci�
 
 1. **Servidor de correo caído** (`docker compose stop mailpit`):
    - El `POST /notificaciones` sigue respondiendo `202` y las notificaciones quedan `pendiente`.
-   - Con el circuit breaker (issue #33), el circuito se abre en unos 20 s y después hay como mucho un intento de prueba cada 30 s. La alerta del estado del circuito se dispara en unos 2 minutos, sin importar cuántas pendientes haya, y las pendientes no gastan reintentos.
-   - Al volver Mailpit, las pendientes salen en alrededor de un minuto.
-   - Mientras no esté implementado, el comportamiento es el del ensayo: `fallida` a los 3,5 minutos solo con pocas pendientes, y bastante más con una cola grande.
+   - El circuito se abre después de 5 fallos seguidos y desde ahí hay como mucho un intento de prueba cada ~35 s (los 30 s del circuito más hasta 5 s del sondeo). Las pendientes no gastan reintentos. La alerta del estado del circuito se dispara en unos 2 minutos, sin importar cuántas pendientes haya (cuando esté la métrica).
+   - Al volver Mailpit, la prueba del estado semiabierto cierra el circuito y salen todas las pendientes.
+   - **Medido el 22/10/2026**, con 60 notificaciones (el límite de 60 por minuto rechazó con `429` las 40 restantes de una ráfaga de 100):
+     - el circuito se abrió a los ~10 s;
+     - hubo 6 intentos SMTP en total (5 que lo abrieron y 1 prueba), contra uno cada ~3 s sin el disyuntor;
+     - al volver Mailpit, las 59 pendientes salieron en 32 s y ninguna quedó `fallida`.
+
+     En el ensayo anterior, sin el disyuntor, la alerta tardaba 15 a 20 minutos y la cola, varios minutos más.
 2. **Una instancia de notificaciones caída** (`docker compose stop notificaciones-1`): el gateway la saca del balanceo y todo el tráfico va a la otra; con las dos caídas, `503 no_disponible`.
 
 Para la presentación se suma la caída del inventario del proveedor (circuit breaker y `pendiente_confirmacion`).

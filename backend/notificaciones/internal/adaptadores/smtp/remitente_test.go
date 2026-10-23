@@ -120,10 +120,11 @@ func (servidor *servidorFalso) puerto() int {
 func nuevoRemitente(prueba *testing.T, puerto int, tiempoMaximo time.Duration) *smtp.Remitente {
 	prueba.Helper()
 	remitente, err := smtp.NuevoRemitente(smtp.Configuracion{
-		Host:         "127.0.0.1",
-		Puerto:       puerto,
-		Remitente:    "Recién hecho <avisos@recienhecho.test>",
-		TiempoMaximo: tiempoMaximo,
+		Host:                 "127.0.0.1",
+		Puerto:               puerto,
+		Remitente:            "Recién hecho <avisos@recienhecho.test>",
+		TiempoMaximo:         tiempoMaximo,
+		TiempoMaximoConexion: tiempoMaximo,
 	})
 	if err != nil {
 		prueba.Fatalf("crear remitente: %v", err)
@@ -236,12 +237,13 @@ func TestAsuntoConSaltoDeLineaNoAgregaEncabezados(prueba *testing.T) {
 }
 
 func TestConfiguracionInvalida(prueba *testing.T) {
-	valida := smtp.Configuracion{Host: "localhost", Puerto: 1025, Remitente: "avisos@recienhecho.test", TiempoMaximo: time.Second}
+	valida := smtp.Configuracion{Host: "localhost", Puerto: 1025, Remitente: "avisos@recienhecho.test", TiempoMaximo: time.Second, TiempoMaximoConexion: time.Second}
 	casos := map[string]func(configuracion *smtp.Configuracion){
-		"sin host":           func(configuracion *smtp.Configuracion) { configuracion.Host = "" },
-		"sin puerto":         func(configuracion *smtp.Configuracion) { configuracion.Puerto = 0 },
-		"remitente inválido": func(configuracion *smtp.Configuracion) { configuracion.Remitente = "no es un mail" },
-		"sin tiempo máximo":  func(configuracion *smtp.Configuracion) { configuracion.TiempoMaximo = 0 },
+		"sin host":               func(configuracion *smtp.Configuracion) { configuracion.Host = "" },
+		"sin puerto":             func(configuracion *smtp.Configuracion) { configuracion.Puerto = 0 },
+		"remitente inválido":     func(configuracion *smtp.Configuracion) { configuracion.Remitente = "no es un mail" },
+		"sin tiempo máximo":      func(configuracion *smtp.Configuracion) { configuracion.TiempoMaximo = 0 },
+		"sin tiempo de conexión": func(configuracion *smtp.Configuracion) { configuracion.TiempoMaximoConexion = 0 },
 	}
 
 	for nombre, cambiar := range casos {

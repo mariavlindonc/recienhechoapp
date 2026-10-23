@@ -357,3 +357,48 @@ func TestCadaIntentoDeEnvioSeAvisaConSuResultado(prueba *testing.T) {
 		})
 	}
 }
+
+func TestSinCorreoSePostergaSinGastarIntentosYCortaLaVuelta(prueba *testing.T) {
+	entorno := nuevoEscenario()
+	entorno.remitente.errores = []error{puertos.ErrCorreoNoDisponible}
+	primera, _ := entorno.servicio.Crear(contexto, "grupo-a", "clave-1", solicitudValida())
+	entorno.servicio.Crear(contexto, "grupo-b", "clave-1", solicitudValida())
+
+	procesadas, err := entorno.servicio.ProcesarPendientes(contexto)
+
+	if err != nil || procesadas != 0 {
+		prueba.Fatalf("se esperaban 0 procesadas sin error, dio %d, %v", procesadas, err)
+	}
+	if len(entorno.remitente.enviados) != 1 {
+		prueba.Errorf("con el correo no disponible la vuelta tiene que cortar: se intentaron %d envíos", len(entorno.remitente.enviados))
+	}
+	guardada, _ := entorno.servicio.Obtener(contexto, "grupo-a", primera.ID)
+	if guardada.Intentos != 0 || guardada.Estado != dominio.EstadoPendiente {
+		prueba.Errorf("no tiene que gastar un intento: quedó %s con %d intentos", guardada.Estado, guardada.Intentos)
+	}
+	if !guardada.ProximoIntento.Equal(entorno.reloj.ahora().Add(30 * time.Second)) {
+		prueba.Errorf("se esperaba postergada 30 s, quedó para %v", guardada.ProximoIntento)
+	}
+	if len(entorno.eventos.intentos) != 0 {
+		prueba.Errorf("postergar no es un intento de envío: hubo %d eventos", len(entorno.eventos.intentos))
+	}
+}
+
+func TestUnaPendienteDe24HorasPasaAFallida(prueba *testing.T) {
+	entorno := nuevoEscenario()
+	creada, _ := entorno.servicio.Crear(contexto, "grupo-a", "clave-1", solicitudValida())
+	entorno.reloj.adelantar(dominio.VidaMaximaPendiente)
+
+	entorno.servicio.ProcesarPendientes(contexto)
+
+	guardada, _ := entorno.servicio.Obtener(contexto, "grupo-a", creada.ID)
+	if guardada.Estado != dominio.EstadoFallida || guardada.Motivo != dominio.MotivoVencida {
+		prueba.Errorf("se esperaba fallida por vencimiento, quedó %s (%q)", guardada.Estado, guardada.Motivo)
+	}
+	if len(entorno.remitente.enviados) != 0 {
+		prueba.Error("una notificación vencida no se intenta enviar")
+	}
+	if len(entorno.eventos.intentos) != 1 || entorno.eventos.intentos[0].Resultado != puertos.EnvioFallido {
+		prueba.Errorf("el vencimiento se avisa como un envío fallido: %+v", entorno.eventos.intentos)
+	}
+}

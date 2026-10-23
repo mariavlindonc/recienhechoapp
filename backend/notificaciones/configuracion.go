@@ -63,12 +63,13 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 		limitePorMinuto:  entero("NOTIFICACIONES_LIMITE_POR_MINUTO", "60"),
 		intervaloDeEnvio: duracion("NOTIFICACIONES_INTERVALO_DE_ENVIO", "5s"),
 		smtp: smtp.Configuracion{
-			Host:         obligatoria("SMTP_HOST"),
-			Puerto:       entero("SMTP_PUERTO", "587"),
-			Usuario:      buscar("SMTP_USUARIO"),
-			Clave:        buscar("SMTP_CLAVE"),
-			Remitente:    obligatoria("SMTP_REMITENTE"),
-			TiempoMaximo: duracion("SMTP_TIEMPO_MAXIMO", "10s"),
+			Host:                 obligatoria("SMTP_HOST"),
+			Puerto:               entero("SMTP_PUERTO", "587"),
+			Usuario:              buscar("SMTP_USUARIO"),
+			Clave:                buscar("SMTP_CLAVE"),
+			Remitente:            obligatoria("SMTP_REMITENTE"),
+			TiempoMaximo:         duracion("SMTP_TIEMPO_MAXIMO", "10s"),
+			TiempoMaximoConexion: duracion("SMTP_TIEMPO_MAXIMO_CONEXION", "2s"),
 		},
 	}
 

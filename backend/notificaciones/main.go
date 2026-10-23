@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/api"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/disyuntor"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/eventos"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/metricas"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/mongodb"
@@ -81,12 +82,15 @@ func ejecutar() error {
 		return fmt.Errorf("preparar MongoDB: %w", err)
 	}
 
-	remitente, err := smtp.NuevoRemitente(configuracion.smtp)
+	remitenteSMTP, err := smtp.NuevoRemitente(configuracion.smtp)
 	if err != nil {
 		return err
 	}
 	medidor := metricas.Nuevas()
-	servicio := aplicacion.NuevoServicio(repositorio, remitente, eventos.Nuevos(medidor, slog.Default()), ahora, nuevoUUID)
+	observador := eventos.Nuevos(medidor, slog.Default())
+	// El disyuntor envuelve al SMTP: con el correo caído no se intenta enviar (ADR-011).
+	remitente := disyuntor.NuevoRemitente(remitenteSMTP, observador, disyuntor.ConfiguracionDelServicio)
+	servicio := aplicacion.NuevoServicio(repositorio, remitente, observador, ahora, nuevoUUID)
 
 	router := gin.New()
 	// otelgin va primero: abre el span de la solicitud (o continúa la traza que llega
