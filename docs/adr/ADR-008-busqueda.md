@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado por Agustín el 26/10/2026. Implementado con `productos` el mismo día; lo marcado con *(propuesto)* lo decidió un agente de código y se confirma en el PR.
+Aceptado por Agustín el 26/10/2026. Implementado con `productos` el mismo día; lo marcado con *(propuesto)* se confirma en el PR.
 
 ## Contexto
 
