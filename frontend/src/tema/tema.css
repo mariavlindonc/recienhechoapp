@@ -1,0 +1,68 @@
+@import url('./claro.css');
+@import url('./oscuro.css') (prefers-color-scheme: dark);
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --md-ref-typeface-brand: 'Google Sans Flex', sans-serif;
+  --md-ref-typeface-plain: 'Google Sans Flex', sans-serif;
+  background: var(--md-sys-color-background);
+  color: var(--md-sys-color-on-background);
+  font-family: var(--md-ref-typeface-plain);
+  font-size: 14px;
+}
+
+body {
+  margin: 0;
+  background: var(--md-sys-color-background);
+}
+
+a {
+  color: var(--md-sys-color-primary);
+}
+
+.marco {
+  display: flex;
+  min-height: 100vh;
+}
+
+.contenido {
+  flex: 1;
+  padding: 16px;
+  min-width: 0;
+  max-width: 1100px;
+}
+
+.rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.aviso-error {
+  color: var(--md-sys-color-error);
+}
+
+@media (width < 600px) {
+  .marco {
+    flex-direction: column;
+  }
+}

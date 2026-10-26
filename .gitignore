@@ -16,6 +16,9 @@ dist/
 go.work
 go.work.sum
 
+# Dependencias de Node y Bun
+node_modules/
+
 # IDEs y sistema operativo
 .idea/
 .vscode/
