@@ -26,8 +26,7 @@ type DatosEstadoCambiado struct {
 	EmailComprador string
 	EstadoAnterior string // vacío cuando el pedido se acaba de crear
 	EstadoNuevo    string
-	NombreProducto string
-	Cantidad       int
+	Items          []ItemEvento
 	Fecha          string
 	Motivo         string // de la cancelación, si hay
 }
@@ -45,10 +44,23 @@ func NuevoEventoEstadoCambiado(id string, pedido Pedido, anterior Estado, ahora 
 			EmailComprador: pedido.Comprador.Email,
 			EstadoAnterior: string(anterior),
 			EstadoNuevo:    string(pedido.Estado),
-			NombreProducto: pedido.NombreProducto,
-			Cantidad:       pedido.Cantidad,
+			Items:          itemsDelEvento(pedido.Items),
 			Fecha:          pedido.Fecha,
 			Motivo:         pedido.MotivoCancelacion,
 		},
 	}
+}
+
+// ItemEvento es lo que el aviso necesita de cada ítem.
+type ItemEvento struct {
+	NombreProducto string
+	Cantidad       int
+}
+
+func itemsDelEvento(items []Item) []ItemEvento {
+	resultado := make([]ItemEvento, len(items))
+	for posicion, item := range items {
+		resultado[posicion] = ItemEvento{NombreProducto: item.Nombre, Cantidad: item.Cantidad}
+	}
+	return resultado
 }

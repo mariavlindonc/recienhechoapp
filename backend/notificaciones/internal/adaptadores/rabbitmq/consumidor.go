@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -53,10 +54,12 @@ type evento struct {
 		IDPedido       string `json:"idPedido"`
 		EmailComprador string `json:"emailComprador"`
 		EstadoNuevo    string `json:"estadoNuevo"`
-		NombreProducto string `json:"nombreProducto"`
-		Cantidad       int    `json:"cantidad"`
-		Fecha          string `json:"fecha"`
-		Motivo         string `json:"motivo"`
+		Items          []struct {
+			NombreProducto string `json:"nombreProducto"`
+			Cantidad       int    `json:"cantidad"`
+		} `json:"items"`
+		Fecha  string `json:"fecha"`
+		Motivo string `json:"motivo"`
 	} `json:"datos"`
 }
 
@@ -200,7 +203,11 @@ func Procesar(contexto context.Context, casos CasosDeUso, cuerpo []byte) error {
 // mensajeDe arma el asunto y el cuerpo del mail según el estado nuevo del pedido.
 func mensajeDe(recibido evento) (string, string) {
 	datos := recibido.Datos
-	pedido := fmt.Sprintf("tu pedido de %d × %s para el %s", datos.Cantidad, datos.NombreProducto, datos.Fecha)
+	productos := make([]string, len(datos.Items))
+	for posicion, item := range datos.Items {
+		productos[posicion] = fmt.Sprintf("%d × %s", item.Cantidad, item.NombreProducto)
+	}
+	pedido := fmt.Sprintf("tu pedido (%s) para el %s", strings.Join(productos, ", "), datos.Fecha)
 	switch datos.EstadoNuevo {
 	case "pendiente_confirmacion":
 		return "Recibimos tu pedido", fmt.Sprintf("Recibimos %s. Te avisamos cuando esté confirmado.", pedido)

@@ -139,10 +139,10 @@ func (repositorio *Repositorio) Registrar(contexto context.Context, pedido domin
 			bson.D{
 				{Key: "_id", Value: pedido.Fecha},
 				{Key: "$expr", Value: bson.D{{Key: "$lte", Value: bson.A{
-					bson.D{{Key: "$add", Value: bson.A{"$reservados", pedido.Cantidad}}}, "$capacidad",
+					bson.D{{Key: "$add", Value: bson.A{"$reservados", pedido.Unidades()}}}, "$capacidad",
 				}}}},
 			},
-			bson.D{{Key: "$inc", Value: bson.D{{Key: "reservados", Value: pedido.Cantidad}}}},
+			bson.D{{Key: "$inc", Value: bson.D{{Key: "reservados", Value: pedido.Unidades()}}}},
 		)
 		if err != nil {
 			return fmt.Errorf("reservar cupo del %s: %w", pedido.Fecha, err)
@@ -171,7 +171,7 @@ func (repositorio *Repositorio) GuardarCambio(contexto context.Context, cambio p
 		if cambio.LiberarCupo {
 			_, err := repositorio.dias.UpdateOne(contexto,
 				bson.D{{Key: "_id", Value: cambio.Pedido.Fecha}},
-				bson.D{{Key: "$inc", Value: bson.D{{Key: "reservados", Value: -cambio.Pedido.Cantidad}}}},
+				bson.D{{Key: "$inc", Value: bson.D{{Key: "reservados", Value: -cambio.Pedido.Unidades()}}}},
 			)
 			if err != nil {
 				return fmt.Errorf("liberar cupo del %s: %w", cambio.Pedido.Fecha, err)

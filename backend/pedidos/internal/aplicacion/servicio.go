@@ -94,12 +94,18 @@ func (servicio *Servicio) Crear(contexto context.Context, comprador dominio.Comp
 		return existente, err
 	}
 
-	producto, err := servicio.catalogo.ObtenerProducto(contexto, solicitud.ProductoID)
-	if err != nil {
-		return dominio.Pedido{}, fmt.Errorf("obtener producto %s: %w", solicitud.ProductoID, err)
+	// shortcut: los productos se piden de a uno, así que la demora crece con la
+	// cantidad de ítems; se piden en paralelo si los tests de carga lo muestran lento.
+	productos := make(map[string]dominio.Producto, len(solicitud.Items))
+	for _, item := range solicitud.Items {
+		producto, err := servicio.catalogo.ObtenerProducto(contexto, item.ProductoID)
+		if err != nil {
+			return dominio.Pedido{}, fmt.Errorf("obtener producto %s: %w", item.ProductoID, err)
+		}
+		productos[item.ProductoID] = producto
 	}
 
-	pedido, err := servicio.registrar(contexto, comprador, clave, solicitud, producto)
+	pedido, err := servicio.registrar(contexto, comprador, clave, solicitud, productos)
 	if errors.Is(err, dominio.ErrPedidoRepetido) {
 		// Otro intento con la misma clave ganó la carrera: se devuelve ese.
 		existente, _, errExistente := servicio.pedidoYaCreado(contexto, comprador.ID, clave, solicitud)
@@ -139,11 +145,11 @@ func (servicio *Servicio) pedidoYaCreado(contexto context.Context, idComprador, 
 
 // registrar guarda el pedido con su cupo. Un programado va a su fecha; un
 // inmediato prueba desde la primera fecha posible hasta encontrar un día con cupo.
-func (servicio *Servicio) registrar(contexto context.Context, comprador dominio.Comprador, clave string, solicitud dominio.Solicitud, producto dominio.Producto) (dominio.Pedido, error) {
+func (servicio *Servicio) registrar(contexto context.Context, comprador dominio.Comprador, clave string, solicitud dominio.Solicitud, productos map[string]dominio.Producto) (dominio.Pedido, error) {
 	ahora := servicio.ahora()
 	fechas := []string{solicitud.Fecha}
 	if solicitud.Tipo == dominio.TipoInmediato {
-		primera := dominio.PrimeraFechaPosible(dominio.Hoy(ahora), producto.AnticipacionDias)
+		primera := dominio.PrimeraFechaPosible(dominio.Hoy(ahora), dominio.AnticipacionDe(productos))
 		fechas = make([]string, diasDeBusqueda)
 		for dia := range fechas {
 			fechas[dia] = dominio.SumarDias(primera, dia)
@@ -152,7 +158,7 @@ func (servicio *Servicio) registrar(contexto context.Context, comprador dominio.
 
 	id := servicio.nuevoID()
 	for _, fecha := range fechas {
-		pedido, err := dominio.NuevoPedido(id, comprador, clave, solicitud, producto, fecha, ahora)
+		pedido, err := dominio.NuevoPedido(id, comprador, clave, solicitud, productos, fecha, ahora)
 		if err != nil {
 			return dominio.Pedido{}, err
 		}

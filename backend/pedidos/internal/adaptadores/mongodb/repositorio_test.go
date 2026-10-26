@@ -69,9 +69,7 @@ func pedido(id, idComprador, clave string, cantidad int) dominio.Pedido {
 	return dominio.Pedido{
 		ID:                  id,
 		Comprador:           dominio.Comprador{ID: idComprador, Email: idComprador + "@ejemplo.com"},
-		ProductoID:          "torta",
-		NombreProducto:      "Torta",
-		Cantidad:            cantidad,
+		Items:               []dominio.Item{{ProductoID: "torta", Nombre: "Torta", Cantidad: cantidad}},
 		Fecha:               fecha,
 		Tipo:                dominio.TipoProgramado,
 		Estado:              dominio.EstadoPendienteConfirmacion,
@@ -290,5 +288,28 @@ func TestBandejaDeSalida(prueba *testing.T) {
 	}
 	if _, encontrado, _ := repositorio.TomarEvento(context.Background(), momento.Add(time.Hour), momento.Add(2*time.Hour)); encontrado {
 		prueba.Error("un evento publicado sale de la bandeja")
+	}
+}
+
+// El cupo se reserva por la suma de unidades de todos los ítems.
+func TestVariosItemsReservanLaSumaDeUnidades(prueba *testing.T) {
+	repositorio := nuevoRepositorio(prueba)
+	definir(prueba, repositorio, 4)
+	nuevo := pedido("pedido-1", "comprador-1", "clave", 3)
+	nuevo.Items = append(nuevo.Items, dominio.Item{ProductoID: "medialuna", Nombre: "Medialuna", Cantidad: 2})
+
+	if err := repositorio.Registrar(context.Background(), nuevo, evento("evento-1", nuevo)); !errors.Is(err, dominio.ErrSinCupo) {
+		prueba.Fatalf("5 unidades no entran en 4 de capacidad: %v", err)
+	}
+	definir(prueba, repositorio, 5)
+	if err := repositorio.Registrar(context.Background(), nuevo, evento("evento-1", nuevo)); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+	if total := reservados(prueba, repositorio); total != 5 {
+		prueba.Errorf("reservados = %d, se esperaban 5", total)
+	}
+	guardado, _ := repositorio.Buscar(context.Background(), "pedido-1")
+	if len(guardado.Items) != 2 || guardado.Items[1].Nombre != "Medialuna" {
+		prueba.Errorf("ítems guardados = %+v", guardado.Items)
 	}
 }

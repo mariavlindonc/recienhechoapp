@@ -48,27 +48,45 @@ type cuerpoEvento struct {
 }
 
 type cuerpoDatos struct {
-	IDPedido       string `json:"idPedido"`
-	IDComprador    string `json:"idComprador"`
-	EmailComprador string `json:"emailComprador"`
-	EstadoAnterior string `json:"estadoAnterior,omitempty"`
-	EstadoNuevo    string `json:"estadoNuevo"`
+	IDPedido       string       `json:"idPedido"`
+	IDComprador    string       `json:"idComprador"`
+	EmailComprador string       `json:"emailComprador"`
+	EstadoAnterior string       `json:"estadoAnterior,omitempty"`
+	EstadoNuevo    string       `json:"estadoNuevo"`
+	Items          []cuerpoItem `json:"items"`
+	Fecha          string       `json:"fecha"`
+	Motivo         string       `json:"motivo,omitempty"`
+}
+
+type cuerpoItem struct {
 	NombreProducto string `json:"nombreProducto"`
 	Cantidad       int    `json:"cantidad"`
-	Fecha          string `json:"fecha"`
-	Motivo         string `json:"motivo,omitempty"`
 }
 
 // Publicar manda el evento como mensaje persistente y devuelve nil solo si el
 // broker confirmó que lo guardó.
 func (publicador *Publicador) Publicar(contexto context.Context, guardado puertos.EventoGuardado) error {
 	evento := guardado.Evento
+	datos := evento.Datos
+	items := make([]cuerpoItem, len(datos.Items))
+	for indice, item := range datos.Items {
+		items[indice] = cuerpoItem(item)
+	}
 	cuerpo, err := json.Marshal(cuerpoEvento{
 		IDEvento:   evento.ID,
 		Tipo:       evento.Tipo,
 		Version:    evento.Version,
 		OcurridoEn: evento.OcurridoEn,
-		Datos:      cuerpoDatos(evento.Datos),
+		Datos: cuerpoDatos{
+			IDPedido:       datos.IDPedido,
+			IDComprador:    datos.IDComprador,
+			EmailComprador: datos.EmailComprador,
+			EstadoAnterior: datos.EstadoAnterior,
+			EstadoNuevo:    datos.EstadoNuevo,
+			Items:          items,
+			Fecha:          datos.Fecha,
+			Motivo:         datos.Motivo,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("armar el evento %s: %w", evento.ID, err)

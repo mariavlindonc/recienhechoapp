@@ -38,10 +38,10 @@ func (repositorio *repositorioFalso) Registrar(_ context.Context, pedido dominio
 		}
 	}
 	dia := repositorio.dias[pedido.Fecha]
-	if dia.Reservados+pedido.Cantidad > dia.Capacidad {
+	if dia.Reservados+pedido.Unidades() > dia.Capacidad {
 		return dominio.ErrSinCupo
 	}
-	dia.Reservados += pedido.Cantidad
+	dia.Reservados += pedido.Unidades()
 	repositorio.dias[pedido.Fecha] = dia
 	repositorio.pedidos[pedido.ID] = pedido
 	repositorio.eventos = append(repositorio.eventos, puertos.EventoGuardado{Evento: evento})
@@ -62,7 +62,7 @@ func (repositorio *repositorioFalso) GuardarCambio(_ context.Context, cambio pue
 	repositorio.pedidos[pedido.ID] = pedido
 	if cambio.LiberarCupo {
 		dia := repositorio.dias[pedido.Fecha]
-		dia.Reservados -= pedido.Cantidad
+		dia.Reservados -= pedido.Unidades()
 		repositorio.dias[pedido.Fecha] = dia
 	}
 	if cambio.Evento != nil {

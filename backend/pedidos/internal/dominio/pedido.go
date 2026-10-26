@@ -46,6 +46,7 @@ const (
 
 const (
 	cantidadMaxima    = 100
+	itemsMaximos      = 20
 	largoMaximoFranja = 50
 
 	// formatoFecha es el de las fechas de producción: un día, sin hora.
@@ -110,13 +111,18 @@ type Comprador struct {
 	Email string
 }
 
-// Solicitud es lo que pide el comprador.
-type Solicitud struct {
-	Tipo       Tipo
+// ItemSolicitado es un producto y cuántas unidades se piden.
+type ItemSolicitado struct {
 	ProductoID string
 	Cantidad   int
-	Fecha      string // solo en los programados
-	Franja     string // opcional
+}
+
+// Solicitud es lo que pide el comprador: uno o más productos para un mismo día (ADR-002).
+type Solicitud struct {
+	Tipo   Tipo
+	Items  []ItemSolicitado
+	Fecha  string // solo en los programados
+	Franja string // opcional
 }
 
 // Validar controla la solicitud y devuelve ErrSolicitudInvalida con todos los
@@ -132,11 +138,20 @@ func (solicitud Solicitud) Validar() error {
 	default:
 		problemas = append(problemas, fmt.Sprintf("tipo %q inválido (inmediato o programado)", solicitud.Tipo))
 	}
-	if strings.TrimSpace(solicitud.ProductoID) == "" {
-		problemas = append(problemas, "productoId es obligatorio")
+	if len(solicitud.Items) < 1 || len(solicitud.Items) > itemsMaximos {
+		problemas = append(problemas, fmt.Sprintf("items tiene que tener entre 1 y %d productos", itemsMaximos))
 	}
-	if solicitud.Cantidad < 1 || solicitud.Cantidad > cantidadMaxima {
-		problemas = append(problemas, fmt.Sprintf("cantidad tiene que estar entre 1 y %d", cantidadMaxima))
+	vistos := map[string]bool{}
+	for posicion, item := range solicitud.Items {
+		if strings.TrimSpace(item.ProductoID) == "" {
+			problemas = append(problemas, fmt.Sprintf("items[%d]: productoId es obligatorio", posicion))
+		} else if vistos[item.ProductoID] {
+			problemas = append(problemas, fmt.Sprintf("items[%d]: el producto %s está repetido", posicion, item.ProductoID))
+		}
+		vistos[item.ProductoID] = true
+		if item.Cantidad < 1 || item.Cantidad > cantidadMaxima {
+			problemas = append(problemas, fmt.Sprintf("items[%d]: cantidad tiene que estar entre 1 y %d", posicion, cantidadMaxima))
+		}
 	}
 	if utf8.RuneCountInString(solicitud.Franja) > largoMaximoFranja {
 		problemas = append(problemas, fmt.Sprintf("franja supera los %d caracteres", largoMaximoFranja))
@@ -150,14 +165,17 @@ func (solicitud Solicitud) Validar() error {
 // Huella identifica el contenido de la solicitud, para la idempotencia: la misma
 // Idempotency-Key con otra huella es un conflicto.
 func (solicitud Solicitud) Huella() string {
-	contenido := strings.Join([]string{
-		string(solicitud.Tipo), solicitud.ProductoID, strconv.Itoa(solicitud.Cantidad), solicitud.Fecha, solicitud.Franja,
-	}, "\x00")
+	partes := []string{string(solicitud.Tipo), solicitud.Fecha, solicitud.Franja}
+	for _, item := range solicitud.Items {
+		partes = append(partes, item.ProductoID, strconv.Itoa(item.Cantidad))
+	}
+	contenido := strings.Join(partes, "\x00")
 	suma := sha256.Sum256([]byte(contenido))
 	return hex.EncodeToString(suma[:])
 }
 
-// Insumo es un ingrediente de la receta, ya multiplicado por la cantidad pedida.
+// Insumo es un ingrediente de la receta. En el pedido ya está multiplicado por las
+// cantidades pedidas y sumado entre productos.
 type Insumo struct {
 	Ingrediente string
 	Cantidad    int64
@@ -173,22 +191,38 @@ type Producto struct {
 	Receta           []Insumo // por unidad
 }
 
-// Pedido es un encargo de un comprador, con la copia del producto al momento de
-// pedirlo (R4) y su estado.
-type Pedido struct {
-	ID                     string
-	Comprador              Comprador
+// AnticipacionDe es la anticipación que necesita un pedido con esos productos:
+// la del producto que más necesita (R2).
+func AnticipacionDe(productos map[string]Producto) int {
+	maxima := 0
+	for _, producto := range productos {
+		maxima = max(maxima, producto.AnticipacionDias)
+	}
+	return maxima
+}
+
+// Item es un producto del pedido con la copia de su nombre y su precio al momento
+// de pedirlo (R4).
+type Item struct {
 	ProductoID             string
-	NombreProducto         string
+	Nombre                 string
 	Cantidad               int
 	PrecioUnitarioCentavos int64
-	TotalCentavos          int64
-	Insumos                []Insumo
-	Fecha                  string
-	Franja                 string
-	Tipo                   Tipo
-	Estado                 Estado
-	MotivoCancelacion      string
+	SubtotalCentavos       int64
+}
+
+// Pedido es un encargo de un comprador, con sus ítems y su estado.
+type Pedido struct {
+	ID                string
+	Comprador         Comprador
+	Items             []Item
+	TotalCentavos     int64
+	Insumos           []Insumo
+	Fecha             string
+	Franja            string
+	Tipo              Tipo
+	Estado            Estado
+	MotivoCancelacion string
 
 	ClaveIdempotencia string
 	Huella            string
@@ -210,9 +244,10 @@ type Pedido struct {
 	Version int
 }
 
-// NuevoPedido arma un pedido pendiente de confirmación para la fecha dada. Controla
-// la anticipación mínima del producto (R2) y fija el precio (R4, R5).
-func NuevoPedido(id string, comprador Comprador, clave string, solicitud Solicitud, producto Producto, fecha string, ahora time.Time) (Pedido, error) {
+// NuevoPedido arma un pedido pendiente de confirmación para la fecha dada.
+// productos tiene los datos del catálogo de cada producto pedido. Controla la
+// anticipación mínima (R2) y fija los precios (R4, R5).
+func NuevoPedido(id string, comprador Comprador, clave string, solicitud Solicitud, productos map[string]Producto, fecha string, ahora time.Time) (Pedido, error) {
 	if id == "" || comprador.ID == "" {
 		return Pedido{}, fmt.Errorf("crear pedido: faltan el id o el comprador")
 	}
@@ -222,33 +257,60 @@ func NuevoPedido(id string, comprador Comprador, clave string, solicitud Solicit
 	if err := ValidarFecha(fecha); err != nil {
 		return Pedido{}, err
 	}
-	if primera := PrimeraFechaPosible(Hoy(ahora), producto.AnticipacionDias); fecha < primera {
+	if primera := PrimeraFechaPosible(Hoy(ahora), AnticipacionDe(productos)); fecha < primera {
 		return Pedido{}, ErrorDeAnticipacion{PrimeraFecha: primera}
 	}
 
-	insumos := make([]Insumo, len(producto.Receta))
-	for indice, insumo := range producto.Receta {
-		insumos[indice] = Insumo{Ingrediente: insumo.Ingrediente, Cantidad: insumo.Cantidad * int64(solicitud.Cantidad), Unidad: insumo.Unidad}
+	pedido := Pedido{
+		ID:                  id,
+		Comprador:           comprador,
+		Fecha:               fecha,
+		Franja:              solicitud.Franja,
+		Tipo:                solicitud.Tipo,
+		Estado:              EstadoPendienteConfirmacion,
+		ClaveIdempotencia:   clave,
+		Huella:              solicitud.Huella(),
+		ProximaConfirmacion: ahora,
+		CreadoEn:            ahora,
+		ActualizadoEn:       ahora,
 	}
-	return Pedido{
-		ID:                     id,
-		Comprador:              comprador,
-		ProductoID:             producto.ID,
-		NombreProducto:         producto.Nombre,
-		Cantidad:               solicitud.Cantidad,
-		PrecioUnitarioCentavos: producto.PrecioCentavos,
-		TotalCentavos:          producto.PrecioCentavos * int64(solicitud.Cantidad),
-		Insumos:                insumos,
-		Fecha:                  fecha,
-		Franja:                 solicitud.Franja,
-		Tipo:                   solicitud.Tipo,
-		Estado:                 EstadoPendienteConfirmacion,
-		ClaveIdempotencia:      clave,
-		Huella:                 solicitud.Huella(),
-		ProximaConfirmacion:    ahora,
-		CreadoEn:               ahora,
-		ActualizadoEn:          ahora,
-	}, nil
+	posicionDelInsumo := map[[2]string]int{} // (ingrediente, unidad) -> posición en Insumos
+	for _, solicitado := range solicitud.Items {
+		producto, existe := productos[solicitado.ProductoID]
+		if !existe {
+			return Pedido{}, fmt.Errorf("%w: %s", ErrProductoInexistente, solicitado.ProductoID)
+		}
+		subtotal := producto.PrecioCentavos * int64(solicitado.Cantidad)
+		pedido.Items = append(pedido.Items, Item{
+			ProductoID:             producto.ID,
+			Nombre:                 producto.Nombre,
+			Cantidad:               solicitado.Cantidad,
+			PrecioUnitarioCentavos: producto.PrecioCentavos,
+			SubtotalCentavos:       subtotal,
+		})
+		pedido.TotalCentavos += subtotal
+		for _, insumo := range producto.Receta {
+			cantidad := insumo.Cantidad * int64(solicitado.Cantidad)
+			clave := [2]string{insumo.Ingrediente, insumo.Unidad}
+			if posicion, existe := posicionDelInsumo[clave]; existe {
+				pedido.Insumos[posicion].Cantidad += cantidad
+				continue
+			}
+			posicionDelInsumo[clave] = len(pedido.Insumos)
+			pedido.Insumos = append(pedido.Insumos, Insumo{Ingrediente: insumo.Ingrediente, Cantidad: cantidad, Unidad: insumo.Unidad})
+		}
+	}
+	return pedido, nil
+}
+
+// Unidades es cuántas unidades ocupa el pedido en el cupo del día: la suma de las
+// cantidades de sus ítems.
+func (pedido Pedido) Unidades() int {
+	unidades := 0
+	for _, item := range pedido.Items {
+		unidades += item.Cantidad
+	}
+	return unidades
 }
 
 // PuedePasarA indica si el cambio de estado es válido (R6).

@@ -24,30 +24,36 @@ type documentoInsumo struct {
 }
 
 type documentoPedido struct {
-	ID                     string             `bson:"_id"`
-	Comprador              documentoComprador `bson:"comprador"`
-	ProductoID             string             `bson:"productoId"`
-	NombreProducto         string             `bson:"nombreProducto"`
-	Cantidad               int                `bson:"cantidad"`
-	PrecioUnitarioCentavos int64              `bson:"precioUnitarioCentavos"`
-	TotalCentavos          int64              `bson:"totalCentavos"`
-	Insumos                []documentoInsumo  `bson:"insumos"`
-	Fecha                  string             `bson:"fecha"`
-	Franja                 string             `bson:"franja,omitempty"`
-	Tipo                   string             `bson:"tipo"`
-	Estado                 string             `bson:"estado"`
-	MotivoCancelacion      string             `bson:"motivoCancelacion,omitempty"`
-	ClaveIdempotencia      string             `bson:"claveIdempotencia"`
-	Huella                 string             `bson:"huella"`
-	IntentosConfirmacion   int                `bson:"intentosConfirmacion"`
-	ProximaConfirmacion    time.Time          `bson:"proximaConfirmacion"`
-	RequiereRevision       bool               `bson:"requiereRevision"`
-	MotivoRevision         string             `bson:"motivoRevision,omitempty"`
-	LiberarInsumos         bool               `bson:"liberarInsumos"`
-	ProximaLiberacion      time.Time          `bson:"proximaLiberacion"`
-	CreadoEn               time.Time          `bson:"creadoEn"`
-	ActualizadoEn          time.Time          `bson:"actualizadoEn"`
-	Version                int                `bson:"version"`
+	ID                   string             `bson:"_id"`
+	Comprador            documentoComprador `bson:"comprador"`
+	Items                []documentoItem    `bson:"items"`
+	TotalCentavos        int64              `bson:"totalCentavos"`
+	Insumos              []documentoInsumo  `bson:"insumos"`
+	Fecha                string             `bson:"fecha"`
+	Franja               string             `bson:"franja,omitempty"`
+	Tipo                 string             `bson:"tipo"`
+	Estado               string             `bson:"estado"`
+	MotivoCancelacion    string             `bson:"motivoCancelacion,omitempty"`
+	ClaveIdempotencia    string             `bson:"claveIdempotencia"`
+	Huella               string             `bson:"huella"`
+	IntentosConfirmacion int                `bson:"intentosConfirmacion"`
+	ProximaConfirmacion  time.Time          `bson:"proximaConfirmacion"`
+	RequiereRevision     bool               `bson:"requiereRevision"`
+	MotivoRevision       string             `bson:"motivoRevision,omitempty"`
+	LiberarInsumos       bool               `bson:"liberarInsumos"`
+	ProximaLiberacion    time.Time          `bson:"proximaLiberacion"`
+	CreadoEn             time.Time          `bson:"creadoEn"`
+	ActualizadoEn        time.Time          `bson:"actualizadoEn"`
+	Version              int                `bson:"version"`
+}
+
+// documentoItem tiene los mismos campos que dominio.Item, así se convierten directo.
+type documentoItem struct {
+	ProductoID             string `bson:"productoId"`
+	Nombre                 string `bson:"nombre"`
+	Cantidad               int    `bson:"cantidad"`
+	PrecioUnitarioCentavos int64  `bson:"precioUnitarioCentavos"`
+	SubtotalCentavos       int64  `bson:"subtotalCentavos"`
 }
 
 type documentoDia struct {
@@ -106,31 +112,32 @@ func aDocumento(pedido dominio.Pedido, version int) documentoPedido {
 	for indice, insumo := range pedido.Insumos {
 		insumos[indice] = documentoInsumo(insumo)
 	}
+	items := make([]documentoItem, len(pedido.Items))
+	for indice, item := range pedido.Items {
+		items[indice] = documentoItem(item)
+	}
 	return documentoPedido{
-		ID:                     pedido.ID,
-		Comprador:              documentoComprador(pedido.Comprador),
-		ProductoID:             pedido.ProductoID,
-		NombreProducto:         pedido.NombreProducto,
-		Cantidad:               pedido.Cantidad,
-		PrecioUnitarioCentavos: pedido.PrecioUnitarioCentavos,
-		TotalCentavos:          pedido.TotalCentavos,
-		Insumos:                insumos,
-		Fecha:                  pedido.Fecha,
-		Franja:                 pedido.Franja,
-		Tipo:                   string(pedido.Tipo),
-		Estado:                 string(pedido.Estado),
-		MotivoCancelacion:      pedido.MotivoCancelacion,
-		ClaveIdempotencia:      pedido.ClaveIdempotencia,
-		Huella:                 pedido.Huella,
-		IntentosConfirmacion:   pedido.IntentosConfirmacion,
-		ProximaConfirmacion:    pedido.ProximaConfirmacion,
-		RequiereRevision:       pedido.RequiereRevision,
-		MotivoRevision:         pedido.MotivoRevision,
-		LiberarInsumos:         pedido.LiberarInsumos,
-		ProximaLiberacion:      pedido.ProximaLiberacion,
-		CreadoEn:               pedido.CreadoEn,
-		ActualizadoEn:          pedido.ActualizadoEn,
-		Version:                version,
+		ID:                   pedido.ID,
+		Comprador:            documentoComprador(pedido.Comprador),
+		Items:                items,
+		TotalCentavos:        pedido.TotalCentavos,
+		Insumos:              insumos,
+		Fecha:                pedido.Fecha,
+		Franja:               pedido.Franja,
+		Tipo:                 string(pedido.Tipo),
+		Estado:               string(pedido.Estado),
+		MotivoCancelacion:    pedido.MotivoCancelacion,
+		ClaveIdempotencia:    pedido.ClaveIdempotencia,
+		Huella:               pedido.Huella,
+		IntentosConfirmacion: pedido.IntentosConfirmacion,
+		ProximaConfirmacion:  pedido.ProximaConfirmacion,
+		RequiereRevision:     pedido.RequiereRevision,
+		MotivoRevision:       pedido.MotivoRevision,
+		LiberarInsumos:       pedido.LiberarInsumos,
+		ProximaLiberacion:    pedido.ProximaLiberacion,
+		CreadoEn:             pedido.CreadoEn,
+		ActualizadoEn:        pedido.ActualizadoEn,
+		Version:              version,
 	}
 }
 
@@ -139,30 +146,31 @@ func aDominio(documento documentoPedido) dominio.Pedido {
 	for indice, insumo := range documento.Insumos {
 		insumos[indice] = dominio.Insumo(insumo)
 	}
+	items := make([]dominio.Item, len(documento.Items))
+	for indice, item := range documento.Items {
+		items[indice] = dominio.Item(item)
+	}
 	return dominio.Pedido{
-		ID:                     documento.ID,
-		Comprador:              dominio.Comprador(documento.Comprador),
-		ProductoID:             documento.ProductoID,
-		NombreProducto:         documento.NombreProducto,
-		Cantidad:               documento.Cantidad,
-		PrecioUnitarioCentavos: documento.PrecioUnitarioCentavos,
-		TotalCentavos:          documento.TotalCentavos,
-		Insumos:                insumos,
-		Fecha:                  documento.Fecha,
-		Franja:                 documento.Franja,
-		Tipo:                   dominio.Tipo(documento.Tipo),
-		Estado:                 dominio.Estado(documento.Estado),
-		MotivoCancelacion:      documento.MotivoCancelacion,
-		ClaveIdempotencia:      documento.ClaveIdempotencia,
-		Huella:                 documento.Huella,
-		IntentosConfirmacion:   documento.IntentosConfirmacion,
-		ProximaConfirmacion:    documento.ProximaConfirmacion.UTC(),
-		RequiereRevision:       documento.RequiereRevision,
-		MotivoRevision:         documento.MotivoRevision,
-		LiberarInsumos:         documento.LiberarInsumos,
-		ProximaLiberacion:      documento.ProximaLiberacion.UTC(),
-		CreadoEn:               documento.CreadoEn.UTC(),
-		ActualizadoEn:          documento.ActualizadoEn.UTC(),
-		Version:                documento.Version,
+		ID:                   documento.ID,
+		Comprador:            dominio.Comprador(documento.Comprador),
+		Items:                items,
+		TotalCentavos:        documento.TotalCentavos,
+		Insumos:              insumos,
+		Fecha:                documento.Fecha,
+		Franja:               documento.Franja,
+		Tipo:                 dominio.Tipo(documento.Tipo),
+		Estado:               dominio.Estado(documento.Estado),
+		MotivoCancelacion:    documento.MotivoCancelacion,
+		ClaveIdempotencia:    documento.ClaveIdempotencia,
+		Huella:               documento.Huella,
+		IntentosConfirmacion: documento.IntentosConfirmacion,
+		ProximaConfirmacion:  documento.ProximaConfirmacion.UTC(),
+		RequiereRevision:     documento.RequiereRevision,
+		MotivoRevision:       documento.MotivoRevision,
+		LiberarInsumos:       documento.LiberarInsumos,
+		ProximaLiberacion:    documento.ProximaLiberacion.UTC(),
+		CreadoEn:             documento.CreadoEn.UTC(),
+		ActualizadoEn:        documento.ActualizadoEn.UTC(),
+		Version:              documento.Version,
 	}
 }

@@ -20,13 +20,36 @@ func torta() dominio.Producto {
 	}
 }
 
+func medialuna() dominio.Producto {
+	return dominio.Producto{
+		ID: "medialuna", Nombre: "Medialuna", PrecioCentavos: 80000, AnticipacionDias: 0,
+		Receta: []dominio.Insumo{{Ingrediente: "harina", Cantidad: 50, Unidad: "g"}, {Ingrediente: "manteca", Cantidad: 20, Unidad: "g"}},
+	}
+}
+
+func catalogo() map[string]dominio.Producto {
+	return map[string]dominio.Producto{"torta": torta(), "medialuna": medialuna()}
+}
+
+func items(pares ...any) []dominio.ItemSolicitado {
+	var resultado []dominio.ItemSolicitado
+	for posicion := 0; posicion < len(pares); posicion += 2 {
+		resultado = append(resultado, dominio.ItemSolicitado{ProductoID: pares[posicion].(string), Cantidad: pares[posicion+1].(int)})
+	}
+	return resultado
+}
+
 func programado(fecha string) dominio.Solicitud {
-	return dominio.Solicitud{Tipo: dominio.TipoProgramado, ProductoID: "torta", Cantidad: 2, Fecha: fecha}
+	return dominio.Solicitud{Tipo: dominio.TipoProgramado, Items: items("torta", 2), Fecha: fecha}
+}
+
+func inmediato(pares ...any) dominio.Solicitud {
+	return dominio.Solicitud{Tipo: dominio.TipoInmediato, Items: items(pares...)}
 }
 
 func pedidoNuevo(prueba *testing.T) dominio.Pedido {
 	prueba.Helper()
-	pedido, err := dominio.NuevoPedido("pedido-1", comprador, "clave-1", programado("2026-10-30"), torta(), "2026-10-30", momento)
+	pedido, err := dominio.NuevoPedido("pedido-1", comprador, "clave-1", programado("2026-10-30"), catalogo(), "2026-10-30", momento)
 	if err != nil {
 		prueba.Fatalf("error inesperado: %v", err)
 	}
@@ -50,13 +73,16 @@ func TestValidarSolicitud(prueba *testing.T) {
 		esValida  bool
 	}{
 		{"programado completo", programado("2026-10-30"), true},
-		{"inmediato sin fecha", dominio.Solicitud{Tipo: dominio.TipoInmediato, ProductoID: "torta", Cantidad: 1}, true},
+		{"inmediato con dos productos", inmediato("torta", 1, "medialuna", 12), true},
 		{"programado sin fecha", programado(""), false},
 		{"fecha con otro formato", programado("30/10/2026"), false},
-		{"tipo desconocido", dominio.Solicitud{Tipo: "urgente", ProductoID: "torta", Cantidad: 1}, false},
-		{"sin producto", dominio.Solicitud{Tipo: dominio.TipoInmediato, Cantidad: 1}, false},
-		{"cantidad cero", dominio.Solicitud{Tipo: dominio.TipoInmediato, ProductoID: "torta"}, false},
-		{"cantidad excesiva", dominio.Solicitud{Tipo: dominio.TipoInmediato, ProductoID: "torta", Cantidad: 101}, false},
+		{"tipo desconocido", dominio.Solicitud{Tipo: "urgente", Items: items("torta", 1)}, false},
+		{"sin ítems", inmediato(), false},
+		{"más de 20 ítems", dominio.Solicitud{Tipo: dominio.TipoInmediato, Items: make([]dominio.ItemSolicitado, 21)}, false},
+		{"ítem sin producto", inmediato("", 1), false},
+		{"producto repetido", inmediato("torta", 1, "torta", 2), false},
+		{"cantidad cero", inmediato("torta", 0), false},
+		{"cantidad excesiva", inmediato("torta", 101), false},
 	}
 	for _, caso := range casos {
 		prueba.Run(caso.nombre, func(prueba *testing.T) {
@@ -78,13 +104,16 @@ func TestHuellaDistingueElContenido(prueba *testing.T) {
 	if programado("2026-10-30").Huella() == programado("2026-10-31").Huella() {
 		prueba.Error("otra fecha tiene que dar otra huella")
 	}
+	if inmediato("torta", 1, "medialuna", 2).Huella() == inmediato("torta", 2, "medialuna", 1).Huella() {
+		prueba.Error("otras cantidades tienen que dar otra huella")
+	}
 }
 
 func TestNuevoPedidoFijaElPrecioEnCentavos(prueba *testing.T) {
 	pedido := pedidoNuevo(prueba)
 
-	if pedido.TotalCentavos != 2500000 || pedido.PrecioUnitarioCentavos != 1250000 {
-		prueba.Errorf("total = %d, unitario = %d", pedido.TotalCentavos, pedido.PrecioUnitarioCentavos)
+	if pedido.TotalCentavos != 2500000 || pedido.Items[0].PrecioUnitarioCentavos != 1250000 || pedido.Items[0].Nombre != "Torta de chocolate" {
+		prueba.Errorf("total = %d, ítems = %+v", pedido.TotalCentavos, pedido.Items)
 	}
 	if pedido.Estado != dominio.EstadoPendienteConfirmacion {
 		prueba.Errorf("estado = %s", pedido.Estado)
@@ -94,9 +123,42 @@ func TestNuevoPedidoFijaElPrecioEnCentavos(prueba *testing.T) {
 	}
 }
 
+func TestPedidoConVariosProductos(prueba *testing.T) {
+	solicitud := dominio.Solicitud{Tipo: dominio.TipoProgramado, Items: items("torta", 1, "medialuna", 12), Fecha: "2026-10-30"}
+
+	pedido, err := dominio.NuevoPedido("pedido-1", comprador, "clave-1", solicitud, catalogo(), "2026-10-30", momento)
+
+	if err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+	if pedido.Unidades() != 13 || pedido.TotalCentavos != 1250000+12*80000 {
+		prueba.Errorf("unidades %d, total %d", pedido.Unidades(), pedido.TotalCentavos)
+	}
+	if len(pedido.Items) != 2 || pedido.Items[1].SubtotalCentavos != 960000 {
+		prueba.Errorf("ítems = %+v", pedido.Items)
+	}
+	// La harina de los dos productos se suma: 500 g + 12 × 50 g.
+	esperados := []dominio.Insumo{{Ingrediente: "harina", Cantidad: 1100, Unidad: "g"}, {Ingrediente: "manteca", Cantidad: 240, Unidad: "g"}}
+	if len(pedido.Insumos) != 2 || pedido.Insumos[0] != esperados[0] || pedido.Insumos[1] != esperados[1] {
+		prueba.Errorf("insumos = %+v", pedido.Insumos)
+	}
+}
+
+func TestLaAnticipacionEsLaDelProductoQueMasNecesita(prueba *testing.T) {
+	// Las medialunas se pueden pedir para hoy, pero con una torta en el pedido hay que esperar 3 días.
+	solicitud := dominio.Solicitud{Tipo: dominio.TipoProgramado, Items: items("medialuna", 6, "torta", 1), Fecha: "2026-10-27"}
+
+	_, err := dominio.NuevoPedido("pedido-1", comprador, "clave-1", solicitud, catalogo(), "2026-10-27", momento)
+
+	var anticipacion dominio.ErrorDeAnticipacion
+	if !errors.As(err, &anticipacion) || anticipacion.PrimeraFecha != "2026-10-29" {
+		prueba.Errorf("se esperaba la primera fecha 2026-10-29, dio: %v", err)
+	}
+}
+
 func TestNuevoPedidoRespetaLaAnticipacionMinima(prueba *testing.T) {
 	// Hoy es el 26 y la torta necesita 3 días: la primera fecha posible es el 29.
-	_, err := dominio.NuevoPedido("pedido-1", comprador, "clave-1", programado("2026-10-28"), torta(), "2026-10-28", momento)
+	_, err := dominio.NuevoPedido("pedido-1", comprador, "clave-1", programado("2026-10-28"), catalogo(), "2026-10-28", momento)
 
 	var anticipacion dominio.ErrorDeAnticipacion
 	if !errors.As(err, &anticipacion) || !errors.Is(err, dominio.ErrAnticipacionInsuficiente) {
@@ -106,7 +168,7 @@ func TestNuevoPedidoRespetaLaAnticipacionMinima(prueba *testing.T) {
 		prueba.Errorf("primera fecha = %s, se esperaba 2026-10-29", anticipacion.PrimeraFecha)
 	}
 
-	if _, err := dominio.NuevoPedido("pedido-1", comprador, "clave-1", programado("2026-10-29"), torta(), "2026-10-29", momento); err != nil {
+	if _, err := dominio.NuevoPedido("pedido-1", comprador, "clave-1", programado("2026-10-29"), catalogo(), "2026-10-29", momento); err != nil {
 		prueba.Errorf("justo en la primera fecha posible se acepta: %v", err)
 	}
 }
@@ -188,7 +250,7 @@ func TestEventoLlevaLoNecesarioParaAvisar(prueba *testing.T) {
 		prueba.Errorf("tipo %s versión %d", evento.Tipo, evento.Version)
 	}
 	datos := evento.Datos
-	if datos.EmailComprador != comprador.Email || datos.EstadoAnterior != "pendiente_confirmacion" || datos.EstadoNuevo != "confirmado" {
+	if datos.EmailComprador != comprador.Email || datos.EstadoAnterior != "pendiente_confirmacion" || datos.EstadoNuevo != "confirmado" || datos.Items[0].Cantidad != 2 {
 		prueba.Errorf("datos = %+v", datos)
 	}
 }

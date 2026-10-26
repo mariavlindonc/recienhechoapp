@@ -28,7 +28,7 @@ func (casos *casosFalsos) Crear(_ context.Context, comprador dominio.Comprador, 
 	if casos.errCrear != nil {
 		return dominio.Pedido{}, casos.errCrear
 	}
-	return dominio.Pedido{ID: "pedido-1", Cantidad: solicitud.Cantidad, TotalCentavos: 160000, Estado: dominio.EstadoConfirmado}, nil
+	return dominio.Pedido{ID: "pedido-1", Items: []dominio.Item{{ProductoID: "medialuna", Nombre: "Medialuna", Cantidad: 2}}, TotalCentavos: 160000, Estado: dominio.EstadoConfirmado}, nil
 }
 func (casos *casosFalsos) Obtener(context.Context, string, string) (dominio.Pedido, error) {
 	return dominio.Pedido{}, dominio.ErrNoEncontrado
@@ -55,7 +55,7 @@ func (casos *casosFalsos) ListarCapacidad(context.Context, string, string) ([]do
 var comprador = map[string]string{"X-Id-Usuario": "comprador-1", "X-Email-Usuario": "cliente@ejemplo.com", "X-Rol-Usuario": "comprador"}
 var vendedor = map[string]string{"X-Id-Usuario": "vendedor-1", "X-Rol-Usuario": "vendedor"}
 
-const cuerpoPedido = `{"tipo":"programado","productoId":"medialuna","cantidad":2,"fecha":"2026-10-30"}`
+const cuerpoPedido = `{"tipo":"programado","items":[{"productoId":"medialuna","cantidad":2}],"fecha":"2026-10-30"}`
 
 func pedir(casos *casosFalsos, metodo, ruta, cuerpo string, headers map[string]string) (*httptest.ResponseRecorder, map[string]any) {
 	gin.SetMode(gin.TestMode)
@@ -94,7 +94,10 @@ func TestCrearPedido(prueba *testing.T) {
 	if datos["precioCentavos"] != float64(160000) || datos["estado"] != "confirmado" {
 		prueba.Errorf("respuesta = %v", datos)
 	}
-	if casos.comprador.Email != "cliente@ejemplo.com" || casos.solicitud.Fecha != "2026-10-30" {
+	if items := datos["items"].([]any); len(items) != 1 || items[0].(map[string]any)["nombreProducto"] != "Medialuna" {
+		prueba.Errorf("ítems = %v", datos["items"])
+	}
+	if casos.comprador.Email != "cliente@ejemplo.com" || casos.solicitud.Fecha != "2026-10-30" || casos.solicitud.Items[0].Cantidad != 2 {
 		prueba.Errorf("llegó %+v %+v", casos.comprador, casos.solicitud)
 	}
 }

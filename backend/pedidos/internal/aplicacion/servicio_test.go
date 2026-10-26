@@ -47,6 +47,7 @@ func nuevoEntorno() *entorno {
 		Publicador:  actual.publicador,
 		Catalogo: catalogoFalso{productos: map[string]dominio.Producto{
 			"medialuna": {ID: "medialuna", Nombre: "Medialuna", PrecioCentavos: 80000, AnticipacionDias: 0},
+			"torta":     {ID: "torta", Nombre: "Torta", PrecioCentavos: 1250000, AnticipacionDias: 2},
 		}},
 		Inventario: actual.inventario,
 		Eventos:    actual.eventos,
@@ -64,7 +65,7 @@ func (actual *entorno) capacidad(prueba *testing.T, fecha string, capacidad int)
 }
 
 func medialunas(cantidad int, fecha string) dominio.Solicitud {
-	return dominio.Solicitud{Tipo: dominio.TipoProgramado, ProductoID: "medialuna", Cantidad: cantidad, Fecha: fecha}
+	return dominio.Solicitud{Tipo: dominio.TipoProgramado, Items: []dominio.ItemSolicitado{{ProductoID: "medialuna", Cantidad: cantidad}}, Fecha: fecha}
 }
 
 func TestCrearReservaElCupoYConfirma(prueba *testing.T) {
@@ -141,10 +142,32 @@ func TestInmediatoBuscaElPrimerDiaConCupo(prueba *testing.T) {
 	actual.capacidad(prueba, "2026-10-28", 5)
 
 	pedido, err := actual.servicio.Crear(context.Background(), comprador, "clave-1",
-		dominio.Solicitud{Tipo: dominio.TipoInmediato, ProductoID: "medialuna", Cantidad: 3})
+		dominio.Solicitud{Tipo: dominio.TipoInmediato, Items: []dominio.ItemSolicitado{{ProductoID: "medialuna", Cantidad: 3}}})
 
 	if err != nil || pedido.Fecha != "2026-10-28" {
 		prueba.Fatalf("fecha = %s (%v), se esperaba 2026-10-28", pedido.Fecha, err)
+	}
+}
+
+func TestVariosProductosReservanLaSumaDeUnidades(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, hoy, 10)
+	actual.capacidad(prueba, "2026-10-28", 10)
+
+	// La torta necesita 2 días: un inmediato con torta y medialunas va al 28, no a hoy.
+	pedido, err := actual.servicio.Crear(context.Background(), comprador, "clave-1", dominio.Solicitud{
+		Tipo:  dominio.TipoInmediato,
+		Items: []dominio.ItemSolicitado{{ProductoID: "torta", Cantidad: 1}, {ProductoID: "medialuna", Cantidad: 6}},
+	})
+
+	if err != nil || pedido.Fecha != "2026-10-28" {
+		prueba.Fatalf("fecha = %s (%v), se esperaba 2026-10-28", pedido.Fecha, err)
+	}
+	if reservados := actual.repositorio.reservados("2026-10-28"); reservados != 7 {
+		prueba.Errorf("reservados = %d, se esperaban 7", reservados)
+	}
+	if pedido.TotalCentavos != 1250000+6*80000 {
+		prueba.Errorf("total = %d", pedido.TotalCentavos)
 	}
 }
 
@@ -156,7 +179,7 @@ func TestSinCupoNiProductoNoCreanNada(prueba *testing.T) {
 		prueba.Errorf("se esperaba ErrSinCupo, dio: %v", err)
 	}
 	inexistente := medialunas(1, hoy)
-	inexistente.ProductoID = "alfajor"
+	inexistente.Items = append(inexistente.Items, dominio.ItemSolicitado{ProductoID: "alfajor", Cantidad: 1})
 	if _, err := actual.servicio.Crear(context.Background(), comprador, "clave-2", inexistente); !errors.Is(err, dominio.ErrProductoInexistente) {
 		prueba.Errorf("se esperaba ErrProductoInexistente, dio: %v", err)
 	}

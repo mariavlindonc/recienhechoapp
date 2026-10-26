@@ -82,11 +82,15 @@ type usuario struct {
 }
 
 type cuerpoNuevoPedido struct {
-	Tipo       string `json:"tipo"`
+	Tipo   string       `json:"tipo"`
+	Items  []cuerpoItem `json:"items"`
+	Fecha  string       `json:"fecha"`
+	Franja string       `json:"franja"`
+}
+
+type cuerpoItem struct {
 	ProductoID string `json:"productoId"`
 	Cantidad   int    `json:"cantidad"`
-	Fecha      string `json:"fecha"`
-	Franja     string `json:"franja"`
 }
 
 type cuerpoEstado struct {
@@ -97,22 +101,27 @@ type cuerpoCapacidad struct {
 	Capacidad *int `json:"capacidad"`
 }
 
-// respuestaPedido usa los nombres que ya usa el frontend (frontend/src/tipos.ts).
 type respuestaPedido struct {
-	ID                     string    `json:"id"`
-	ProductoID             string    `json:"productoId"`
-	NombreProducto         string    `json:"nombreProducto"`
-	Cantidad               int       `json:"cantidad"`
-	Fecha                  string    `json:"fecha"`
-	Franja                 string    `json:"franja,omitempty"`
-	PrecioUnitarioCentavos int64     `json:"precioUnitarioCentavos"`
-	PrecioCentavos         int64     `json:"precioCentavos"` // total del pedido
-	Tipo                   string    `json:"tipo"`
-	Estado                 string    `json:"estado"`
-	MotivoCancelacion      string    `json:"motivoCancelacion,omitempty"`
-	RequiereRevision       bool      `json:"requiereRevision"`
-	MotivoRevision         string    `json:"motivoRevision,omitempty"`
-	CreadoEn               time.Time `json:"creadoEn"`
+	ID                string          `json:"id"`
+	Items             []respuestaItem `json:"items"`
+	Fecha             string          `json:"fecha"`
+	Franja            string          `json:"franja,omitempty"`
+	PrecioCentavos    int64           `json:"precioCentavos"` // total del pedido
+	Tipo              string          `json:"tipo"`
+	Estado            string          `json:"estado"`
+	MotivoCancelacion string          `json:"motivoCancelacion,omitempty"`
+	RequiereRevision  bool            `json:"requiereRevision"`
+	MotivoRevision    string          `json:"motivoRevision,omitempty"`
+	CreadoEn          time.Time       `json:"creadoEn"`
+}
+
+// respuestaItem tiene los mismos campos que dominio.Item, así se convierten directo.
+type respuestaItem struct {
+	ProductoID             string `json:"productoId"`
+	Nombre                 string `json:"nombreProducto"`
+	Cantidad               int    `json:"cantidad"`
+	PrecioUnitarioCentavos int64  `json:"precioUnitarioCentavos"`
+	SubtotalCentavos       int64  `json:"subtotalCentavos"`
 }
 
 type respuestaDia struct {
@@ -137,12 +146,15 @@ func (manejador *manejador) crear(contexto *gin.Context) {
 		return
 	}
 	actual := usuarioDe(contexto)
+	items := make([]dominio.ItemSolicitado, len(cuerpo.Items))
+	for indice, item := range cuerpo.Items {
+		items[indice] = dominio.ItemSolicitado(item)
+	}
 	pedido, err := manejador.casos.Crear(contexto.Request.Context(), dominio.Comprador{ID: actual.id, Email: actual.email}, clave, dominio.Solicitud{
-		Tipo:       dominio.Tipo(cuerpo.Tipo),
-		ProductoID: cuerpo.ProductoID,
-		Cantidad:   cuerpo.Cantidad,
-		Fecha:      cuerpo.Fecha,
-		Franja:     cuerpo.Franja,
+		Tipo:   dominio.Tipo(cuerpo.Tipo),
+		Items:  items,
+		Fecha:  cuerpo.Fecha,
+		Franja: cuerpo.Franja,
 	})
 	if err != nil {
 		responderErrorDeDominio(contexto, err)
@@ -209,7 +221,7 @@ func (manejador *manejador) cambiarEstado(contexto *gin.Context) {
 	contexto.JSON(http.StatusOK, aRespuesta(pedido))
 }
 
-// listarCapacidad devuelve un objeto fecha -> {capacidad, reservados}, como lo usa el frontend.
+// listarCapacidad devuelve un objeto fecha -> {capacidad, reservados}.
 func (manejador *manejador) listarCapacidad(contexto *gin.Context) {
 	dias, err := manejador.casos.ListarCapacidad(contexto.Request.Context(), contexto.Query("desde"), contexto.Query("hasta"))
 	if err != nil {
@@ -267,21 +279,22 @@ func leerCuerpo(contexto *gin.Context, destino any) bool {
 }
 
 func aRespuesta(pedido dominio.Pedido) respuestaPedido {
+	items := make([]respuestaItem, len(pedido.Items))
+	for indice, item := range pedido.Items {
+		items[indice] = respuestaItem(item)
+	}
 	return respuestaPedido{
-		ID:                     pedido.ID,
-		ProductoID:             pedido.ProductoID,
-		NombreProducto:         pedido.NombreProducto,
-		Cantidad:               pedido.Cantidad,
-		Fecha:                  pedido.Fecha,
-		Franja:                 pedido.Franja,
-		PrecioUnitarioCentavos: pedido.PrecioUnitarioCentavos,
-		PrecioCentavos:         pedido.TotalCentavos,
-		Tipo:                   string(pedido.Tipo),
-		Estado:                 string(pedido.Estado),
-		MotivoCancelacion:      pedido.MotivoCancelacion,
-		RequiereRevision:       pedido.RequiereRevision,
-		MotivoRevision:         pedido.MotivoRevision,
-		CreadoEn:               pedido.CreadoEn,
+		ID:                pedido.ID,
+		Items:             items,
+		Fecha:             pedido.Fecha,
+		Franja:            pedido.Franja,
+		PrecioCentavos:    pedido.TotalCentavos,
+		Tipo:              string(pedido.Tipo),
+		Estado:            string(pedido.Estado),
+		MotivoCancelacion: pedido.MotivoCancelacion,
+		RequiereRevision:  pedido.RequiereRevision,
+		MotivoRevision:    pedido.MotivoRevision,
+		CreadoEn:          pedido.CreadoEn,
 	}
 }
 

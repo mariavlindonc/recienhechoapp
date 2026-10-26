@@ -44,7 +44,8 @@ func (receptor *receptorFalso) Nack(_, reencolar bool) error {
 
 const eventoListo = `{"idEvento":"evento-1","tipo":"pedido.estado_cambiado","version":1,"ocurridoEn":"2026-10-26T15:00:00Z",
 	"datos":{"idPedido":"pedido-1","idComprador":"comprador-1","emailComprador":"cliente@ejemplo.com",
-	"estadoAnterior":"en_produccion","estadoNuevo":"listo","nombreProducto":"Medialuna","cantidad":12,"fecha":"2026-10-30"}}`
+	"estadoAnterior":"en_produccion","estadoNuevo":"listo","fecha":"2026-10-30",
+	"items":[{"nombreProducto":"Medialuna","cantidad":12},{"nombreProducto":"Torta","cantidad":1}]}}`
 
 func TestEventoRepetidoCreaUnaSolaNotificacion(prueba *testing.T) {
 	casos := &casosFalsos{}
@@ -59,7 +60,7 @@ func TestEventoRepetidoCreaUnaSolaNotificacion(prueba *testing.T) {
 		prueba.Fatalf("se esperaba una notificación del grupo propio: %v (%s)", casos.creadas, casos.grupo)
 	}
 	solicitud := casos.creadas["evento-1"]
-	if solicitud.Asunto != "Tu pedido está listo" || !strings.Contains(solicitud.Cuerpo, "12 × Medialuna") || solicitud.Destinatario != "cliente@ejemplo.com" {
+	if solicitud.Asunto != "Tu pedido está listo" || !strings.Contains(solicitud.Cuerpo, "(12 × Medialuna, 1 × Torta)") || solicitud.Destinatario != "cliente@ejemplo.com" {
 		prueba.Errorf("solicitud = %+v", solicitud)
 	}
 }

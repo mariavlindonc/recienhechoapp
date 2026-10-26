@@ -19,7 +19,7 @@ Encargar escribe tres cosas en la base de `pedidos`: el cupo del día, el pedido
 
 | Operación | Qué guarda la transacción |
 |---|---|
-| Encargar | Pedido nuevo + reserva condicional del cupo (`reservados + cantidad <= capacidad`) + evento |
+| Encargar | Pedido nuevo + reserva condicional del cupo (`reservados + unidades del pedido <= capacidad`) + evento |
 | Cambiar de estado | Pedido + evento; al cancelar, también devuelve el cupo |
 
 Para eso, el MongoDB de `pedidos` corre como replica set de un nodo (`--replSet rs0`). El driver reintenta solo la transacción cuando choca con otra que toca el mismo día, y entonces la condición del cupo se vuelve a evaluar con el valor ya actualizado.
