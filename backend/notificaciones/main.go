@@ -115,11 +115,7 @@ func ejecutar() error {
 
 	var procesos sync.WaitGroup
 	procesos.Add(2)
-	if configuracion.direccionRabbit != "" {
-		procesos.Go(func() { rabbitmq.Consumir(contexto, configuracion.direccionRabbit, servicio) })
-	} else {
-		slog.Info("sin RABBITMQ_URL: no se consumen los eventos de pedidos")
-	}
+	procesos.Go(func() { rabbitmq.Consumir(contexto, configuracion.direccionRabbit, servicio) })
 	go func() {
 		defer procesos.Done()
 		enviarPendientes(contexto, servicio, configuracion.intervaloDeEnvio)

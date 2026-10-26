@@ -37,6 +37,7 @@ arrancar() {
 	(cd "$raiz/backend/notificaciones" && go build -o "$temporal/notificaciones" .) || fallar "no compila"
 	PORT=$puerto \
 		MONGO_URI=mongodb://localhost:27018 \
+		RABBITMQ_URL=amqp://localhost:5672 \
 		NOTIFICACIONES_CLAVES_API="grupo-a:$clave_a,grupo-b:$clave_b" \
 		NOTIFICACIONES_INTERVALO_DE_ENVIO=1s \
 		SMTP_HOST=localhost SMTP_PUERTO=1025 \
