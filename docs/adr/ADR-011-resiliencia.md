@@ -3,7 +3,8 @@
 ## Estado
 
 - **Aceptado** para `api-gateway` y `notificaciones`, Entrega 2.
-- **Propuesto** para `pedidos` y `productos`: se acepta al implementar cada servicio.
+- **Aceptado** para `productos` con el plan que aprobó Agustín el 26/10/2026; implementado el mismo día.
+- **Propuesto** para `pedidos`: se acepta al revisar su PR.
 
 Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementado en la issue #33: el adaptador `internal/adaptadores/disyuntor` envuelve al remitente SMTP. Con el circuito abierto devuelve `ErrCorreoNoDisponible`, y la aplicación posterga la notificación sin gastar un intento. El disyuntor vive del lado de los adaptadores, como el de `pedidos` en ADR-010, porque la aplicación no importa tecnologías ([ADR-007](ADR-007-arquitectura-interna.md)). Falta la métrica y la alerta del estado del circuito (parte de Athina en la #33).
 
@@ -27,9 +28,9 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 | pedidos | inventario (otro grupo) | El pedido queda `pendiente_confirmacion` | Timeout de 1,5 s y circuit breaker ([ADR-010](ADR-010-consumo-de-inventario.md)) |
 | pedidos | RabbitMQ | El cambio de estado se guarda igual; el evento sale cuando vuelve | Bandeja de salida (outbox, [ADR-015](ADR-015-consistencia-y-concurrencia.md)) |
 | pedidos | MongoDB | No se toman pedidos (`503`) | Timeout; no hay degradación posible sin perder la garantía de cupo |
-| productos | Redis | Se lee de MySQL, más lento | Timeout de 50 ms ([ADR-009](ADR-009-cache.md)) |
-| productos | Meilisearch | Sin búsqueda de texto; queda el listado por categoría | Outbox del índice ([ADR-008](ADR-008-busqueda.md)) |
-| productos | MySQL | `503` | Timeout |
+| productos | Redis | Se lee de MySQL, más lento | Timeout de 50 ms y sin reintentos ([ADR-009](ADR-009-cache.md)); no frena el arranque |
+| productos | Meilisearch | `GET /productos/busqueda` responde `503 busqueda_no_disponible`; el catálogo por categoría sigue. Los cambios esperan en la bandeja y se aplican solos al volver | Outbox del índice ([ADR-008](ADR-008-busqueda.md)); 2 s por búsqueda; no frena el arranque |
+| productos | MySQL | `503 no_disponible`; `/health` informa la falla | Timeout de 2 s por operación (en el DSN); el servicio no arranca sin MySQL |
 
 **Mecanismos:**
 
