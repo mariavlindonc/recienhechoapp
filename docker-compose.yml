@@ -10,11 +10,12 @@ services:
       GIN_MODE: release
       # Instancias de notificaciones entre las que reparte el gateway (ADR-012).
       NOTIFICACIONES_URLS: http://notificaciones:${NOTIFICACIONES_PORT}
+      PEDIDOS_URLS: http://pedidos:${PEDIDOS_PORT}
       # Destino de las trazas (ADR-006). Si Jaeger no está, el gateway funciona igual.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
-    depends_on: [notificaciones]
+    depends_on: [notificaciones, pedidos]
     networks: [interna]
 
   usuarios:
@@ -38,7 +39,76 @@ services:
     container_name: recienhecho-pedidos
     environment:
       PORT: ${PEDIDOS_PORT}
+      GIN_MODE: release
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      # replicaSet: las transacciones de MongoDB necesitan un replica set (D4).
+      MONGO_URI: mongodb://${PEDIDOS_MONGO_USUARIO}:${PEDIDOS_MONGO_CLAVE}@mongo-pedidos:27017/?authSource=admin&replicaSet=rs0
+      RABBITMQ_URL: amqp://${RABBITMQ_USUARIO}:${RABBITMQ_CLAVE}@rabbitmq:5672/
+      PRODUCTOS_URL: http://productos:${PRODUCTOS_PORT}
+      # Inventario falso hasta tener el contrato del proveedor (ADR-010): confirma,
+      # sin_stock, lento, error o rechazo, para la demo y las caídas provocadas.
+      INVENTARIO_MODO: ${INVENTARIO_MODO}
     # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
+    # No depende de RabbitMQ para arrancar: si no está, los eventos esperan en la
+    # bandeja de salida (ADR-011).
+    depends_on:
+      mongo-pedidos:
+        condition: service_healthy
+    networks: [interna]
+
+  # Base propia de pedidos (ADR-002). Corre como replica set de un solo nodo porque
+  # pedidos usa transacciones (D4). La clave interna del replica set se genera al
+  # arrancar: con un solo nodo no se comparte con nadie.
+  mongo-pedidos:
+    image: mongo:8
+    container_name: recienhecho-mongo-pedidos
+    entrypoint:
+      - bash
+      - -c
+      - >-
+        head -c 756 /dev/urandom | base64 > /tmp/clave-replica &&
+        chmod 400 /tmp/clave-replica && chown 999:999 /tmp/clave-replica &&
+        exec docker-entrypoint.sh mongod --replSet rs0 --keyFile /tmp/clave-replica --bind_ip_all
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${PEDIDOS_MONGO_USUARIO}
+      MONGO_INITDB_ROOT_PASSWORD: ${PEDIDOS_MONGO_CLAVE}
+    volumes:
+      - mongo-pedidos-datos:/data/db
+    ports:
+      # Solo desde esta compu (127.0.0.1), como la de notificaciones (ADR-006).
+      # Desde afuera del compose hay que conectarse con ?directConnection=true.
+      - "127.0.0.1:${PEDIDOS_MONGO_PORT}:27017"
+    # El chequeo también inicia el replica set la primera vez.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" --quiet --eval
+          "try { rs.status().ok } catch (error) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo-pedidos:27017'}]}).ok }"
+          | grep -q 1
+      interval: 5s
+      timeout: 10s
+      retries: 20
+    networks: [interna]
+
+  # Broker de eventos entre pedidos y notificaciones (ADR-003). La web de
+  # administración muestra las colas, incluida la de fallidos.
+  rabbitmq:
+    image: rabbitmq:4.3.5-management-alpine
+    container_name: recienhecho-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USUARIO}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_CLAVE}
+    volumes:
+      - rabbitmq-datos:/var/lib/rabbitmq
+    ports:
+      # Solo desde esta compu (127.0.0.1), como las demás herramientas de desarrollo (ADR-006).
+      - "127.0.0.1:${RABBITMQ_WEB_PORT}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
     networks: [interna]
 
   notificaciones:
@@ -50,6 +120,8 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       MONGO_URI: mongodb://${NOTIFICACIONES_MONGO_USUARIO}:${NOTIFICACIONES_MONGO_CLAVE}@mongo-notificaciones:27017/?authSource=admin
       NOTIFICACIONES_CLAVES_API: ${NOTIFICACIONES_CLAVES_API}
+      # Consume los eventos de pedidos (ADR-003). Si RabbitMQ no está, reintenta solo.
+      RABBITMQ_URL: amqp://${RABBITMQ_USUARIO}:${RABBITMQ_CLAVE}@rabbitmq:5672/
       # Mailpit en desarrollo; para Gmail se cambian estas variables en el .env (ADR-005).
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PUERTO: ${SMTP_PUERTO}
@@ -148,6 +220,8 @@ services:
 
 volumes:
   mongo-notificaciones-datos:
+  mongo-pedidos-datos:
+  rabbitmq-datos:
 
 networks:
   interna:
