@@ -42,12 +42,14 @@ func NuevoCatalogo(direccion *url.URL) *Catalogo {
 	return &Catalogo{direccion: direccion, cliente: &http.Client{Timeout: tiempoMaximoPorIntento}, esperas: esperasEntreIntentos}
 }
 
-// respuestaProducto es lo que devuelve GET /productos/{id} de productos.
+// respuestaProducto es lo que devuelve GET /internos/productos/{id} de productos:
+// la ruta sin caché, con la receta (ADR-009). El contrato lo fija el test
+// TestContratoInternoConPedidos de productos.
 type respuestaProducto struct {
 	ID               string `json:"id"`
 	Nombre           string `json:"nombre"`
 	PrecioCentavos   int64  `json:"precioCentavos"`
-	AnticipacionDias int    `json:"anticipacionDias"`
+	AnticipacionDias int    `json:"anticipacionMinimaDias"`
 	Disponible       bool   `json:"disponible"`
 	Receta           []struct {
 		Ingrediente string `json:"ingrediente"`
@@ -84,7 +86,7 @@ func (catalogo *Catalogo) ObtenerProducto(contexto context.Context, id string) (
 }
 
 func (catalogo *Catalogo) pedir(contexto context.Context, id string) (dominio.Producto, error) {
-	direccion := catalogo.direccion.JoinPath("productos", id)
+	direccion := catalogo.direccion.JoinPath("internos", "productos", id)
 	solicitud, err := http.NewRequestWithContext(contexto, http.MethodGet, direccion.String(), nil)
 	if err != nil {
 		return dominio.Producto{}, fmt.Errorf("armar la solicitud a productos: %w", err)
