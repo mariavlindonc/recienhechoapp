@@ -100,6 +100,6 @@ Responde `{productos, pagina, porPagina, total}`.
 - `creadoEn` se guarda como milisegundos desde 1970, para ordenar por novedad.
 - Guardar y borrar esperan a que Meilisearch termine la tarea, revisando cada 50 ms y hasta 30 s. Recién ahí se borran las filas de la bandeja. Cada búsqueda se corta a los 2 s.
 - Si Meilisearch no responde al arrancar, `productos` arranca igual y reintenta configurar el índice cada 5 s. Mientras tanto, los cambios esperan en la bandeja.
-- La bandeja procesa hasta 100 filas por vuelta. Si un producto aparece varias veces, vale su última operación. Si al indexarlo ya no existe, se borra del índice.
+- La bandeja se lee de a 100 filas, y la misma vuelta sigue mientras el lote venga lleno: renombrar una categoría con cientos de productos se refleja en una sola vuelta. Si un producto aparece varias veces, vale su última operación. Si al indexarlo ya no existe, se borra del índice.
 - La reconstrucción carga el índice `productos_reconstruccion`, lo intercambia con `productos` y borra el viejo. Si falla, descarta el nuevo y el vigente no cambia. El comando es `docker compose exec productos /servicio reindexar`.
 - Con dos instancias de `productos`, las dos pueden procesar las mismas filas. No hace daño, porque guardar y borrar se pueden repetir. Un producto que cambia mientras corre `reindexar` puede quedar desactualizado hasta su próximo cambio.

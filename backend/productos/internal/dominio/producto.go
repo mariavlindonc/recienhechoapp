@@ -142,13 +142,11 @@ func (producto Producto) ReemplazarReceta(receta []Insumo, ahora time.Time) (Pro
 	return producto, nil
 }
 
-// CambiarImagen deja la URL nueva y devuelve también la anterior, para borrar ese
-// archivo. La anterior queda vacía si el producto no tenía imagen.
-func (producto Producto) CambiarImagen(url string, ahora time.Time) (actualizado Producto, anterior string) {
-	anterior = producto.ImagenURL
+// CambiarImagen deja la URL de la foto nueva.
+func (producto Producto) CambiarImagen(url string, ahora time.Time) Producto {
 	producto.ImagenURL = url
 	producto.ActualizadoEn = ahora
-	return producto, anterior
+	return producto
 }
 
 // VistaPublica es el producto tal como lo ve el comprador: sin la receta.

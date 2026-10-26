@@ -109,7 +109,7 @@ func TestModificarRecetaEImagen(prueba *testing.T) {
 	if err := repositorio.GuardarReceta(contexto, conReceta); err != nil {
 		prueba.Fatal(err)
 	}
-	conImagen, _ := conReceta.CambiarImagen("/imagenes/torta.png", ahora)
+	conImagen := conReceta.CambiarImagen("/imagenes/torta.png", ahora)
 	if err := repositorio.GuardarImagen(contexto, conImagen); err != nil {
 		prueba.Fatal(err)
 	}

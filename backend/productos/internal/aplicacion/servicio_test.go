@@ -3,6 +3,7 @@ package aplicacion_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -120,13 +121,17 @@ func TestSubirImagenReemplazaLaAnterior(prueba *testing.T) {
 	if err != nil {
 		prueba.Fatalf("error inesperado: %v", err)
 	}
+	actual.servicio.ObtenerProducto(contexto, torta.ID) // queda en la caché con la primera
 	segunda, _ := actual.servicio.SubirImagen(contexto, torta.ID, []byte(png))
 
-	if _, sigue := actual.almacen.archivos[primera.ImagenURL]; sigue {
-		prueba.Error("el archivo de la imagen anterior se borra")
+	if _, sigue := actual.almacen.archivos[primera.ImagenURL]; !sigue {
+		prueba.Error("la imagen anterior se conserva: la búsqueda y la caché la pueden seguir mostrando un rato")
 	}
-	if _, esta := actual.almacen.archivos[segunda.ImagenURL]; !esta || actual.base.productos[torta.ID].ImagenURL != segunda.ImagenURL {
-		prueba.Errorf("queda la imagen nueva: %+v", actual.base.productos[torta.ID])
+	if actual.base.productos[torta.ID].ImagenURL != segunda.ImagenURL {
+		prueba.Errorf("el producto queda con la imagen nueva: %+v", actual.base.productos[torta.ID])
+	}
+	if detalle, _ := actual.servicio.ObtenerProducto(contexto, torta.ID); detalle.ImagenURL != segunda.ImagenURL {
+		prueba.Errorf("el detalle ya no sale de la caché vieja: %q", detalle.ImagenURL)
 	}
 }
 
@@ -168,6 +173,19 @@ func TestSincronizarIndice(prueba *testing.T) {
 	actual.servicio.SincronizarIndice(contexto)
 	if _, sigue := actual.buscador.indice[torta.ID]; sigue {
 		prueba.Error("un producto dado de baja sale del índice")
+	}
+}
+
+func TestUnaVueltaVaciaLaBandejaDeALotes(prueba *testing.T) {
+	actual := armar()
+	for numero := range 250 { // como renombrar una categoría con 250 productos
+		actual.base.encolar(fmt.Sprintf("producto-%03d", numero), puertos.IndiceBorrar)
+	}
+
+	cantidad, err := actual.servicio.SincronizarIndice(contexto)
+
+	if err != nil || cantidad != 250 || len(actual.base.bandeja) != 0 {
+		prueba.Errorf("una sola vuelta procesa los 3 lotes: cantidad %d, quedan %d, error %v", cantidad, len(actual.base.bandeja), err)
 	}
 }
 

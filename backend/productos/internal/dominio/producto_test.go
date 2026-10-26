@@ -56,7 +56,7 @@ func TestDatosInvalidos(prueba *testing.T) {
 }
 
 func TestModificarConservaLaImagenYLaReceta(prueba *testing.T) {
-	original, _ := productoValido(prueba).CambiarImagen("/imagenes/torta.png", ahora)
+	original := productoValido(prueba).CambiarImagen("/imagenes/torta.png", ahora)
 	original, _ = original.ReemplazarReceta([]dominio.Insumo{{Ingrediente: "Harina", Cantidad: 500, Unidad: dominio.UnidadGramos}}, ahora)
 	original.Categoria = "Tortas"
 	datos := datosValidos()
@@ -97,19 +97,6 @@ func TestReemplazarReceta(prueba *testing.T) {
 		if _, err := productoValido(prueba).ReemplazarReceta(receta, ahora); !errors.Is(err, dominio.ErrSolicitudInvalida) {
 			prueba.Errorf("%s: se esperaba ErrSolicitudInvalida, dio %v", nombre, err)
 		}
-	}
-}
-
-func TestCambiarImagenDevuelveLaAnterior(prueba *testing.T) {
-	primera, anterior := productoValido(prueba).CambiarImagen("/imagenes/a.png", ahora)
-	if anterior != "" {
-		prueba.Errorf("sin imagen previa, la anterior es vacía: %q", anterior)
-	}
-
-	segunda, anterior := primera.CambiarImagen("/imagenes/b.png", ahora)
-
-	if anterior != "/imagenes/a.png" || segunda.ImagenURL != "/imagenes/b.png" {
-		prueba.Errorf("anterior %q, actual %q", anterior, segunda.ImagenURL)
 	}
 }
 

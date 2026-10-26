@@ -10,33 +10,44 @@ import (
 )
 
 const (
-	// loteDelIndice es cuántas filas de la bandeja se procesan por vuelta.
+	// loteDelIndice es cuántas filas de la bandeja se leen por vez.
 	loteDelIndice = 100
 	// loteDeReindexado es cuántos productos se cargan por vez al reconstruir el índice.
 	loteDeReindexado = 500
 )
 
 // SincronizarIndice refleja en la búsqueda los productos que cambiaron (ADR-008).
-// Corre en segundo plano cada 2 s. Si el motor no responde, las filas quedan en la
-// bandeja y se reintentan en la vuelta siguiente: no se pierde ningún cambio.
+// Corre en segundo plano cada 2 s y, en cada vuelta, vacía la bandeja de a lotes:
+// renombrar una categoría con cientos de productos no espera varias vueltas. Si el
+// motor no responde, las filas quedan en la bandeja y se reintentan en la vuelta
+// siguiente: no se pierde ningún cambio.
 //
 // shortcut: con dos instancias, las dos pueden procesar las mismas filas. No hace
 // daño, porque guardar y borrar en el índice se pueden repetir; se aparta cada
 // fila por instancia si la carga lo pide.
 func (servicio *Servicio) SincronizarIndice(contexto context.Context) (int, error) {
-	cambios, err := servicio.bandeja.CambiosPendientes(contexto, loteDelIndice)
-	if err != nil {
-		err = fmt.Errorf("leer la bandeja del índice: %w", err)
-		servicio.eventos.IndiceSincronizado(contexto, 0, err)
-		return 0, err
+	total := 0
+	for primerLote := true; ; primerLote = false {
+		cambios, err := servicio.bandeja.CambiosPendientes(contexto, loteDelIndice)
+		if err != nil {
+			err = fmt.Errorf("leer la bandeja del índice: %w", err)
+			servicio.eventos.IndiceSincronizado(contexto, 0, err)
+			return total, err
+		}
+		if primerLote {
+			servicio.eventos.AntiguedadDelIndice(contexto, cambios.Antiguedad(servicio.ahora()))
+		}
+		if len(cambios) == 0 {
+			return total, nil
+		}
+		cantidad, err := servicio.reflejar(contexto, cambios)
+		servicio.eventos.IndiceSincronizado(contexto, cantidad, err)
+		total += cantidad
+		// Un lote incompleto es el último; con el contexto cancelado, se sigue en la próxima vuelta.
+		if err != nil || len(cambios) < loteDelIndice || contexto.Err() != nil {
+			return total, err
+		}
 	}
-	servicio.eventos.AntiguedadDelIndice(contexto, cambios.Antiguedad(servicio.ahora()))
-	if len(cambios) == 0 {
-		return 0, nil
-	}
-	cantidad, err := servicio.reflejar(contexto, cambios)
-	servicio.eventos.IndiceSincronizado(contexto, cantidad, err)
-	return cantidad, err
 }
 
 func (servicio *Servicio) reflejar(contexto context.Context, cambios puertos.CambiosDeIndice) (int, error) {

@@ -59,7 +59,6 @@ type piezas struct {
 	servicio    *aplicacion.Servicio
 	repositorio *mysql.Repositorio
 	buscador    *meilisearch.Buscador
-	imagenes    *imagenes.Disco
 	medidor     *metricas.Metricas
 }
 
@@ -99,7 +98,7 @@ func armar(contexto context.Context, configuracion configuracion) (piezas, error
 		Ahora:      ahora,
 		NuevoID:    nuevoUUID,
 	})
-	return piezas{servicio: servicio, repositorio: repositorio, buscador: buscador, imagenes: disco, medidor: medidor}, nil
+	return piezas{servicio: servicio, repositorio: repositorio, buscador: buscador, medidor: medidor}, nil
 }
 
 func servir() error {
@@ -133,7 +132,7 @@ func servir() error {
 		contextoSalud, cancelarSalud := context.WithTimeout(contextoSalud, esperaSalud)
 		defer cancelarSalud()
 		return armado.repositorio.Ping(contextoSalud)
-	}, gin.Dir(armado.imagenes.Directorio(), false))
+	}, gin.Dir(configuracion.carpetaImagenes, false))
 	servidor := &http.Server{
 		Addr:              ":" + configuracion.puerto,
 		Handler:           router,

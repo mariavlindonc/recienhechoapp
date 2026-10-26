@@ -58,8 +58,13 @@ func (servicio *Servicio) ReemplazarReceta(contexto context.Context, id string, 
 	return conReceta, nil
 }
 
-// SubirImagen guarda la foto del producto y borra la anterior. Si no se puede
-// guardar en la base, se borra el archivo nuevo para no dejarlo suelto.
+// SubirImagen guarda la foto del producto. Si no se puede guardar en la base, se
+// borra el archivo nuevo para no dejarlo suelto.
+//
+// shortcut: la foto anterior queda en el volumen. Borrarla rompería la imagen
+// donde todavía se la muestra (la búsqueda tarda unos segundos en actualizarse y
+// la caché hasta 60 s). Si el volumen crece, se limpian los archivos que ningún
+// producto usa.
 func (servicio *Servicio) SubirImagen(contexto context.Context, id string, contenido []byte) (dominio.Producto, error) {
 	imagen, err := dominio.NuevaImagen(contenido)
 	if err != nil {
@@ -73,22 +78,15 @@ func (servicio *Servicio) SubirImagen(contexto context.Context, id string, conte
 	if err != nil {
 		return dominio.Producto{}, fmt.Errorf("guardar el archivo de la imagen: %w", err)
 	}
-	conImagen, anterior := actual.CambiarImagen(url, servicio.ahora())
+	conImagen := actual.CambiarImagen(url, servicio.ahora())
 	if err := servicio.productos.GuardarImagen(contexto, conImagen); err != nil {
-		servicio.borrarImagen(contexto, url)
+		if errBorrar := servicio.imagenes.Borrar(contexto, url); errBorrar != nil {
+			servicio.eventos.ImagenSinBorrar(contexto, url, errBorrar)
+		}
 		return dominio.Producto{}, fmt.Errorf("guardar la imagen del producto: %w", err)
-	}
-	if anterior != "" {
-		servicio.borrarImagen(contexto, anterior)
 	}
 	servicio.invalidarProducto(contexto, id)
 	return conImagen, nil
-}
-
-func (servicio *Servicio) borrarImagen(contexto context.Context, url string) {
-	if err := servicio.imagenes.Borrar(contexto, url); err != nil {
-		servicio.eventos.ImagenSinBorrar(contexto, url, err)
-	}
 }
 
 // EliminarProducto da de baja el producto (baja lógica). Sale del catálogo y de la

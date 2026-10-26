@@ -43,7 +43,6 @@ internal/adaptadores/   api (Gin), mongodb, mysql, smtp, rabbitmq, inventario, m
   Cambiar de motor de búsqueda es cambiar el adaptador, como prevé [ADR-008](ADR-008-busqueda.md).
 - **Las entidades deciden sus cambios** (*tell, don't ask*; decisión de Agustín del 26/10/2026). La aplicación le ordena al objeto que haga algo, en vez de pedirle los datos y decidir afuera:
   - `producto.ReemplazarReceta(...)` valida la receta;
-  - `producto.CambiarImagen(...)` devuelve la URL anterior para borrar el archivo;
   - `dominio.NuevaImagen(...)` decide si el archivo es una imagen aceptada;
   - los cambios de la bandeja resuelven solos qué guardar y qué borrar en el índice.
 

@@ -61,6 +61,3 @@ func (disco *Disco) Borrar(_ context.Context, url string) error {
 	}
 	return err
 }
-
-// Directorio es la carpeta de las imágenes, para servirlas por HTTP.
-func (disco *Disco) Directorio() string { return disco.directorio }
