@@ -26,7 +26,9 @@ const (
 func (servicio *Servicio) SincronizarIndice(contexto context.Context) (int, error) {
 	cambios, err := servicio.bandeja.CambiosPendientes(contexto, loteDelIndice)
 	if err != nil {
-		return 0, fmt.Errorf("leer la bandeja del índice: %w", err)
+		err = fmt.Errorf("leer la bandeja del índice: %w", err)
+		servicio.eventos.IndiceSincronizado(contexto, 0, err)
+		return 0, err
 	}
 	servicio.eventos.AntiguedadDelIndice(contexto, cambios.Antiguedad(servicio.ahora()))
 	if len(cambios) == 0 {
