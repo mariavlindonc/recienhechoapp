@@ -7,6 +7,12 @@ import PedidoEspecial from './paginas/PedidoEspecial.jsx'
 import MisPedidos from './paginas/MisPedidos.jsx'
 import Ingresar from './paginas/Ingresar.jsx'
 import Registrarse from './paginas/Registrarse.jsx'
+import VendedorProductos from './paginas/vendedor/Productos.jsx'
+import VendedorReceta from './paginas/vendedor/Receta.jsx'
+import VendedorCapacidad from './paginas/vendedor/Capacidad.jsx'
+import VendedorCalendario from './paginas/vendedor/Calendario.jsx'
+import VendedorEspeciales from './paginas/vendedor/Especiales.jsx'
+import VendedorPedidos from './paginas/vendedor/Pedidos.jsx'
 import NoEncontrado from './paginas/NoEncontrado.jsx'
 
 export default createBrowserRouter([
@@ -20,6 +26,12 @@ export default createBrowserRouter([
       { path: '/pedir/:id', element: <Encargar /> },
       { path: '/pedido-especial', element: <PedidoEspecial /> },
       { path: '/mis-pedidos', element: <MisPedidos /> },
+      { path: '/vendedor/productos', element: <VendedorProductos /> },
+      { path: '/vendedor/productos/:id/receta', element: <VendedorReceta /> },
+      { path: '/vendedor/capacidad', element: <VendedorCapacidad /> },
+      { path: '/vendedor/calendario', element: <VendedorCalendario /> },
+      { path: '/vendedor/especiales', element: <VendedorEspeciales /> },
+      { path: '/vendedor/pedidos', element: <VendedorPedidos /> },
       { path: '*', element: <NoEncontrado /> },
     ],
   },
