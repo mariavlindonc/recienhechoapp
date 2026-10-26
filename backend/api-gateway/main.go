@@ -58,9 +58,10 @@ func ejecutar() error {
 
 	medidor := nuevasMetricas()
 	proxyNotificaciones := nuevoProxyBalanceado("notificaciones", configuracion.instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
+	proxyPedidos := nuevoProxyBalanceado("pedidos", configuracion.instanciasPedidos, tiempoMaximoServicios, medidor.contarReenvio("pedidos"))
 	servidor := &http.Server{
 		Addr:              ":" + configuracion.puerto,
-		Handler:           nuevoRouter(proxyNotificaciones, medidor.medirSolicitudes()),
+		Handler:           nuevoRouter(proxyNotificaciones, proxyPedidos, medidor.medirSolicitudes()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -102,8 +103,13 @@ func ejecutar() error {
 }
 
 // nuevoRouter arma las rutas públicas. Todo lo que empieza con /notificaciones va
-// al servicio de notificaciones tal cual llega (headers, cuerpo y respuesta).
-func nuevoRouter(notificaciones http.Handler, extras ...gin.HandlerFunc) *gin.Engine {
+// al servicio de notificaciones tal cual llega (headers, cuerpo y respuesta), y
+// /pedidos y /capacidad van a pedidos.
+//
+// shortcut: los headers X-Id-Usuario, X-Email-Usuario y X-Rol-Usuario pasan tal
+// cual los manda el cliente. Cuando exista la autenticación, el gateway los arma a
+// partir del token y descarta los del cliente.
+func nuevoRouter(notificaciones, pedidos http.Handler, extras ...gin.HandlerFunc) *gin.Engine {
 	router := gin.New()
 	// otelgin va primero: abre el span de la solicitud y así el middleware de logs
 	// ya ve el trace_id.
@@ -114,6 +120,9 @@ func nuevoRouter(notificaciones http.Handler, extras ...gin.HandlerFunc) *gin.En
 	})
 	router.Any("/notificaciones", gin.WrapH(notificaciones))
 	router.Any("/notificaciones/*resto", gin.WrapH(notificaciones))
+	for _, ruta := range []string{"/pedidos", "/pedidos/*resto", "/capacidad", "/capacidad/*resto"} {
+		router.Any(ruta, gin.WrapH(pedidos))
+	}
 	return router
 }
 

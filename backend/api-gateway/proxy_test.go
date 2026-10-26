@@ -39,7 +39,7 @@ func instanciaFalsa(prueba *testing.T, nombre string, demora time.Duration) (*ur
 
 func routerDePrueba(instancias []*url.URL, tiempoMaximo time.Duration) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return nuevoRouter(nuevoProxyBalanceado("notificaciones", instancias, tiempoMaximo, nil))
+	return nuevoRouter(nuevoProxyBalanceado("notificaciones", instancias, tiempoMaximo, nil), http.NotFoundHandler())
 }
 
 func pedir(router http.Handler, metodo, ruta, cuerpo string) *httptest.ResponseRecorder {
@@ -147,5 +147,24 @@ func comprobarNoDisponible(prueba *testing.T, respuesta *httptest.ResponseRecord
 	var cuerpo map[string]string
 	if err := json.Unmarshal(respuesta.Body.Bytes(), &cuerpo); err != nil || cuerpo["codigo"] != "no_disponible" || cuerpo["mensaje"] == "" {
 		prueba.Errorf("se esperaba {codigo: no_disponible, mensaje: ...}, llegó %s", respuesta.Body.String())
+	}
+}
+
+func TestPedidosYCapacidadVanAPedidos(prueba *testing.T) {
+	notificaciones, recibidasNotificaciones := instanciaFalsa(prueba, "notificaciones", 0)
+	pedidos, recibidasPedidos := instanciaFalsa(prueba, "pedidos", 0)
+	gin.SetMode(gin.TestMode)
+	router := nuevoRouter(
+		nuevoProxyBalanceado("notificaciones", []*url.URL{notificaciones}, time.Second, nil),
+		nuevoProxyBalanceado("pedidos", []*url.URL{pedidos}, time.Second, nil),
+	)
+
+	for _, ruta := range []string{"/pedidos", "/pedidos/id-1/cancelacion", "/capacidad", "/capacidad/2026-10-30"} {
+		if respuesta := pedir(router, http.MethodGet, ruta, ""); respuesta.Header().Get("X-Instancia") != "pedidos" {
+			prueba.Errorf("%s fue a %q", ruta, respuesta.Header().Get("X-Instancia"))
+		}
+	}
+	if len(*recibidasPedidos) != 4 || len(*recibidasNotificaciones) != 0 {
+		prueba.Errorf("pedidos recibió %d y notificaciones %d", len(*recibidasPedidos), len(*recibidasNotificaciones))
 	}
 }

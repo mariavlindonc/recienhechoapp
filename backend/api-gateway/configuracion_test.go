@@ -6,7 +6,7 @@ import (
 )
 
 func TestLeerConfiguracionUsaValoresPorDefecto(prueba *testing.T) {
-	variables := map[string]string{"NOTIFICACIONES_URLS": "http://notificaciones:8084"}
+	variables := map[string]string{"NOTIFICACIONES_URLS": "http://notificaciones:8084", "PEDIDOS_URLS": "http://pedidos:8083"}
 
 	leida, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
 
@@ -19,12 +19,15 @@ func TestLeerConfiguracionUsaValoresPorDefecto(prueba *testing.T) {
 	if len(leida.instanciasNotificaciones) != 1 || leida.instanciasNotificaciones[0].Host != "notificaciones:8084" {
 		prueba.Errorf("instancias = %v", leida.instanciasNotificaciones)
 	}
+	if len(leida.instanciasPedidos) != 1 || leida.instanciasPedidos[0].Host != "pedidos:8083" {
+		prueba.Errorf("instancias de pedidos = %v", leida.instanciasPedidos)
+	}
 }
 
 func TestLeerConfiguracionInformaLosProblemas(prueba *testing.T) {
 	casos := map[string]map[string]string{
 		"falta NOTIFICACIONES_URLS":    {},
-		"NOTIFICACIONES_URLS inválida": {"NOTIFICACIONES_URLS": "notificaciones:8084"},
+		"NOTIFICACIONES_URLS inválida": {"NOTIFICACIONES_URLS": "notificaciones:8084", "PEDIDOS_URLS": "http://pedidos:8083"},
 	}
 
 	for nombre, variables := range casos {
@@ -48,5 +51,15 @@ func TestParsearInstancias(prueba *testing.T) {
 		if _, err := parsearInstancias(invalido); err == nil {
 			prueba.Errorf("%q tenía que dar error", invalido)
 		}
+	}
+}
+
+func TestLeerConfiguracionExigePedidos(prueba *testing.T) {
+	variables := map[string]string{"NOTIFICACIONES_URLS": "http://notificaciones:8084", "PEDIDOS_URLS": "pedidos"}
+
+	_, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
+
+	if err == nil || !strings.Contains(err.Error(), "PEDIDOS_URLS") {
+		prueba.Errorf("se esperaba un error que mencione PEDIDOS_URLS, dio: %v", err)
 	}
 }
