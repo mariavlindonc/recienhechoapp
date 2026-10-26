@@ -8,7 +8,7 @@ Instrucciones para agentes de código (Claude Code, Antigravity, Codex, OpenCode
 
 ```
 backend/    api-gateway, usuarios, productos, pedidos, notificaciones (cada uno con su go.mod y Dockerfile)
-frontend/   interfaz web en React 19 con material-esm y Bun (ADR-014); datos de ejemplo hasta que existan los servicios
+frontend/   interfaz web en React 19, TypeScript, material-esm y Bun (ADR-014); datos de ejemplo hasta que existan los servicios
 docs/       arquitectura, ADRs, contratos, postmortems
 observabilidad/  configuración de Prometheus (lectura de métricas y alertas) y de Grafana (fuentes y tablero)
 ```

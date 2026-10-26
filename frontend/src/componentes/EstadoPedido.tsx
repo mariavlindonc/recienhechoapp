@@ -1,5 +1,7 @@
+import type { EstadoPedido as Estado } from '../tipos.ts'
+
 // Nombres de docs/ARCHITECTURE.md, "Estados de un pedido", en español para la pantalla.
-const ETIQUETAS = {
+const ETIQUETAS: Record<Estado, string> = {
   pendiente_confirmacion: 'Pendiente de confirmación',
   confirmado: 'Confirmado',
   en_produccion: 'En producción',
@@ -8,6 +10,6 @@ const ETIQUETAS = {
   cancelado: 'Cancelado',
 }
 
-export default function EstadoPedido({ estado }) {
+export default function EstadoPedido({ estado }: { estado: Estado }) {
   return <md-chip type="assist" label={ETIQUETAS[estado] ?? estado}></md-chip>
 }

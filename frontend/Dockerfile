@@ -9,6 +9,6 @@ RUN bun run build
 FROM oven/bun:1.4.3-alpine
 WORKDIR /app
 COPY --from=compilacion /app/dist ./dist
-COPY servidor.js ./
+COPY servidor.ts ./
 ENV NODE_ENV=production
-CMD ["bun", "servidor.js"]
+CMD ["bun", "servidor.ts"]

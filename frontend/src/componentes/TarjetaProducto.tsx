@@ -1,7 +1,8 @@
 import { Link } from 'react-router'
-import { formatearPrecio } from '../formato.js'
+import { formatearPrecio } from '../formato.ts'
+import type { Producto } from '../tipos.ts'
 
-export default function TarjetaProducto({ producto }) {
+export default function TarjetaProducto({ producto }: { producto: Producto }) {
   return (
     <md-card variant="outlined">
       <div className="formulario" style={{ padding: 16 }}>

@@ -1,6 +1,6 @@
 # Frontend
 
-Interfaz web de Recién hecho: React 19.3, [material-esm](https://github.com/material-esm/material) (Material 3 Expressive) y Bun. Decisiones en [ADR-014](../docs/adr/ADR-014-frontend.md).
+Interfaz web de Recién hecho: React 19.3, TypeScript, [material-esm](https://github.com/material-esm/material) (Material 3 Expressive) y Bun. Decisiones en [ADR-014](../docs/adr/ADR-014-frontend.md).
 
 ## Cómo correrlo
 
@@ -29,15 +29,16 @@ El `dev` server reenvía `/api` al api-gateway en `API_GATEWAY_URL` (por defecto
 - Sin autenticación: ingreso y registro no envían datos (C1 pendiente). El cambio comprador/vendedor es manual desde la barra superior.
 - Los pedidos inmediatos (sin fecha) se rechazan para productos con anticipación mínima mayor a cero, porque la regla R2 exige anticipación.
 
-## Tests
+## Tests y tipos
 
 ```bash
 bun test
+bunx tsc          # chequeo de tipos; `bun run build` también lo corre
 ```
 
 ## Estructura
 
-- `src/rutas.jsx`: tabla de rutas. `src/paginas/`: una página por ruta; `src/paginas/vendedor/`: pantallas del vendedor.
+- `src/rutas.tsx`: tabla de rutas. `src/paginas/`: una página por ruta; `src/paginas/vendedor/`: pantallas del vendedor.
 - `src/componentes/`: marco con navegación, tarjeta de producto, estado del pedido.
 - `src/tema/`: tokens de color de material-esm (claro y oscuro, copiados del demo del tag `v3.3.11`).
 - `servidor.js`: servidor de producción con Bun. Sirve `dist/` y reenvía `/api/*` al api-gateway.

@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto. React 19.3, material-esm y Bun fueron elegidos por Agustín Di Mario el 23/10/2026. Falta que el equipo confirme la decisión y los puntos de abajo marcados como propuestos.
+Propuesto. React 19.3, material-esm y Bun fueron elegidos por Agustín Di Mario el 23/10/2026, y TypeScript el 26/10/2026. Falta que el equipo confirme la decisión y los puntos de abajo marcados como propuestos.
 
 ## Contexto
 
@@ -23,7 +23,8 @@ No hay una librería oficial de Google con Material 3 Expressive para web. `mate
 - **Gestor y runtime:** Bun 1.4.3. `bun.lock` queda versionado.
 - **Servidor de producción:** un servidor de Bun (`frontend/servidor.js`) que sirve la app compilada y reenvía `/api/*` al api-gateway. Con esto el navegador habla con un solo origen y no hace falta CORS.
 - **Datos:** `src/api.js` es el único punto de acceso a datos. Hoy resuelve contra datos de ejemplo en memoria; después cambia a `fetch` sin tocar las pantallas.
-- **Propuesto, sin confirmar por el equipo:** JavaScript con JSX sin TypeScript (menos dependencias para un MVP); navegación con un `md-nav-rail` en todos los anchos.
+- **Lenguaje:** TypeScript 7.0.2 en modo `strict`, elegido por Agustín Di Mario el 26/10/2026. Los tipos del dominio están en `src/tipos.ts`. `bun run build` corre `tsc` antes de `vite build`. Dependencias de desarrollo nuevas: `typescript`, `@types/react`, `@types/react-dom` y `@types/bun`.
+- **Propuesto, sin confirmar por el equipo:** navegación con un `md-nav-rail` en todos los anchos.
 
 ## Alternativas consideradas
 

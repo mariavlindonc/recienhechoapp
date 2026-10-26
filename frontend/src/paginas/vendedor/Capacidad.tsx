@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
-import { guardarCapacidad, listarCapacidad } from '../../api.js'
+import { useEffect, useState, type FormEvent } from 'react'
+import { guardarCapacidad, listarCapacidad } from '../../api.ts'
+import type { DiaCapacidad } from '../../tipos.ts'
+import { mensajeDe, valorDe } from '../../ayudas.ts'
 
 // VE3: capacidad de producción por día.
 export default function Capacidad() {
-  const [dias, setDias] = useState({})
+  const [dias, setDias] = useState<Record<string, DiaCapacidad>>({})
   const [fecha, setFecha] = useState('')
   const [capacidad, setCapacidad] = useState('')
   const [error, setError] = useState('')
@@ -13,14 +15,14 @@ export default function Capacidad() {
     cargar()
   }, [])
 
-  const guardar = evento => {
+  const guardar = (evento: FormEvent) => {
     evento.preventDefault()
     guardarCapacidad(fecha, Number(capacidad))
       .then(() => {
         setError('')
         cargar()
       })
-      .catch(errorGuardar => setError(errorGuardar.message))
+      .catch(errorGuardar => setError(mensajeDe(errorGuardar)))
   }
 
   return (
@@ -33,8 +35,8 @@ export default function Capacidad() {
         ))}
       </ul>
       <form className="formulario" onSubmit={guardar}>
-        <md-text-field label="Día" type="date" value={fecha} onInput={evento => setFecha(evento.target.value)} required></md-text-field>
-        <md-text-field label="Capacidad" type="number" value={capacidad} onInput={evento => setCapacidad(evento.target.value)} required></md-text-field>
+        <md-text-field label="Día" type="date" value={fecha} onInput={evento => setFecha(valorDe(evento))} required></md-text-field>
+        <md-text-field label="Capacidad" type="number" value={capacidad} onInput={evento => setCapacidad(valorDe(evento))} required></md-text-field>
         <md-button color="filled" type="submit">Guardar capacidad</md-button>
       </form>
     </section>

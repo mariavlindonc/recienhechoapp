@@ -1,13 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { borrarProducto, guardarProducto, listarProductosVendedor } from '../../api.js'
-import { formatearPrecio } from '../../formato.js'
+import { borrarProducto, guardarProducto, listarProductosVendedor } from '../../api.ts'
+import { formatearPrecio } from '../../formato.ts'
+import type { Producto } from '../../tipos.ts'
+import { mensajeDe, valorDe } from '../../ayudas.ts'
 
-const VACIO = { nombre: '', categoria: '', precio: '', anticipacionDias: 1, aptoCeliacos: false, descripcion: '' }
+type Formulario = {
+  id?: string
+  nombre: string
+  categoria: string
+  precio: string
+  anticipacionDias: number | string
+  aptoCeliacos: boolean
+  descripcion: string
+}
+
+const VACIO: Formulario = { nombre: '', categoria: '', precio: '', anticipacionDias: 1, aptoCeliacos: false, descripcion: '' }
 
 // VE1: alta, baja y modificación de productos.
 export default function Productos() {
-  const [productos, setProductos] = useState([])
+  const [productos, setProductos] = useState<Producto[]>([])
   const [formulario, setFormulario] = useState(VACIO)
   const [error, setError] = useState('')
 
@@ -16,9 +28,9 @@ export default function Productos() {
     cargar()
   }, [])
 
-  const cambiar = cambios => setFormulario(anteriores => ({ ...anteriores, ...cambios }))
+  const cambiar = (cambios: Partial<Formulario>) => setFormulario(anteriores => ({ ...anteriores, ...cambios }))
 
-  const guardar = evento => {
+  const guardar = (evento: FormEvent) => {
     evento.preventDefault()
     try {
       guardarProducto({
@@ -35,21 +47,21 @@ export default function Productos() {
         cargar()
       })
     } catch (errorGuardar) {
-      setError(errorGuardar.message)
+      setError(mensajeDe(errorGuardar))
     }
   }
 
-  const borrar = id => borrarProducto(id).then(cargar)
+  const borrar = (id: string) => borrarProducto(id).then(cargar)
 
   return (
     <section>
       <h1>Productos</h1>
       {error && <p className="aviso-error">{error}</p>}
       <form className="formulario" onSubmit={guardar}>
-        <md-text-field label="Nombre" value={formulario.nombre} onInput={evento => cambiar({ nombre: evento.target.value })} required></md-text-field>
-        <md-text-field label="Categoría" value={formulario.categoria} onInput={evento => cambiar({ categoria: evento.target.value })} required></md-text-field>
-        <md-text-field label="Precio (pesos)" type="number" value={formulario.precio} onInput={evento => cambiar({ precio: evento.target.value })} required></md-text-field>
-        <md-text-field label="Anticipación mínima (días)" type="number" value={formulario.anticipacionDias} onInput={evento => cambiar({ anticipacionDias: evento.target.value })} required></md-text-field>
+        <md-text-field label="Nombre" value={formulario.nombre} onInput={evento => cambiar({ nombre: valorDe(evento) })} required></md-text-field>
+        <md-text-field label="Categoría" value={formulario.categoria} onInput={evento => cambiar({ categoria: valorDe(evento) })} required></md-text-field>
+        <md-text-field label="Precio (pesos)" type="number" value={formulario.precio} onInput={evento => cambiar({ precio: valorDe(evento) })} required></md-text-field>
+        <md-text-field label="Anticipación mínima (días)" type="number" value={formulario.anticipacionDias} onInput={evento => cambiar({ anticipacionDias: valorDe(evento) })} required></md-text-field>
         <label>
           <input type="checkbox" checked={formulario.aptoCeliacos} onChange={evento => cambiar({ aptoCeliacos: evento.target.checked })} />
           Apto celíacos

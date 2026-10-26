@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { avanzarEstado, listarPedidosVendedor, TRANSICIONES } from '../../api.js'
-import EstadoPedido from '../../componentes/EstadoPedido.jsx'
+import { avanzarEstado, listarPedidosVendedor, TRANSICIONES } from '../../api.ts'
+import EstadoPedido from '../../componentes/EstadoPedido.tsx'
+import type { EstadoPedido as Estado, Pedido } from '../../tipos.ts'
+import { mensajeDe } from '../../ayudas.ts'
 
 // Solo los pasos que da el vendedor (VE6). Confirmar lo hace el inventario (R3) y cancelar, el comprador (C8).
-const ETIQUETAS_SIGUIENTE = {
+const ETIQUETAS_SIGUIENTE: Partial<Record<Estado, string>> = {
   en_produccion: 'Pasar a producción',
   listo: 'Marcar listo',
   entregado: 'Marcar entregado',
@@ -11,7 +13,7 @@ const ETIQUETAS_SIGUIENTE = {
 
 // VE6: avanzar el estado de los pedidos por las transiciones válidas (R6).
 export default function Pedidos() {
-  const [pedidos, setPedidos] = useState([])
+  const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [error, setError] = useState('')
 
   const cargar = () => listarPedidosVendedor().then(setPedidos)
@@ -19,10 +21,10 @@ export default function Pedidos() {
     cargar()
   }, [])
 
-  const avanzar = (pedido, siguiente) => {
+  const avanzar = (pedido: Pedido, siguiente: Estado) => {
     avanzarEstado(pedido.id, siguiente)
       .then(cargar)
-      .catch(errorAvanzar => setError(errorAvanzar.message))
+      .catch(errorAvanzar => setError(mensajeDe(errorAvanzar)))
   }
 
   return (

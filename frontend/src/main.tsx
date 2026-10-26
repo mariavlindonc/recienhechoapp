@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router'
-import rutas from './rutas.jsx'
+import rutas from './rutas.tsx'
 
 // Componentes de material-esm que usa la app. Cada uno se registra al importarlo.
 import 'material/app/bar.js'
@@ -21,7 +21,7 @@ import 'material/text/text-field.js'
 
 import './tema/tema.css'
 
-createRoot(document.getElementById('raiz')).render(
+createRoot(document.getElementById('raiz')!).render(
   <StrictMode>
     <RouterProvider router={rutas} />
   </StrictMode>,

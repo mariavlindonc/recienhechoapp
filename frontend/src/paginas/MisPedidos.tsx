@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
-import { cancelarPedido, listarEspeciales, listarMisPedidos, responderCotizacion } from '../api.js'
-import EstadoPedido from '../componentes/EstadoPedido.jsx'
-import { formatearFecha, formatearPrecio } from '../formato.js'
+import { cancelarPedido, listarEspeciales, listarMisPedidos, responderCotizacion } from '../api.ts'
+import EstadoPedido from '../componentes/EstadoPedido.tsx'
+import { formatearFecha, formatearPrecio } from '../formato.ts'
+import type { Pedido, PedidoEspecial } from '../tipos.ts'
+import { mensajeDe } from '../ayudas.ts'
 
 // C7 y C8: ver pedidos y estado; cancelar solo antes de producción.
 export default function MisPedidos() {
-  const [pedidos, setPedidos] = useState([])
+  const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [error, setError] = useState('')
 
-  const [especiales, setEspeciales] = useState([])
+  const [especiales, setEspeciales] = useState<PedidoEspecial[]>([])
 
   const cargar = () => {
     listarMisPedidos().then(setPedidos)
@@ -19,21 +21,21 @@ export default function MisPedidos() {
   }, [])
 
   // C6 y R8: el comprador acepta o rechaza la cotización; si pasaron 48 h, se le avisa que venció.
-  const responder = (id, acepta) => {
+  const responder = (id: string, acepta: boolean) => {
     try {
       responderCotizacion(id, acepta)
         .then(cargar)
-        .catch(errorResponder => setError(errorResponder.message))
+        .catch(errorResponder => setError(mensajeDe(errorResponder)))
     } catch (errorResponder) {
-      setError(errorResponder.message)
+      setError(mensajeDe(errorResponder))
       cargar()
     }
   }
 
-  const cancelar = id => {
+  const cancelar = (id: string) => {
     cancelarPedido(id)
       .then(cargar)
-      .catch(errorCancelar => setError(errorCancelar.message))
+      .catch(errorCancelar => setError(mensajeDe(errorCancelar)))
   }
 
   return (

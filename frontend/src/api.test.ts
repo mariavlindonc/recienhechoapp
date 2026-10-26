@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import { crearPedido, responderCotizacion, cotizarEspecial, solicitarPedidoEspecial, guardarCapacidad } from './api.js'
-import { hoyIso } from './formato.js'
+import { crearPedido, responderCotizacion, cotizarEspecial, solicitarPedidoEspecial, guardarCapacidad } from './api.ts'
+import { hoyIso } from './formato.ts'
 
 test('R2: no acepta pedidos con menos anticipación que la del producto', () => {
   // Budin 1 pide 1 día de anticipación: para hoy no alcanza.

@@ -7,14 +7,25 @@ import {
   pedidosIniciales,
   productosIniciales,
   recetasIniciales,
-} from './datosDeEjemplo.js'
-import { hoyIso, sumarDias } from './formato.js'
+} from './datosDeEjemplo.ts'
+import { hoyIso, sumarDias } from './formato.ts'
+import type {
+  DatosProducto,
+  DiaCapacidad,
+  EstadoPedido,
+  FiltrosCatalogo,
+  Ingrediente,
+  PaginaDeProductos,
+  Pedido,
+  PedidoEspecial,
+  Producto,
+} from './tipos.ts'
 
 const TAMANIO_PAGINA = 20
 const HORAS_VENCIMIENTO_COTIZACION = 48
 
 // Estados de docs/ARCHITECTURE.md, "Estados de un pedido".
-export const TRANSICIONES = {
+export const TRANSICIONES: Record<EstadoPedido, EstadoPedido[]> = {
   pendiente_confirmacion: ['confirmado', 'cancelado'],
   confirmado: ['en_produccion', 'cancelado'],
   en_produccion: ['listo'],
@@ -29,10 +40,10 @@ const capacidad = structuredClone(capacidadIniciales)
 const pedidos = structuredClone(pedidosIniciales)
 const especiales = structuredClone(especialesIniciales)
 
-const esperar = valor => new Promise(resolver => setTimeout(() => resolver(structuredClone(valor)), 80))
+const esperar = <Tipo>(valor: Tipo) => new Promise<Tipo>(resolver => setTimeout(() => resolver(structuredClone(valor)), 80))
 
 // Catálogo (C2, C3)
-export function buscarProductos({ texto = '', categoria = '', precioMaximo, aptoCeliacos = false, orden = 'nombre', pagina = 1 } = {}) {
+export function buscarProductos({ texto = '', categoria = '', precioMaximo, aptoCeliacos = false, orden = 'nombre', pagina = 1 }: FiltrosCatalogo = {}): Promise<PaginaDeProductos> {
   const textoBuscado = texto.trim().toLowerCase()
   const filtrados = productos
     .filter(producto => producto.disponible)
@@ -49,7 +60,7 @@ export function buscarProductos({ texto = '', categoria = '', precioMaximo, apto
   return esperar({ items: filtrados.slice(inicio, inicio + TAMANIO_PAGINA), total: filtrados.length, pagina })
 }
 
-export function obtenerProducto(id) {
+export function obtenerProducto(id: string) {
   const producto = productos.find(item => item.id === id)
   return esperar(producto ?? null)
 }
@@ -58,35 +69,36 @@ export function listarProductosVendedor() {
   return esperar(productos)
 }
 
-export function guardarProducto(datos) {
+export function guardarProducto(datos: DatosProducto) {
   if (!Number.isInteger(datos.precioCentavos)) throw new Error('el precio debe ser un entero en centavos')
   if (datos.id) {
     const indice = productos.findIndex(item => item.id === datos.id)
-    productos[indice] = { ...productos[indice], ...datos }
-    return esperar(productos[indice])
+    const actualizado = { ...productos[indice]!, ...datos }
+    productos[indice] = actualizado
+    return esperar(actualizado)
   }
-  const nuevo = { ...datos, id: `p${Date.now()}`, disponible: true }
+  const nuevo: Producto = { ...datos, id: `p${Date.now()}`, disponible: true }
   productos.push(nuevo)
   return esperar(nuevo)
 }
 
-export function borrarProducto(id) {
+export function borrarProducto(id: string) {
   const indice = productos.findIndex(item => item.id === id)
   if (indice >= 0) productos.splice(indice, 1)
   return esperar(true)
 }
 
-export function obtenerReceta(productoId) {
+export function obtenerReceta(productoId: string) {
   return esperar(recetas[productoId] ?? [])
 }
 
-export function guardarReceta(productoId, ingredientes) {
+export function guardarReceta(productoId: string, ingredientes: Ingrediente[]) {
   recetas[productoId] = ingredientes
   return esperar(ingredientes)
 }
 
 // Pedidos (C4, C5, C7, C8)
-export function crearPedido({ productoId, cantidad, fecha, franja }) {
+export function crearPedido({ productoId, cantidad, fecha, franja }: { productoId: string; cantidad: number; fecha: string; franja?: string }) {
   const producto = productos.find(item => item.id === productoId)
   if (!producto) throw new Error('el producto no existe')
 
@@ -97,7 +109,7 @@ export function crearPedido({ productoId, cantidad, fecha, franja }) {
   }
 
   // R1: el cupo se reserva solo si alcanza.
-  const dia = capacidad[fecha] ?? { capacidad: 0, reservados: 0 }
+  const dia: DiaCapacidad = capacidad[fecha] ?? { capacidad: 0, reservados: 0 }
   if (dia.reservados + cantidad > dia.capacidad) {
     throw new Error('sin cupo para ese día')
   }
@@ -105,7 +117,7 @@ export function crearPedido({ productoId, cantidad, fecha, franja }) {
   capacidad[fecha] = dia
 
   // R4: el precio queda fijado al crear el pedido.
-  const pedido = {
+  const pedido: Pedido = {
     id: `pd${Date.now()}`,
     productoId,
     nombreProducto: producto.nombre,
@@ -125,7 +137,7 @@ export function listarMisPedidos() {
 }
 
 // R6 y R7: solo se cancela antes de producción; cancelar libera el cupo.
-export function cancelarPedido(id) {
+export function cancelarPedido(id: string) {
   const pedido = pedidos.find(item => item.id === id)
   if (!pedido) throw new Error('el pedido no existe')
   if (!['pendiente_confirmacion', 'confirmado'].includes(pedido.estado)) {
@@ -138,7 +150,7 @@ export function cancelarPedido(id) {
 }
 
 // Vendedor: estados (VE6)
-export function avanzarEstado(id, nuevoEstado) {
+export function avanzarEstado(id: string, nuevoEstado: EstadoPedido) {
   const pedido = pedidos.find(item => item.id === id)
   if (!pedido) throw new Error('el pedido no existe')
   if (!TRANSICIONES[pedido.estado].includes(nuevoEstado)) {
@@ -158,18 +170,19 @@ export function listarCapacidad() {
 }
 
 // VE3: no se puede bajar la capacidad por debajo de lo reservado.
-export function guardarCapacidad(fecha, nuevaCapacidad) {
-  const dia = capacidad[fecha] ?? { capacidad: 0, reservados: 0 }
+export function guardarCapacidad(fecha: string, nuevaCapacidad: number) {
+  const dia: DiaCapacidad = capacidad[fecha] ?? { capacidad: 0, reservados: 0 }
   if (nuevaCapacidad < dia.reservados) {
     throw new Error(`la capacidad no puede ser menor a los ${dia.reservados} reservados`)
   }
-  capacidad[fecha] = { ...dia, capacidad: nuevaCapacidad }
-  return esperar(capacidad[fecha])
+  const actualizado = { ...dia, capacidad: nuevaCapacidad }
+  capacidad[fecha] = actualizado
+  return esperar(actualizado)
 }
 
 // Pedidos especiales (C6, VE5, R8)
-export function solicitarPedidoEspecial({ descripcion, fecha }) {
-  const especial = { id: `es${Date.now()}`, descripcion, fecha, estado: 'solicitado', precioCentavos: null, cotizadoEn: null }
+export function solicitarPedidoEspecial({ descripcion, fecha }: { descripcion: string; fecha: string }) {
+  const especial: PedidoEspecial = { id: `es${Date.now()}`, descripcion, fecha, estado: 'solicitado', precioCentavos: null, cotizadoEn: null }
   especiales.push(especial)
   return esperar(especial)
 }
@@ -178,7 +191,7 @@ export function listarEspeciales() {
   return esperar(especiales)
 }
 
-export function cotizarEspecial(id, precioCentavos) {
+export function cotizarEspecial(id: string, precioCentavos: number) {
   const especial = especiales.find(item => item.id === id)
   if (!especial) throw new Error('el pedido especial no existe')
   Object.assign(especial, { estado: 'cotizado', precioCentavos, cotizadoEn: new Date().toISOString() })
@@ -186,10 +199,10 @@ export function cotizarEspecial(id, precioCentavos) {
 }
 
 // R8: una cotización vence a las 48 h si el comprador no la acepta.
-export function responderCotizacion(id, acepta, ahora = new Date()) {
+export function responderCotizacion(id: string, acepta: boolean, ahora = new Date()) {
   const especial = especiales.find(item => item.id === id)
   if (!especial) throw new Error('el pedido especial no existe')
-  const horasDesdeCotizacion = (ahora - new Date(especial.cotizadoEn)) / 36e5
+  const horasDesdeCotizacion = (ahora.getTime() - new Date(especial.cotizadoEn!).getTime()) / 36e5
   if (horasDesdeCotizacion > HORAS_VENCIMIENTO_COTIZACION) {
     especial.estado = 'vencido'
     throw new Error('la cotización venció')

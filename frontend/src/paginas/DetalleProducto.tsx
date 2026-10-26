@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { obtenerProducto } from '../api.js'
-import { formatearPrecio } from '../formato.js'
+import { obtenerProducto } from '../api.ts'
+import { formatearPrecio } from '../formato.ts'
+import type { Producto } from '../tipos.ts'
 
 // C2: detalle del producto con su anticipación mínima antes de pedir.
 export default function DetalleProducto() {
-  const { id } = useParams()
-  const [producto, setProducto] = useState(undefined)
+  const { id = '' } = useParams()
+  const [producto, setProducto] = useState<Producto | null | undefined>(undefined)
 
   useEffect(() => {
     obtenerProducto(id).then(setProducto)

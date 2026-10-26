@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { formatearFecha, formatearPrecio, sumarDias } from './formato.js'
+import { formatearFecha, formatearPrecio, sumarDias } from './formato.ts'
 
 test('formatearPrecio muestra pesos a partir de centavos', () => {
   expect(formatearPrecio(185000)).toContain('1.850')

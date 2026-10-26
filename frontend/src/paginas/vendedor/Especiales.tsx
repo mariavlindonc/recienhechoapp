@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react'
-import { cotizarEspecial, listarEspeciales } from '../../api.js'
-import { formatearPrecio } from '../../formato.js'
+import { cotizarEspecial, listarEspeciales } from '../../api.ts'
+import { formatearPrecio } from '../../formato.ts'
+import type { PedidoEspecial } from '../../tipos.ts'
+import { valorDe } from '../../ayudas.ts'
 
 // VE5: cotizar pedidos especiales. La aceptación la hace el comprador (C6).
 export default function Especiales() {
-  const [especiales, setEspeciales] = useState([])
-  const [precios, setPrecios] = useState({})
+  const [especiales, setEspeciales] = useState<PedidoEspecial[]>([])
+  const [precios, setPrecios] = useState<Record<string, string>>({})
 
   const cargar = () => listarEspeciales().then(setEspeciales)
   useEffect(() => {
     cargar()
   }, [])
 
-  const cotizar = especial => {
+  const cotizar = (especial: PedidoEspecial) => {
     // Pesos a centavos enteros (R5).
     cotizarEspecial(especial.id, Math.round(Number(precios[especial.id]) * 100)).then(cargar)
   }
@@ -30,7 +32,7 @@ export default function Especiales() {
               {especial.precioCentavos !== null && <strong>{formatearPrecio(especial.precioCentavos)}</strong>}
               {especial.estado === 'solicitado' && (
                 <>
-                  <md-text-field label="Precio (pesos)" type="number" value={precios[especial.id] ?? ''} onInput={evento => setPrecios({ ...precios, [especial.id]: evento.target.value })}></md-text-field>
+                  <md-text-field label="Precio (pesos)" type="number" value={precios[especial.id] ?? ''} onInput={evento => setPrecios({ ...precios, [especial.id]: valorDe(evento) })}></md-text-field>
                   <md-button color="filled" onClick={() => cotizar(especial)}>Cotizar</md-button>
                 </>
               )}
