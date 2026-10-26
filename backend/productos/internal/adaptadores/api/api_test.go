@@ -196,16 +196,19 @@ func TestErroresDelDominio(prueba *testing.T) {
 func TestBuscarLeeLosParametros(prueba *testing.T) {
 	casos := &casosFalsos{}
 
-	respuesta, _ := pedir(casos, http.MethodGet, "/productos/busqueda?q=limon&categoria=tortas&precioMin=100&precioMax=900000&aptoCeliacos=true&orden=precio_asc&pagina=2&incluirNoDisponibles=true", "", comprador)
+	respuesta, _ := pedir(casos, http.MethodGet, "/productos/busqueda?q=limon&categoria=Tortas&precioMin=100&precioMax=900000&aptoCeliacos=true&disponible=true&orden=precio_asc&pagina=2", "", nil)
 
 	consulta := casos.consulta
-	if respuesta.Code != http.StatusOK || consulta.Texto != "limon" || consulta.CategoriaID != "tortas" || consulta.Orden != dominio.OrdenPrecioAsc || consulta.Pagina != 2 {
+	if respuesta.Code != http.StatusOK || consulta.Texto != "limon" || consulta.Categoria != "Tortas" || consulta.Orden != dominio.OrdenPrecioAsc || consulta.Pagina != 2 {
 		prueba.Fatalf("estado %d, consulta %+v", respuesta.Code, consulta)
 	}
-	if *consulta.PrecioMinimoCentavos != 100 || *consulta.PrecioMaximoCentavos != 900000 || !*consulta.AptoCeliacos || consulta.IncluirNoDisponibles {
-		prueba.Errorf("filtros: %+v (un comprador no ve los no disponibles)", consulta)
+	if *consulta.PrecioMinimoCentavos != 100 || *consulta.PrecioMaximoCentavos != 900000 || !*consulta.AptoCeliacos || !*consulta.Disponible {
+		prueba.Errorf("filtros: %+v", consulta)
 	}
-	for _, ruta := range []string{"/productos/busqueda?precioMin=1,5", "/productos/busqueda?aptoCeliacos=quizas", "/productos/busqueda?pagina=dos"} {
+	if pedir(casos, http.MethodGet, "/productos/busqueda?q=limon", "", nil); casos.consulta.Disponible != nil {
+		prueba.Error("sin el parámetro disponible no se filtra (lo pide el frontend, ADR-008)")
+	}
+	for _, ruta := range []string{"/productos/busqueda?precioMin=1,5", "/productos/busqueda?aptoCeliacos=quizas", "/productos/busqueda?disponible=si", "/productos/busqueda?pagina=dos"} {
 		if respuesta, _ := pedir(casos, http.MethodGet, ruta, "", nil); respuesta.Code != http.StatusBadRequest {
 			prueba.Errorf("%s: se esperaba 400, dio %d", ruta, respuesta.Code)
 		}

@@ -24,15 +24,15 @@ const (
 )
 
 // Consulta es una búsqueda de productos con filtros, orden y paginación (C3).
-// Los filtros vacíos no filtran.
+// Los filtros vacíos no filtran: la búsqueda devuelve también los no disponibles,
+// y el frontend pide Disponible=true por defecto (ADR-008).
 type Consulta struct {
 	Texto                string
-	CategoriaID          string
+	Categoria            string // nombre, como en ADR-008
 	PrecioMinimoCentavos *int64
 	PrecioMaximoCentavos *int64
 	AptoCeliacos         *bool
-	// IncluirNoDisponibles es para el vendedor: el comprador solo ve lo que se vende.
-	IncluirNoDisponibles bool
+	Disponible           *bool
 	Orden                Orden
 	Pagina               int // desde 1
 }

@@ -91,13 +91,14 @@ func TestFiltraPorCategoriaYOrdenaPorPrecio(prueba *testing.T) {
 	buscador := buscadorDePrueba(prueba)
 	cargarCatalogo(prueba, buscador)
 
-	pagina := buscar(prueba, buscador, dominio.Consulta{CategoriaID: "id-Tortas", Orden: dominio.OrdenPrecioAsc})
+	disponible := true
+	pagina := buscar(prueba, buscador, dominio.Consulta{Categoria: "Tortas", Disponible: &disponible, Orden: dominio.OrdenPrecioAsc})
 
 	if got := ids(pagina); len(got) != 2 || got[0] != "torta-chocolate" || got[1] != "torta-limon" {
 		prueba.Errorf("solo tortas disponibles, de la más barata a la más cara: %v", got)
 	}
-	if conTodas := buscar(prueba, buscador, dominio.Consulta{CategoriaID: "id-Tortas", IncluirNoDisponibles: true, Orden: dominio.OrdenPrecioDesc}); conTodas.Total != 3 || conTodas.Productos[0].ID != "torta-boda" {
-		prueba.Errorf("el vendedor ve también la no disponible: %v", ids(conTodas))
+	if conTodas := buscar(prueba, buscador, dominio.Consulta{Categoria: "Tortas", Orden: dominio.OrdenPrecioDesc}); conTodas.Total != 3 || conTodas.Productos[0].ID != "torta-boda" || conTodas.Productos[0].Disponible {
+		prueba.Errorf("sin pedir disponibles, vienen todas y cada una dice si se vende: %v", ids(conTodas))
 	}
 }
 
@@ -115,7 +116,7 @@ func TestOtrosFiltrosYOrden(prueba *testing.T) {
 	if pagina := buscar(prueba, buscador, dominio.Consulta{Orden: dominio.OrdenNovedad}); pagina.Productos[0].ID != "tarta-limon" || !pagina.Productos[0].CreadoEn.Equal(time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)) {
 		prueba.Errorf("por novedad, primero la más nueva: %v", ids(pagina))
 	}
-	if pagina := buscar(prueba, buscador, dominio.Consulta{Pagina: 2}); len(pagina.Productos) != 0 || pagina.Total != 3 {
+	if pagina := buscar(prueba, buscador, dominio.Consulta{Pagina: 2}); len(pagina.Productos) != 0 || pagina.Total != 4 {
 		prueba.Errorf("la página 2 está vacía e informa el total: %+v", pagina)
 	}
 }
@@ -124,7 +125,7 @@ func TestUnFiltroConComillasNoSeRompe(prueba *testing.T) {
 	buscador := buscadorDePrueba(prueba)
 	cargarCatalogo(prueba, buscador)
 
-	pagina := buscar(prueba, buscador, dominio.Consulta{CategoriaID: `x" OR disponible = false OR categoriaId = "y`})
+	pagina := buscar(prueba, buscador, dominio.Consulta{Categoria: `x" OR disponible = false OR categoria = "y`})
 
 	if pagina.Total != 0 {
 		prueba.Errorf("las comillas no cambian el filtro: %v", ids(pagina))
@@ -146,14 +147,14 @@ func TestBorrarYReconstruir(prueba *testing.T) {
 	if err != nil {
 		prueba.Fatal(err)
 	}
-	if pagina := buscar(prueba, buscador, dominio.Consulta{}); pagina.Total != 2 {
+	if pagina := buscar(prueba, buscador, dominio.Consulta{}); pagina.Total != 3 {
 		prueba.Errorf("mientras se reconstruye, la búsqueda sigue con el índice vigente: %v", ids(pagina))
 	}
 	reconstruccion.Agregar(contexto, []dominio.Producto{producto("pan", "Pan de campo", "Panes", 300000, false, true, 5)})
 	if err := reconstruccion.Intercambiar(contexto); err != nil {
 		prueba.Fatal(err)
 	}
-	if pagina := buscar(prueba, buscador, dominio.Consulta{IncluirNoDisponibles: true}); pagina.Total != 1 || pagina.Productos[0].ID != "pan" {
+	if pagina := buscar(prueba, buscador, dominio.Consulta{}); pagina.Total != 1 || pagina.Productos[0].ID != "pan" {
 		prueba.Errorf("después del intercambio queda solo lo reconstruido: %v", ids(pagina))
 	}
 	if pagina := buscar(prueba, buscador, dominio.Consulta{Texto: "pan"}); pagina.Total != 1 {

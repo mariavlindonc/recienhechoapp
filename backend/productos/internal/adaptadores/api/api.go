@@ -270,13 +270,13 @@ func (manejador *manejador) listarProductos(contexto *gin.Context) {
 	contexto.JSON(http.StatusOK, aPagina(resultado))
 }
 
-// buscar es la búsqueda con texto, filtros y orden (C3).
+// buscar es la búsqueda con texto, filtros y orden (C3). Devuelve también los no
+// disponibles: el frontend manda disponible=true por defecto (ADR-008).
 func (manejador *manejador) buscar(contexto *gin.Context) {
 	consulta := dominio.Consulta{
-		Texto:                contexto.Query("q"),
-		CategoriaID:          contexto.Query("categoria"),
-		Orden:                dominio.Orden(contexto.Query("orden")),
-		IncluirNoDisponibles: esVendedor(contexto) && contexto.Query("incluirNoDisponibles") == "true",
+		Texto:     contexto.Query("q"),
+		Categoria: contexto.Query("categoria"),
+		Orden:     dominio.Orden(contexto.Query("orden")),
 	}
 	var ok bool
 	if consulta.Pagina, ok = numeroOpcional(contexto, "pagina"); !ok {
@@ -288,13 +288,11 @@ func (manejador *manejador) buscar(contexto *gin.Context) {
 	if consulta.PrecioMaximoCentavos, ok = centavosOpcionales(contexto, "precioMax"); !ok {
 		return
 	}
-	if texto := contexto.Query("aptoCeliacos"); texto != "" {
-		apto, err := strconv.ParseBool(texto)
-		if err != nil {
-			responderError(contexto, http.StatusBadRequest, "solicitud_invalida", "aptoCeliacos tiene que ser true o false.")
-			return
-		}
-		consulta.AptoCeliacos = &apto
+	if consulta.AptoCeliacos, ok = verdaderoOFalso(contexto, "aptoCeliacos"); !ok {
+		return
+	}
+	if consulta.Disponible, ok = verdaderoOFalso(contexto, "disponible"); !ok {
+		return
 	}
 	resultado, err := manejador.casos.BuscarProductos(contexto.Request.Context(), consulta)
 	if err != nil {
@@ -446,6 +444,20 @@ func centavosOpcionales(contexto *gin.Context, nombre string) (*int64, bool) {
 		return nil, false
 	}
 	return &centavos, true
+}
+
+// verdaderoOFalso lee un filtro true/false opcional de la query. Si es inválido, ya respondió.
+func verdaderoOFalso(contexto *gin.Context, nombre string) (*bool, bool) {
+	texto := contexto.Query(nombre)
+	if texto == "" {
+		return nil, true
+	}
+	valor, err := strconv.ParseBool(texto)
+	if err != nil {
+		responderError(contexto, http.StatusBadRequest, "solicitud_invalida", nombre+" tiene que ser true o false.")
+		return nil, false
+	}
+	return &valor, true
 }
 
 func esVendedor(contexto *gin.Context) bool {

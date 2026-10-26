@@ -30,7 +30,7 @@ const (
 // configuracion del índice (ADR-008). El orden de los buscables es el de relevancia.
 var configuracion = &meili.Settings{
 	SearchableAttributes: []string{"nombre", "descripcion", "categoria"},
-	FilterableAttributes: []string{"categoriaId", "precioCentavos", "aptoCeliacos", "disponible"},
+	FilterableAttributes: []string{"categoria", "precioCentavos", "aptoCeliacos", "disponible"},
 	SortableAttributes:   []string{"precioCentavos", "creadoEn"},
 }
 
@@ -147,14 +147,14 @@ func (buscador *Buscador) Buscar(contexto context.Context, consulta dominio.Cons
 }
 
 // filtroDe arma el filtro de Meilisearch. Los textos van entre comillas y
-// escapados: un id con comillas no puede cambiar el filtro.
+// escapados: una categoría con comillas no puede cambiar el filtro.
 func filtroDe(consulta dominio.Consulta) string {
 	var condiciones []string
-	if !consulta.IncluirNoDisponibles {
-		condiciones = append(condiciones, "disponible = true")
+	if consulta.Disponible != nil {
+		condiciones = append(condiciones, "disponible = "+strconv.FormatBool(*consulta.Disponible))
 	}
-	if consulta.CategoriaID != "" {
-		condiciones = append(condiciones, "categoriaId = "+entreComillas(consulta.CategoriaID))
+	if consulta.Categoria != "" {
+		condiciones = append(condiciones, "categoria = "+entreComillas(consulta.Categoria))
 	}
 	if consulta.PrecioMinimoCentavos != nil {
 		condiciones = append(condiciones, "precioCentavos >= "+strconv.FormatInt(*consulta.PrecioMinimoCentavos, 10))
