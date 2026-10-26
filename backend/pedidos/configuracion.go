@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"time"
 
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/adaptadores/inventario"
 )
@@ -18,7 +17,6 @@ type configuracion struct {
 	direccionRabbit    string
 	direccionProductos *url.URL
 	modoInventario     inventario.Modo
-	intervalo          time.Duration
 }
 
 // leerConfiguracion recibe la función que busca cada variable (os.Getenv en el
@@ -59,11 +57,6 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 	if !inventario.ModoValido(string(leida.modoInventario)) {
 		problemas = append(problemas, fmt.Errorf("INVENTARIO_MODO %q inválido: confirma, sin_stock, lento, error o rechazo", leida.modoInventario))
 	}
-	intervalo, err := time.ParseDuration(conValorPorDefecto("PEDIDOS_INTERVALO", "1s"))
-	if err != nil || intervalo <= 0 {
-		problemas = append(problemas, errors.New("PEDIDOS_INTERVALO tiene que ser una duración positiva, como 1s"))
-	}
-	leida.intervalo = intervalo
 
 	if len(problemas) > 0 {
 		return configuracion{}, fmt.Errorf("configuración inválida: %w", errors.Join(problemas...))

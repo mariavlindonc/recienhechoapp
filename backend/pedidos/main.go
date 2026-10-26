@@ -36,6 +36,7 @@ const (
 	esperaAlArrancar = 30 * time.Second // para conectar con MongoDB y crear los índices
 	esperaSalud      = 2 * time.Second
 	esperaAlApagar   = 10 * time.Second // para terminar las solicitudes en curso
+	intervalo        = time.Second      // de los procesos en segundo plano
 )
 
 func main() {
@@ -116,11 +117,11 @@ func ejecutar() error {
 	procesos.Add(3)
 	go func() {
 		defer procesos.Done()
-		repetir(contexto, configuracion.intervalo, "eventos publicados", servicio.PublicarEventos)
+		repetir(contexto, intervalo, "eventos publicados", servicio.PublicarEventos)
 	}()
 	go func() {
 		defer procesos.Done()
-		repetir(contexto, configuracion.intervalo, "pedidos reconfirmados o liberados", servicio.ProcesarConfirmaciones)
+		repetir(contexto, intervalo, "pedidos reconfirmados o liberados", servicio.ProcesarConfirmaciones)
 	}()
 	go func() {
 		defer procesos.Done()
