@@ -25,7 +25,7 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 | notificaciones | Servidor de correo (SMTP) | El `POST` sigue respondiendo `202`; las notificaciones quedan `pendiente` | Envío en segundo plano con timeout de conexión de 2 s y de 10 s por envío; tras el primer intento, 3 reintentos con espera exponencial (30, 60 y 120 s) y después `fallida`; si el servidor rechaza el mensaje o el destinatario de forma definitiva (5xx), pasa a `fallida` sin reintentos. Circuit breaker (`sony/gobreaker`): con 5 fallos transitorios seguidos deja de enviar 30 s, sin gastar los reintentos de las pendientes; una pendiente que no se pudo enviar en 24 h pasa a `fallida`. Alerta sobre el estado del circuito ([ADR-006](ADR-006-observabilidad.md)) |
 | pedidos | productos | No se crea el pedido: "no pudimos tomar el pedido, probá en un rato" | Timeout de 1 s y 2 reintentos ([ADR-003](ADR-003-comunicacion-entre-servicios.md)) |
 | pedidos | inventario (otro grupo) | El pedido queda `pendiente_confirmacion` | Timeout de 1,5 s y circuit breaker ([ADR-010](ADR-010-consumo-de-inventario.md)) |
-| pedidos | RabbitMQ | El cambio de estado se guarda igual; el evento sale cuando vuelve | Outbox (D4) |
+| pedidos | RabbitMQ | El cambio de estado se guarda igual; el evento sale cuando vuelve | Bandeja de salida (outbox, [ADR-015](ADR-015-consistencia-y-concurrencia.md)) |
 | pedidos | MongoDB | No se toman pedidos (`503`) | Timeout; no hay degradación posible sin perder la garantía de cupo |
 | productos | Redis | Se lee de MySQL, más lento | Timeout de 50 ms ([ADR-009](ADR-009-cache.md)) |
 | productos | Meilisearch | Sin búsqueda de texto; queda el listado por categoría | Outbox del índice ([ADR-008](ADR-008-busqueda.md)) |

@@ -17,8 +17,9 @@ Versión 0.2.0 (Entrega 2): `notificaciones` funcionando de punta a punta detrá
 | Componente | Estado |
 |---|---|
 | `notificaciones` | Implementado: `POST` y `GET /notificaciones` del contrato, idempotencia, clave de API por grupo, límite de uso, envío de mails en segundo plano con reintentos, MongoDB y SMTP |
-| `api-gateway` | Reenvía `/notificaciones*` a `notificaciones` con timeout de 3 s (`503 no_disponible` si no responde) |
-| `usuarios`, `productos`, `pedidos` | Esqueletos que solo exponen `/health` |
+| `api-gateway` | Reenvía `/notificaciones*` a `notificaciones` y `/pedidos*` y `/capacidad*` a `pedidos`, con timeout de 3 s (`503 no_disponible` si no responde) |
+| `pedidos` | Implementado: encargar (inmediato y programado) con reserva de cupo en una transacción, idempotencia, cancelar, avanzar estados, capacidad por día, inventario falso con disyuntor y reconfirmación, eventos a RabbitMQ por outbox. Necesita `productos` para crear pedidos |
+| `usuarios`, `productos` | Esqueletos que solo exponen `/health` |
 | Frontend | Pendiente |
 | Logs JSON con `trace_id`, trazas (Jaeger), métricas y alertas (Prometheus y Grafana) | Implementados en el api-gateway y en `notificaciones` |
 | Balanceo de carga | El gateway ya reparte entre las instancias de `NOTIFICACIONES_URLS` ([ADR-012](docs/adr/ADR-012-balanceo-de-carga.md)); el compose levanta una sola, la segunda se suma para la presentación |

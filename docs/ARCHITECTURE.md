@@ -107,7 +107,7 @@ Cada servicio es el único dueño de sus datos ([ADR-001](adr/ADR-001-limites-de
 
 La capacidad de producción vive en `pedidos` porque reservar el cupo y crear el pedido tienen que ser una sola operación atómica: es la operación del sistema que no puede duplicar ni perder información.
 
-Cada servicio vive en `backend/<servicio>/`, con su propio `go.mod` y `Dockerfile`, y ningún servicio importa código de otro. `notificaciones` es hexagonal (dominio, aplicación, puertos y adaptadores) y el api-gateway es un proxy sin dominio; la arquitectura interna de cada uno está en [ADR-007](adr/ADR-007-arquitectura-interna.md). `usuarios`, `productos` y `pedidos` por ahora solo responden `/health`. El puerto de la tabla es el interno: desde afuera solo se entra por el api-gateway.
+Cada servicio vive en `backend/<servicio>/`, con su propio `go.mod` y `Dockerfile`, y ningún servicio importa código de otro. `notificaciones` y `pedidos` son hexagonales (dominio, aplicación, puertos y adaptadores) y el api-gateway es un proxy sin dominio; la arquitectura interna de cada uno está en [ADR-007](adr/ADR-007-arquitectura-interna.md). `usuarios` y `productos` por ahora solo responden `/health`. El puerto de la tabla es el interno: desde afuera solo se entra por el api-gateway.
 
 ### Estados de un pedido
 
@@ -140,22 +140,22 @@ Montos siempre en centavos (`int64`). Detalle y limitaciones en [ADR-002](adr/AD
 ## Comunicación entre servicios
 
 - **Síncrona (HTTP/JSON):** frontend y otros grupos → api-gateway → servicios; `pedidos` → `productos` (precio y receta); `pedidos` → inventario del otro grupo. Con timeouts y reintentos solo en operaciones idempotentes.
-- **Asíncrona (RabbitMQ):** `pedidos` publica `pedido.confirmado` y `pedido.estado_cambiado`; `notificaciones` los consume y avisa al comprador.
+- **Asíncrona (RabbitMQ):** `pedidos` publica `pedido.estado_cambiado` cada vez que un pedido se crea o cambia de estado; `notificaciones` lo consume y avisa al comprador.
 
 Valores y reglas en [ADR-003](adr/ADR-003-comunicacion-entre-servicios.md).
 
 ## Mensajería y eventos
 
-Exchange `pedidos` (topic), cola `notificaciones.pedidos`, DLQ `notificaciones.fallidos`, consumidor idempotente por `idEvento`. Pendiente para la presentación: hace falta `pedidos`, que publica los eventos.
+Exchange `pedidos` (topic), cola quorum `notificaciones.pedidos` con hasta 3 reentregas y DLQ `notificaciones.fallidos`. El consumidor es idempotente por `idEvento`, que usa como `Idempotency-Key` de la notificación. `pedidos` no publica directo: guarda el evento en su bandeja de salida (outbox) en la misma transacción que el cambio, y un proceso lo publica con confirmación del broker ([ADR-015](adr/ADR-015-consistencia-y-concurrencia.md)). La web de RabbitMQ (http://localhost:15672) muestra las colas.
 
 ## Observabilidad
 
 Decisiones en [ADR-006](adr/ADR-006-observabilidad.md) (D11).
 
 - **Logs:** api-gateway y notificaciones escriben una línea JSON por evento en la salida estándar (`docker compose logs`), con `servicio` y, cuando hay una traza activa, `trace_id` y `span_id`. Cada solicitud HTTP deja una línea con `metodo`, `ruta`, `estado` y `duracion_ms`, y cada envío fallido de una notificación, una con `id`, `intento`, `resultado` y `error` (con los emails tapados). No se registran claves de API, claves de idempotencia, destinatarios ni contenidos de mails.
-- **Trazas:** OpenTelemetry en api-gateway y notificaciones, exportadas por OTLP a Jaeger (http://localhost:16686). Una solicitud a `POST /notificaciones` por el gateway queda como una sola traza: api-gateway → reenvío HTTP → notificaciones → comandos de MongoDB. Los logs de esa solicitud llevan el mismo `trace_id`. Si Jaeger está caído, los servicios siguen funcionando y solo se pierden las trazas.
+- **Trazas:** OpenTelemetry en api-gateway, pedidos y notificaciones, exportadas por OTLP a Jaeger (http://localhost:16686). Una solicitud a `POST /notificaciones` por el gateway queda como una sola traza: api-gateway → reenvío HTTP → notificaciones → comandos de MongoDB. Los logs de esa solicitud llevan el mismo `trace_id`. Un `POST /pedidos` también queda como una sola traza, que sigue por RabbitMQ (el `traceparent` viaja en los headers del mensaje) hasta el consumidor de notificaciones. Si Jaeger está caído, los servicios siguen funcionando y solo se pierden las trazas.
 - **Métricas:** cada servicio publica `/metrics` en un puerto interno (9464) que no sale del compose; Prometheus lo lee cada 15 s. Las dos tienen `solicitudes_http_total` por método, ruta y estado, y `duracion_solicitud_http_segundos` por método y ruta. El gateway suma `gateway_solicitudes_total` por instancia (reparto del balanceo, ADR-012) y notificaciones suma `notificaciones_envios_total` por resultado (`enviada`, `reintento`, `fallida`), que la aplicación avisa por el puerto `Eventos`: el adaptador `eventos` decide qué contar y qué loguear, así la aplicación no depende de Prometheus ni de `slog`.
-- **Alertas** (`observabilidad/prometheus/alertas.yml`): `NotificacionesFallidas` (más de 5 en 10 minutos), `ObjetivoDeLatenciaIncumplido` (menos del 99 % de los `POST /notificaciones` en menos de 300 ms en la última hora) y `ServicioSinMetricas`.
+- **Alertas** (`observabilidad/prometheus/alertas.yml`): `NotificacionesFallidas` (más de 5 en 10 minutos), `InventarioRechazaReservas`, `CircuitoDelInventarioAbierto`, `EventosSinPublicar`, `ObjetivoDeLatenciaIncumplido` (menos del 99 % de los `POST /notificaciones` en menos de 300 ms en la última hora) y `ServicioSinMetricas`.
 - **Tablero:** Grafana (http://localhost:3000) con Prometheus y Jaeger como fuentes, cargados desde `observabilidad/grafana`: objetivo de latencia, solicitudes por segundo, errores 5xx, alertas disparadas, latencia p95, envíos por resultado y reparto por instancia.
 - **Acceso:** en desarrollo, las herramientas de observabilidad se ven solo desde la propia computadora (ADR-006).
 
@@ -164,7 +164,7 @@ Decisiones en [ADR-006](adr/ADR-006-observabilidad.md) (D11).
 | Integración | Rol | Servicio responsable | Estado |
 |---|---|---|---|
 | Notificaciones | Publicamos | notificaciones (vía api-gateway) | Implementada en local (`localhost:8080`), con el mock del contrato para probar formatos. Falta publicarla en una URL pública ([docs/contracts](contracts/README.md), [ADR-004](adr/ADR-004-contrato-de-notificaciones.md)) |
-| Inventario | Consumimos | pedidos | Esperando el contrato del otro grupo (D9) |
+| Inventario | Consumimos | pedidos | Esperando el contrato del otro grupo (D9). Mientras tanto, `pedidos` usa un inventario falso configurable (`INVENTARIO_MODO`) detrás del disyuntor ([ADR-010](adr/ADR-010-consumo-de-inventario.md)) |
 
 ## Limitaciones conocidas y deuda técnica
 
@@ -174,3 +174,7 @@ Soluciones más simples que la ideal, elegidas a conciencia. Cada una dice qué 
 |---|---|---|---|
 | **El límite de 60 solicitudes por minuto se cuenta por instancia.** `notificaciones` lleva el contador en la memoria de cada instancia. | Con dos instancias balanceadas (D12), cada una cuenta por separado y un grupo podría hacer hasta 120 por minuto. Siempre falla para el lado permisivo: nunca se rechaza a un grupo que respetó el límite. Con una sola instancia, el límite se cumple exacto. | El límite protege al servicio de abusos y, con el tráfico esperado, el doble no pone en riesgo nada. Un contador compartido (por ejemplo, en MongoDB) suma una escritura a la base en cada solicitud. | Mover el control de tráfico al api-gateway, que ve todas las solicitudes antes de repartirlas. El enunciado lo pide para la presentación. |
 | **Los avisos se entregan "al menos una vez".** Si el servidor de correo acepta un mail pero falla el guardado del estado `enviada`, la notificación se vuelve a tomar cuando vence el apartado (2 minutos) y el mail sale dos veces. | El destinatario puede recibir un mail repetido, solo cuando MongoDB falla justo después de un envío exitoso. | Entre duplicar un aviso y perderlo, es preferible duplicarlo. Garantizar "exactamente una vez" con un servidor SMTP externo no es posible: el servidor no participa de nuestras transacciones. | No hay una solución completa. Se puede reducir la ventana reintentando el guardado del estado antes de soltar la notificación. |
+| **La identidad del usuario viaja en headers que nadie verifica.** `pedidos` lee `X-Id-Usuario`, `X-Email-Usuario` y `X-Rol-Usuario`, y el gateway los pasa tal cual los manda el cliente. | Cualquiera puede hacerse pasar por otro comprador o por el vendedor. | La autenticación todavía no está decidida (se discute en equipo); con los headers, `pedidos` ya funciona como va a funcionar después. | Cuando exista la autenticación, el gateway arma esos headers a partir del token y descarta los que mande el cliente. `pedidos` no cambia. |
+| **Un pedido tiene un solo producto** (con su cantidad). | Para pedir dos productos distintos hay que hacer dos pedidos. | Es lo que ya usa el frontend (`frontend/src/tipos.ts`) y simplifica el cupo y el evento. | Pasar a una lista de ítems en el pedido; el cupo se reserva por la suma de unidades. |
+| **Crear un pedido puede tardar más que el timeout del gateway.** Con `productos` lento, sus reintentos (3 × 1 s) más la reserva de insumos (1,5 s) superan los 3 s del gateway. | El comprador recibe `503` aunque el pedido se haya creado. | Si reintenta con la misma `Idempotency-Key`, recibe el pedido ya creado sin reservar de nuevo. | Ajustar los tiempos con los tests de carga ([ADR-013](adr/ADR-013-capacidad-y-costos.md)). |
+| **Los listados de pedidos no tienen paginación.** | Un comprador o un día con cientos de pedidos devuelven todo junto. | Alcanza para el volumen de una pastelería. | Agregar paginación cuando haga falta. |

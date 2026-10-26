@@ -3,7 +3,8 @@
 ## Estado
 
 - **Aceptado** para `notificaciones` (MongoDB), Entrega 2.
-- **Propuesto** para `usuarios`, `productos` y `pedidos`: se acepta al implementar cada servicio.
+- **Aceptado** para `pedidos` (MongoDB, replica set por las transacciones de [ADR-015](ADR-015-consistencia-y-concurrencia.md)), implementado el 26/10/2026.
+- **Aceptado** para `usuarios` y `productos` (MySQL y Redis) por Agustín el 26/10/2026; se implementan con cada servicio.
 
 ## Contexto
 
@@ -29,7 +30,7 @@ Patrones de acceso esperados:
 
 Precios y montos se guardan como enteros en centavos (`int64`), nunca como decimales con coma flotante.
 
-**Cupo de producción.** Cada día tiene un documento en `pedidos` con la capacidad y lo ya reservado. La reserva se hace con un único update condicional atómico (`reservado + cantidad <= capacidad`): si no matchea, no hay cupo. Dentro de un documento MongoDB garantiza atomicidad, así que no hacen falta transacciones multidocumento. El tratamiento completo (concurrencia, reintentos, fallas parciales) va en D4.
+**Cupo de producción.** Cada día tiene un documento en `pedidos` con la capacidad y lo ya reservado. La reserva se hace con un único update condicional atómico (`reservado + cantidad <= capacidad`): si no matchea, no hay cupo. Dentro de un documento MongoDB garantiza atomicidad. Crear el pedido junto con la reserva y su evento toca varios documentos: eso lo resuelve [ADR-015](ADR-015-consistencia-y-concurrencia.md) (D4) con transacciones.
 
 **Notificaciones.** Una base MongoDB propia (`mongo:8`). La colección `notificaciones` guarda cada envío con su estado; la consulta es por id y siempre filtrando por el grupo dueño de la clave de API, así que un grupo no ve las notificaciones de otro. Las claves de idempotencia van en la colección `claves_idempotencia`, con `_id` compuesto por (grupo, `Idempotency-Key`): al ser el `_id`, MongoDB rechaza en forma atómica una segunda inserción con el mismo par, sin necesitar otro índice único. Un índice TTL (`vencimiento_24h`, sobre `creadaEn`) las borra a las 24 h, como dice el contrato; así vence la clave pero la notificación se puede seguir consultando. MongoDB corre el borrado más o menos una vez por minuto, así que el vencimiento no es exacto al segundo. Un segundo índice, `pendientes_por_fecha` sobre (`estado`, `proximoIntento`), le permite al proceso de envío encontrar rápido las notificaciones listas.
 
