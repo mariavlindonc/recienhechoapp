@@ -5,8 +5,12 @@ import (
 	"testing"
 )
 
+func variablesValidas() map[string]string {
+	return map[string]string{"NOTIFICACIONES_URLS": "http://notificaciones:8084", "PEDIDOS_URLS": "http://pedidos:8083", "PRODUCTOS_URLS": "http://productos:8082"}
+}
+
 func TestLeerConfiguracionUsaValoresPorDefecto(prueba *testing.T) {
-	variables := map[string]string{"NOTIFICACIONES_URLS": "http://notificaciones:8084", "PEDIDOS_URLS": "http://pedidos:8083"}
+	variables := variablesValidas()
 
 	leida, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
 
@@ -21,6 +25,9 @@ func TestLeerConfiguracionUsaValoresPorDefecto(prueba *testing.T) {
 	}
 	if len(leida.instanciasPedidos) != 1 || leida.instanciasPedidos[0].Host != "pedidos:8083" {
 		prueba.Errorf("instancias de pedidos = %v", leida.instanciasPedidos)
+	}
+	if len(leida.instanciasProductos) != 1 || leida.instanciasProductos[0].Host != "productos:8082" {
+		prueba.Errorf("instancias de productos = %v", leida.instanciasProductos)
 	}
 }
 
@@ -54,12 +61,15 @@ func TestParsearInstancias(prueba *testing.T) {
 	}
 }
 
-func TestLeerConfiguracionExigePedidos(prueba *testing.T) {
-	variables := map[string]string{"NOTIFICACIONES_URLS": "http://notificaciones:8084", "PEDIDOS_URLS": "pedidos"}
+func TestLeerConfiguracionExigePedidosYProductos(prueba *testing.T) {
+	for _, variable := range []string{"PEDIDOS_URLS", "PRODUCTOS_URLS"} {
+		variables := variablesValidas()
+		variables[variable] = "sin-esquema"
 
-	_, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
+		_, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
 
-	if err == nil || !strings.Contains(err.Error(), "PEDIDOS_URLS") {
-		prueba.Errorf("se esperaba un error que mencione PEDIDOS_URLS, dio: %v", err)
+		if err == nil || !strings.Contains(err.Error(), variable) {
+			prueba.Errorf("se esperaba un error que mencione %s, dio: %v", variable, err)
+		}
 	}
 }

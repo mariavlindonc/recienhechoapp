@@ -59,9 +59,10 @@ func ejecutar() error {
 	medidor := nuevasMetricas()
 	proxyNotificaciones := nuevoProxyBalanceado("notificaciones", configuracion.instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
 	proxyPedidos := nuevoProxyBalanceado("pedidos", configuracion.instanciasPedidos, tiempoMaximoServicios, medidor.contarReenvio("pedidos"))
+	proxyProductos := nuevoProxyBalanceado("productos", configuracion.instanciasProductos, tiempoMaximoServicios, medidor.contarReenvio("productos"))
 	servidor := &http.Server{
 		Addr:              ":" + configuracion.puerto,
-		Handler:           nuevoRouter(proxyNotificaciones, proxyPedidos, medidor.medirSolicitudes()),
+		Handler:           nuevoRouter(proxyNotificaciones, proxyPedidos, proxyProductos, medidor.medirSolicitudes()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -103,13 +104,14 @@ func ejecutar() error {
 }
 
 // nuevoRouter arma las rutas públicas. Todo lo que empieza con /notificaciones va
-// al servicio de notificaciones tal cual llega (headers, cuerpo y respuesta), y
-// /pedidos y /capacidad van a pedidos.
+// al servicio de notificaciones tal cual llega (headers, cuerpo y respuesta);
+// /pedidos y /capacidad van a pedidos, y /productos, /categorias e /imagenes van
+// a productos. /internos no se enruta: es solo para llamadas entre servicios.
 //
 // shortcut: los headers X-Id-Usuario, X-Email-Usuario y X-Rol-Usuario pasan tal
 // cual los manda el cliente. Cuando exista la autenticación, el gateway los arma a
 // partir del token y descarta los del cliente.
-func nuevoRouter(notificaciones, pedidos http.Handler, extras ...gin.HandlerFunc) *gin.Engine {
+func nuevoRouter(notificaciones, pedidos, productos http.Handler, extras ...gin.HandlerFunc) *gin.Engine {
 	router := gin.New()
 	// otelgin va primero: abre el span de la solicitud y así el middleware de logs
 	// ya ve el trace_id.
@@ -122,6 +124,9 @@ func nuevoRouter(notificaciones, pedidos http.Handler, extras ...gin.HandlerFunc
 	router.Any("/notificaciones/*resto", gin.WrapH(notificaciones))
 	for _, ruta := range []string{"/pedidos", "/pedidos/*resto", "/capacidad", "/capacidad/*resto"} {
 		router.Any(ruta, gin.WrapH(pedidos))
+	}
+	for _, ruta := range []string{"/productos", "/productos/*resto", "/categorias", "/categorias/*resto", "/imagenes/*resto"} {
+		router.Any(ruta, gin.WrapH(productos))
 	}
 	return router
 }
