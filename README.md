@@ -17,7 +17,7 @@ Versión 0.2.0 (Entrega 2): `notificaciones` funcionando de punta a punta detrá
 | Componente | Estado |
 |---|---|
 | `notificaciones` | Implementado: `POST` y `GET /notificaciones` del contrato, idempotencia, clave de API por grupo, límite de uso, envío de mails en segundo plano con reintentos, MongoDB y SMTP |
-| `api-gateway` | Reenvía `/notificaciones*` a `notificaciones` y `/pedidos*` y `/capacidad*` a `pedidos`, con timeout de 3 s (`503 no_disponible` si no responde) |
+| `api-gateway` | Reenvía `/notificaciones*` a `notificaciones` y `/pedidos*` y `/capacidad*` a `pedidos`, con timeout de 3 s (`503 no_disponible` si no responde). Todavía sin autenticación de usuarios: la decisión está pendiente en [ADR-016](docs/adr/ADR-016-autenticacion.md) |
 | `pedidos` | Implementado: encargar (inmediato y programado) con reserva de cupo en una transacción, idempotencia, cancelar, avanzar estados, capacidad por día, inventario falso con disyuntor y reconfirmación, eventos a RabbitMQ por outbox. Necesita `productos` para crear pedidos |
 | `usuarios`, `productos` | Esqueletos que solo exponen `/health` |
 | Frontend | Pendiente |
@@ -54,7 +54,7 @@ Levanta los cuatro servicios, el api-gateway, MongoDB, Mailpit, el mock del cont
 
 | Qué | URL local |
 |---|---|
-| api-gateway, entrada del sistema (`/notificaciones`) | http://localhost:8080 |
+| api-gateway, entrada del sistema (`/notificaciones`, `/pedidos`, `/capacidad`) | http://localhost:8080 |
 | Grafana, tablero de métricas (sin usuario, solo lectura) | http://localhost:3000 |
 | Prometheus, métricas y alertas | http://localhost:9090 |
 | Jaeger, trazas | http://localhost:16686 |

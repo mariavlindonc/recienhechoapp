@@ -57,6 +57,13 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 
 ## Criterios de aceptación
 
+**C1. Registrarse e iniciar sesión** (propuestos el 26/10/2026; el equipo los confirma junto con [ADR-016](adr/ADR-016-autenticacion.md))
+- Dado un email ya registrado, cuando alguien se registra con ese email, entonces se rechaza el registro.
+- Dada una contraseña incorrecta, cuando el usuario intenta iniciar sesión, entonces no entra, y el mensaje no dice si el email existe.
+- Dado un usuario sin sesión, cuando intenta ver sus pedidos o encargar, entonces se le pide iniciar sesión.
+- Dado un comprador con sesión, cuando pide el pedido de otro comprador, entonces el sistema responde como si no existiera.
+- Dado un comprador con sesión, cuando intenta una operación del vendedor (por ejemplo, definir la capacidad), entonces se rechaza.
+
 **C3. Buscar productos**
 - Dado un catálogo con productos de varias categorías, cuando el comprador filtra por "tortas" y ordena por precio ascendente, entonces ve solo tortas, de la más barata a la más cara, de a 20 por página.
 - Dado que el vendedor cambia el precio de un producto, cuando pasa el retraso máximo tolerado (ver requisitos no funcionales), entonces la búsqueda muestra el precio nuevo.
