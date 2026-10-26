@@ -57,12 +57,3 @@ groups:
         annotations:
           resumen: El disyuntor del inventario está abierto
           descripcion: El proveedor de inventario no responde. Los pedidos nuevos quedan pendiente_confirmacion y se reconfirman cuando vuelva (ADR-010).
-
-      - alert: EventosSinPublicar
-        expr: sum(increase(pedidos_eventos_publicados_total{resultado="error"}[5m])) > 0
-        for: 5m
-        labels:
-          severidad: aviso
-        annotations:
-          resumen: Pedidos no puede publicar eventos en RabbitMQ
-          descripcion: Los eventos esperan en la bandeja de salida y los compradores no reciben los avisos. Revisar que RabbitMQ esté arriba.
