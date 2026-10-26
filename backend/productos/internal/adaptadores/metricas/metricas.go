@@ -23,10 +23,17 @@ var limitesDeDuracion = []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.3, 0.5
 
 // Metricas reúne los contadores del servicio en un registro propio.
 type Metricas struct {
-	registro    *prometheus.Registry
-	solicitudes *prometheus.CounterVec
-	duracion    *prometheus.HistogramVec
+	registro         *prometheus.Registry
+	solicitudes      *prometheus.CounterVec
+	duracion         *prometheus.HistogramVec
+	aciertos         *prometheus.CounterVec
+	fallos           *prometheus.CounterVec
+	erroresDeCache   *prometheus.CounterVec
+	indexados        *prometheus.CounterVec
+	antiguedadIndice prometheus.Gauge
 }
+
+var tiposDeCache = []string{"producto", "catalogo", "categorias"}
 
 // Nuevas crea las métricas, además de las del proceso y del runtime de Go.
 func Nuevas() *Metricas {
@@ -41,12 +48,65 @@ func Nuevas() *Metricas {
 			Help:    "Duración de las solicitudes HTTP, por método y ruta.",
 			Buckets: limitesDeDuracion,
 		}, []string{"metodo", "ruta"}),
+		aciertos: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cache_aciertos_total",
+			Help: "Lecturas que encontraron el dato en la caché, por tipo: producto, catalogo o categorias (ADR-009).",
+		}, []string{"tipo"}),
+		fallos: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cache_fallos_total",
+			Help: "Lecturas que no encontraron el dato en la caché y fueron a MySQL, por tipo.",
+		}, []string{"tipo"}),
+		erroresDeCache: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cache_errores_total",
+			Help: "Operaciones con Redis que fallaron o tardaron más de 50 ms; se siguió sin caché.",
+		}, []string{"operacion"}),
+		indexados: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "indice_sincronizaciones_total",
+			Help: "Vueltas del proceso que refleja los cambios en la búsqueda, por resultado: ok o error (ADR-008).",
+		}, []string{"resultado"}),
+		antiguedadIndice: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "indice_pendiente_antiguedad_segundos",
+			Help: "Hace cuánto espera el cambio más viejo sin reflejarse en la búsqueda (RNF1: menos de 10 s).",
+		}),
 	}
 	metricas.registro.MustRegister(
-		metricas.solicitudes, metricas.duracion,
+		metricas.solicitudes, metricas.duracion, metricas.aciertos, metricas.fallos, metricas.erroresDeCache,
+		metricas.indexados, metricas.antiguedadIndice,
 		collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
+	// Las series existen desde el arranque, así la tasa de aciertos se puede calcular aunque todavía no haya lecturas.
+	for _, tipo := range tiposDeCache {
+		metricas.aciertos.WithLabelValues(tipo)
+		metricas.fallos.WithLabelValues(tipo)
+	}
+	for _, resultado := range []string{"ok", "error"} {
+		metricas.indexados.WithLabelValues(resultado)
+	}
 	return metricas
+}
+
+// ContarLecturaDeCache suma un acierto o un fallo de la caché.
+func (metricas *Metricas) ContarLecturaDeCache(tipo string, acierto bool) {
+	if acierto {
+		metricas.aciertos.WithLabelValues(tipo).Inc()
+		return
+	}
+	metricas.fallos.WithLabelValues(tipo).Inc()
+}
+
+// ContarErrorDeCache suma una operación con Redis que falló.
+func (metricas *Metricas) ContarErrorDeCache(operacion string) {
+	metricas.erroresDeCache.WithLabelValues(operacion).Inc()
+}
+
+// ContarSincronizacion suma una vuelta del proceso del índice.
+func (metricas *Metricas) ContarSincronizacion(resultado string) {
+	metricas.indexados.WithLabelValues(resultado).Inc()
+}
+
+// MarcarAntiguedadDelIndice deja la antigüedad del cambio más viejo sin indexar.
+func (metricas *Metricas) MarcarAntiguedadDelIndice(segundos float64) {
+	metricas.antiguedadIndice.Set(segundos)
 }
 
 // Solicitudes es un middleware de Gin que cuenta y mide cada solicitud, con la
