@@ -23,6 +23,7 @@ import (
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/eventos"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/metricas"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/mongodb"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/rabbitmq"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/smtp"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/aplicacion"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/registro"
@@ -114,6 +115,11 @@ func ejecutar() error {
 
 	var procesos sync.WaitGroup
 	procesos.Add(2)
+	if configuracion.direccionRabbit != "" {
+		procesos.Go(func() { rabbitmq.Consumir(contexto, configuracion.direccionRabbit, servicio) })
+	} else {
+		slog.Info("sin RABBITMQ_URL: no se consumen los eventos de pedidos")
+	}
 	go func() {
 		defer procesos.Done()
 		enviarPendientes(contexto, servicio, configuracion.intervaloDeEnvio)

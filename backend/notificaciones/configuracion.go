@@ -15,6 +15,7 @@ type configuracion struct {
 	puerto           string
 	puertoMetricas   string
 	direccionMongo   string
+	direccionRabbit  string
 	baseMongo        string
 	clavesAPI        map[string]string
 	limitePorMinuto  int
@@ -56,10 +57,12 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 	}
 
 	leida := configuracion{
-		puerto:           conValorPorDefecto("PORT", "8084"),
-		puertoMetricas:   conValorPorDefecto("METRICAS_PORT", "9464"),
-		direccionMongo:   obligatoria("MONGO_URI"),
-		baseMongo:        conValorPorDefecto("MONGO_BASE", "notificaciones"),
+		puerto:         conValorPorDefecto("PORT", "8084"),
+		puertoMetricas: conValorPorDefecto("METRICAS_PORT", "9464"),
+		direccionMongo: obligatoria("MONGO_URI"),
+		baseMongo:      conValorPorDefecto("MONGO_BASE", "notificaciones"),
+		// Opcional: la capacidad publicada funciona sola, sin los eventos de pedidos.
+		direccionRabbit:  buscar("RABBITMQ_URL"),
 		limitePorMinuto:  entero("NOTIFICACIONES_LIMITE_POR_MINUTO", "60"),
 		intervaloDeEnvio: duracion("NOTIFICACIONES_INTERVALO_DE_ENVIO", "5s"),
 		smtp: smtp.Configuracion{
