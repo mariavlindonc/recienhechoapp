@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto. Lo redactó un agente de código el 26/10/2026 con las opciones; la decisión la toma el equipo (regla 7 de AGENTS.md).
+Propuesto el 26/10/2026 con las opciones; la decisión la toma el equipo (regla 7 de AGENTS.md).
 
 ## Contexto
 
@@ -33,7 +33,7 @@ Además de la opción, el equipo tiene que definir:
 | **B. JWT firmado con un par de claves (RS256 o EdDSA)** | Igual que A, pero `usuarios` firma con la clave privada y el gateway solo tiene la pública. | Si se filtra la configuración del gateway, no se pueden fabricar tokens. | Hay que generar y guardar un par de claves en el `.env`. Mismo problema de revocación y misma dependencia que A. |
 | **C. Sesión guardada en `usuarios`** | `usuarios` guarda la sesión y le da al cliente un identificador opaco, que el gateway le consulta a `usuarios` en cada solicitud. | Cerrar sesión o bloquear un usuario surte efecto al instante. No suma dependencias. | Una llamada más por solicitud, y si `usuarios` se cae nadie puede usar el sistema: pasa a ser un punto único de falla para todo, contra RNF4. |
 
-Recomendación del agente: **A**, con una vida del token de 1 hora. Es la más simple y el gateway no depende de que `usuarios` esté arriba; la revocación tardía se acota con la vida corta.
+Recomendación: **A**, con una vida del token de 1 hora. Es la más simple y el gateway no depende de que `usuarios` esté arriba; la revocación tardía se acota con la vida corta.
 
 ## Consecuencias
 

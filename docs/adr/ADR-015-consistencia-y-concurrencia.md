@@ -3,7 +3,7 @@
 ## Estado
 
 - **Aceptado** el uso de transacciones de MongoDB en `pedidos` (Agustín, 26/10/2026).
-- **Propuesto** por un agente de código, para que el equipo lo confirme en el PR: el control de versión de cada pedido, la bandeja de salida (outbox) y los valores de tiempo. Están marcados con *(propuesto)*.
+- **Propuesto**, para que el equipo lo confirme en el PR: el control de versión de cada pedido, la bandeja de salida (outbox) y los valores de tiempo. Están marcados con *(propuesto)*.
 
 ## Contexto
 
