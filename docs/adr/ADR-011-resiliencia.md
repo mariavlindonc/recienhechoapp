@@ -31,6 +31,7 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 | productos | Redis | Se lee de MySQL, más lento | Timeout de 50 ms y sin reintentos ([ADR-009](ADR-009-cache.md)); no frena el arranque |
 | productos | Meilisearch | `GET /productos/busqueda` responde `503 busqueda_no_disponible`; el catálogo por categoría sigue. Los cambios esperan en la bandeja y se aplican solos al volver | Outbox del índice ([ADR-008](ADR-008-busqueda.md)); 2 s por búsqueda; no frena el arranque |
 | productos | MySQL | `503 no_disponible`; `/health` informa la falla | Timeout de 2 s por operación (en el DSN); el servicio no arranca sin MySQL |
+| usuarios | MySQL | Registro, inicio de sesión y perfil responden `503 no_disponible`; `/health` informa la falla. Las sesiones abiertas siguen andando hasta que vence el token, porque el gateway no consulta a `usuarios` ([ADR-016](ADR-016-autenticacion.md)) | Timeout de 2 s por operación (en el DSN); el servicio no arranca sin MySQL |
 
 **Mecanismos:**
 
