@@ -24,7 +24,43 @@ services:
     container_name: recienhecho-usuarios
     environment:
       PORT: ${USUARIOS_PORT}
+      GIN_MODE: release
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      # Cada operación con MySQL se corta a los 2 s (ADR-011).
+      MYSQL_DSN: ${USUARIOS_MYSQL_USUARIO}:${USUARIOS_MYSQL_CLAVE}@tcp(mysql-usuarios:3306)/usuarios?timeout=2s&readTimeout=2s&writeTimeout=2s
+      # Firma los tokens de sesión; el api-gateway los verifica con el mismo (ADR-016).
+      JWT_SECRETO: ${JWT_SECRETO}
+      # Cuenta del vendedor: se crea al arrancar si no existe (ADR-016).
+      VENDEDOR_EMAIL: ${VENDEDOR_EMAIL}
+      VENDEDOR_CLAVE: ${VENDEDOR_CLAVE}
     # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
+    depends_on:
+      mysql-usuarios:
+        condition: service_healthy
+    networks: [interna]
+
+  # Base propia de usuarios (ADR-002). La clave de root es al azar: el servicio
+  # usa su propio usuario.
+  mysql-usuarios:
+    image: mysql:8.4.10
+    container_name: recienhecho-mysql-usuarios
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+      MYSQL_DATABASE: usuarios
+      MYSQL_USER: ${USUARIOS_MYSQL_USUARIO}
+      MYSQL_PASSWORD: ${USUARIOS_MYSQL_CLAVE}
+    volumes:
+      - mysql-usuarios-datos:/var/lib/mysql
+    ports:
+      # Solo desde esta compu (127.0.0.1), como las demás bases (ADR-006).
+      - "127.0.0.1:${USUARIOS_MYSQL_PORT}:3306"
+    # Por TCP: el servidor temporal que MySQL levanta para inicializarse no
+    # escucha en la red, así que no da un "listo" falso.
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --protocol=tcp -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     networks: [interna]
 
   productos:
@@ -290,6 +326,7 @@ volumes:
   mysql-productos-datos:
   meilisearch-datos:
   productos-imagenes:
+  mysql-usuarios-datos:
 
 networks:
   interna:
