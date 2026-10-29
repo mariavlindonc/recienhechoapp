@@ -94,10 +94,12 @@ func (balanceador *proxyBalanceado) responderFalla(escritor http.ResponseWriter,
 }
 
 func responderNoDisponible(escritor http.ResponseWriter) {
+	responderError(escritor, http.StatusServiceUnavailable, "no_disponible", "Servicio temporalmente no disponible.")
+}
+
+// responderError escribe el error con la forma del contrato: {codigo, mensaje}.
+func responderError(escritor http.ResponseWriter, estado int, codigo, mensaje string) {
 	escritor.Header().Set("Content-Type", "application/json; charset=utf-8")
-	escritor.WriteHeader(http.StatusServiceUnavailable)
-	json.NewEncoder(escritor).Encode(map[string]string{
-		"codigo":  "no_disponible",
-		"mensaje": "Servicio temporalmente no disponible.",
-	})
+	escritor.WriteHeader(estado)
+	json.NewEncoder(escritor).Encode(map[string]string{"codigo": codigo, "mensaje": mensaje})
 }

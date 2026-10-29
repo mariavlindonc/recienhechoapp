@@ -40,13 +40,18 @@ for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet 
 
 ## Infraestructura
 
-Cada dependencia que se agregue se lista acá con su uso, puerto y URL local. Las demás bases, la caché y el broker están propuestos en [ADR-002](docs/adr/ADR-002-persistencia.md) y [ADR-003](docs/adr/ADR-003-comunicacion-entre-servicios.md), pero todavía no están en el compose.
-
-Las herramientas de desarrollo (MongoDB, Mailpit, Jaeger, Prometheus, Grafana y el mock de Prism) publican su puerto solo en `127.0.0.1`: se usan desde la propia computadora y no quedan expuestas a la red local ([ADR-006](docs/adr/ADR-006-observabilidad.md)). Los servicios no publican puerto: se entra solo por el api-gateway, en `localhost:8080` ([ADR-001](docs/adr/ADR-001-limites-de-los-servicios.md), [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md)).
+Cada dependencia que se agregue se lista acá con su uso, puerto y URL local.
+Las herramientas de desarrollo (MongoDB, MySQL, Redis, Meilisearch, RabbitMQ, Mailpit, Jaeger, Prometheus, Grafana y el mock de Prism) publican su puerto solo en `127.0.0.1`: se usan desde la propia computadora y no quedan expuestas a la red local ([ADR-006](docs/adr/ADR-006-observabilidad.md)). Los servicios no publican puerto: se entra solo por el api-gateway, en `localhost:8080` ([ADR-001](docs/adr/ADR-001-limites-de-los-servicios.md), [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md)).
 
 | Dependencia | Uso | Puerto | URL local |
 |---|---|---|---|
 | MongoDB (`mongo:8`) | Base de `notificaciones` ([ADR-002](docs/adr/ADR-002-persistencia.md)) | `NOTIFICACIONES_MONGO_PORT` (27017) | `mongodb://localhost:27017` (usuario y clave en `.env`) |
+| MongoDB (`mongo:8`, replica set) | Base de `pedidos`, con transacciones ([ADR-015](docs/adr/ADR-015-consistencia-y-concurrencia.md)) | `PEDIDOS_MONGO_PORT` (27020) | `mongodb://localhost:27020/?directConnection=true` (usuario y clave en `.env`) |
+| MySQL (`mysql:8.4.10`) | Base de `productos`, con GORM ([ADR-002](docs/adr/ADR-002-persistencia.md)) | `PRODUCTOS_MYSQL_PORT` (3307) | `localhost:3307`, base `productos` (usuario y clave en `.env`) |
+| MySQL (`mysql:8.4.10`) | Base de `usuarios`, con GORM ([ADR-002](docs/adr/ADR-002-persistencia.md), [ADR-016](docs/adr/ADR-016-autenticacion.md)) | `USUARIOS_MYSQL_PORT` (3308) | `localhost:3308`, base `usuarios` (usuario y clave en `.env`) |
+| Redis (`redis:7.4.11`) | Caché del catálogo de `productos` ([ADR-009](docs/adr/ADR-009-cache.md)) | `PRODUCTOS_REDIS_PORT` (6379) | `redis://localhost:6379` |
+| Meilisearch (`getmeili/meilisearch:v1.54.3`) | Búsqueda de productos ([ADR-008](docs/adr/ADR-008-busqueda.md)) | `MEILI_PORT` (7700) | http://localhost:7700 (clave en `.env`, `MEILI_CLAVE`) |
+| RabbitMQ (`rabbitmq:4.3.5-management-alpine`) | Eventos de `pedidos` a `notificaciones` ([ADR-003](docs/adr/ADR-003-comunicacion-entre-servicios.md)) | `RABBITMQ_WEB_PORT` (15672, solo la web) | http://localhost:15672 (usuario y clave en `.env`) |
 | Mailpit (`axllent/mailpit`) | Buzón falso para desarrollo ([ADR-005](docs/adr/ADR-005-envio-de-email.md)) | `MAILPIT_SMTP_PORT` (1025) y `MAILPIT_WEB_PORT` (8025) | http://localhost:8025 |
 | Prometheus (`prom/prometheus:v3.15.0`) | Lee `/metrics` de los servicios (puerto interno 9464) y evalúa las alertas ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `PROMETHEUS_WEB_PORT` (9090) | http://localhost:9090 |
 | Grafana (`grafana/grafana:13.2.3`) | Tablero de métricas y acceso a las trazas ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `GRAFANA_WEB_PORT` (3000) | http://localhost:3000 (sin usuario, solo lectura; admin con `GRAFANA_ADMIN_CLAVE`) |

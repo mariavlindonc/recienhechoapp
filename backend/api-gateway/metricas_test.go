@@ -19,7 +19,7 @@ func TestSeCuentaCadaReenvioPorInstanciaYEstado(prueba *testing.T) {
 	servidorCaido.Close()
 	medidor := nuevasMetricas()
 	proxy := nuevoProxyBalanceado("notificaciones", []*url.URL{uno, caida}, time.Second, medidor.contarReenvio("notificaciones"))
-	router := nuevoRouter(proxy, medidor.medirSolicitudes())
+	router := nuevoRouter([]byte(secretoDePrueba), proxy, http.NotFoundHandler(), http.NotFoundHandler(), http.NotFoundHandler(), medidor.medirSolicitudes())
 
 	for range 4 {
 		router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/notificaciones/x", nil))

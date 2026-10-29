@@ -16,7 +16,7 @@ dist/
 go.work
 go.work.sum
 
-# Dependencias de Node y Bun
+# Dependencias del frontend (Bun)
 node_modules/
 
 # IDEs y sistema operativo

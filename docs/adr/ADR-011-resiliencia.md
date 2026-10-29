@@ -3,11 +3,12 @@
 ## Estado
 
 - **Aceptado** para `api-gateway` y `notificaciones`, Entrega 2.
-- **Propuesto** para `pedidos` y `productos`: se acepta al implementar cada servicio.
+- **Aceptado** para `productos` con el plan que aprobó Agustín el 26/10/2026; implementado el mismo día.
+- **Propuesto** para `pedidos`: se acepta al revisar su PR.
 
 Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementado en la issue #33: el adaptador `internal/adaptadores/disyuntor` envuelve al remitente SMTP. Con el circuito abierto devuelve `ErrCorreoNoDisponible`, y la aplicación posterga la notificación sin gastar un intento. El disyuntor vive del lado de los adaptadores, como el de `pedidos` en ADR-010, porque la aplicación no importa tecnologías ([ADR-007](ADR-007-arquitectura-interna.md)). Falta la métrica y la alerta del estado del circuito (parte de Athina en la #33).
 
-Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB, límite de uso y envío en segundo plano con reintentos. El api-gateway ya tiene el proxy con timeout de 3 s y `503 no_disponible`. Falta el balanceo con chequeos de `/vivo` ([ADR-012](ADR-012-balanceo-de-carga.md)).
+Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB y envío en segundo plano con reintentos. El api-gateway ya tiene el proxy con timeout de 3 s, `503 no_disponible` y el límite de uso. Falta el balanceo con chequeos de `/vivo` ([ADR-012](ADR-012-balanceo-de-carga.md)).
 
 ## Contexto
 
@@ -25,11 +26,12 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 | notificaciones | Servidor de correo (SMTP) | El `POST` sigue respondiendo `202`; las notificaciones quedan `pendiente` | Envío en segundo plano con timeout de conexión de 2 s y de 10 s por envío; tras el primer intento, 3 reintentos con espera exponencial (30, 60 y 120 s) y después `fallida`; si el servidor rechaza el mensaje o el destinatario de forma definitiva (5xx), pasa a `fallida` sin reintentos. Circuit breaker (`sony/gobreaker`): con 5 fallos transitorios seguidos deja de enviar 30 s, sin gastar los reintentos de las pendientes; una pendiente que no se pudo enviar en 24 h pasa a `fallida`. Alerta sobre el estado del circuito ([ADR-006](ADR-006-observabilidad.md)) |
 | pedidos | productos | No se crea el pedido: "no pudimos tomar el pedido, probá en un rato" | Timeout de 1 s y 2 reintentos ([ADR-003](ADR-003-comunicacion-entre-servicios.md)) |
 | pedidos | inventario (otro grupo) | El pedido queda `pendiente_confirmacion` | Timeout de 1,5 s y circuit breaker ([ADR-010](ADR-010-consumo-de-inventario.md)) |
-| pedidos | RabbitMQ | El cambio de estado se guarda igual; el evento sale cuando vuelve | Outbox (D4) |
+| pedidos | RabbitMQ | El cambio de estado se guarda igual; el evento sale cuando vuelve | Bandeja de salida (outbox, [ADR-015](ADR-015-consistencia-y-concurrencia.md)) |
 | pedidos | MongoDB | No se toman pedidos (`503`) | Timeout; no hay degradación posible sin perder la garantía de cupo |
-| productos | Redis | Se lee de MySQL, más lento | Timeout de 50 ms ([ADR-009](ADR-009-cache.md)) |
-| productos | Meilisearch | Sin búsqueda de texto; queda el listado por categoría | Outbox del índice ([ADR-008](ADR-008-busqueda.md)) |
-| productos | MySQL | `503` | Timeout |
+| productos | Redis | Se lee de MySQL, más lento | Timeout de 50 ms y sin reintentos ([ADR-009](ADR-009-cache.md)); no frena el arranque |
+| productos | Meilisearch | `GET /productos/busqueda` responde `503 busqueda_no_disponible`; el catálogo por categoría sigue. Los cambios esperan en la bandeja y se aplican solos al volver | Outbox del índice ([ADR-008](ADR-008-busqueda.md)); 2 s por búsqueda; no frena el arranque |
+| productos | MySQL | `503 no_disponible`; `/health` informa la falla | Timeout de 2 s por operación (en el DSN); el servicio no arranca sin MySQL |
+| usuarios | MySQL | Registro, inicio de sesión y perfil responden `503 no_disponible`; `/health` informa la falla. Las sesiones abiertas siguen andando hasta que vence el token, porque el gateway no consulta a `usuarios` ([ADR-016](ADR-016-autenticacion.md)) | Timeout de 2 s por operación (en el DSN); el servicio no arranca sin MySQL |
 
 **Mecanismos:**
 
@@ -40,7 +42,7 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
   - `notificaciones` → servidor de correo. Mientras el circuito está abierto, el proceso de envío no toma notificaciones: las pendientes esperan sin gastar sus reintentos, porque no fallaron ellas sino el servidor. Un rechazo definitivo (5xx al destinatario) no cuenta como falla: el servidor respondió.
 - **Trabajo en segundo plano** donde el usuario no necesita esperar: envío de mails, reconfirmación de pedidos, actualización del índice.
 - **Health checks:** cada servicio expone `/health`, que verifica sus dependencias obligatorias (por ejemplo, `notificaciones` hace ping a MongoDB). Para sacar instancias caídas del balanceo, el gateway usa otro chequeo más liviano, `/vivo`, que no mira dependencias ([ADR-012](ADR-012-balanceo-de-carga.md)).
-- **Límite de uso** en `notificaciones`: 60 solicitudes por minuto por grupo (todas las claves de un grupo suman), para que un grupo consumidor no tumbe el servicio. El contador está en la memoria de cada instancia ([ADR-012](ADR-012-balanceo-de-carga.md)).
+- **Límite de uso** de `notificaciones`: 60 solicitudes por minuto por grupo (todas las claves de un grupo suman), para que un grupo consumidor no tumbe el servicio. Lo aplica el api-gateway, que ve todas las solicitudes antes de repartirlas, así que es exacto con varias instancias ([ADR-012](ADR-012-balanceo-de-carga.md)).
 
 **Por qué un circuit breaker también para el servidor de correo (revisión del 22/10/2026).** En un ensayo con Mailpit apagado y ~95 notificaciones pendientes:
 

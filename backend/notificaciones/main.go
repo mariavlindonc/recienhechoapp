@@ -23,6 +23,7 @@ import (
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/eventos"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/metricas"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/mongodb"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/rabbitmq"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/smtp"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/aplicacion"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/registro"
@@ -97,9 +98,7 @@ func ejecutar() error {
 	// en traceparent) y así el middleware de logs ya ve el trace_id.
 	router.Use(otelgin.Middleware(nombreServicio, otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registro.Solicitudes(slog.Default()), medidor.Solicitudes())
 	api.Registrar(router, servicio, api.Configuracion{
-		ClavesAPI:       configuracion.clavesAPI,
-		LimitePorMinuto: configuracion.limitePorMinuto,
-		Ahora:           ahora,
+		ClavesAPI: configuracion.clavesAPI,
 		ChequearSalud: func(contextoSalud context.Context) error {
 			contextoSalud, cancelarSalud := context.WithTimeout(contextoSalud, esperaSalud)
 			defer cancelarSalud()
@@ -114,6 +113,7 @@ func ejecutar() error {
 
 	var procesos sync.WaitGroup
 	procesos.Add(2)
+	procesos.Go(func() { rabbitmq.Consumir(contexto, configuracion.direccionRabbit, servicio) })
 	go func() {
 		defer procesos.Done()
 		enviarPendientes(contexto, servicio, configuracion.intervaloDeEnvio)

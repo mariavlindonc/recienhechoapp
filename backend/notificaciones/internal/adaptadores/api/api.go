@@ -10,10 +10,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"mime"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -41,24 +39,20 @@ type CasosDeUso interface {
 type Configuracion struct {
 	// ClavesAPI asocia cada clave con el grupo dueño (clave -> grupo).
 	ClavesAPI map[string]string
-	// LimitePorMinuto es cuántas solicitudes por minuto puede hacer cada grupo.
-	LimitePorMinuto int
-	// Ahora es el reloj; en los tests se reemplaza.
-	Ahora func() time.Time
 	// ChequearSalud dice si las dependencias responden (por ejemplo, MongoDB).
 	ChequearSalud func(contexto context.Context) error
 }
 
 // Registrar agrega las rutas al router. Los middlewares generales (logs, trazas)
-// se agregan en main antes de llamar a Registrar.
+// se agregan en main antes de llamar a Registrar. El límite de solicitudes por
+// minuto lo aplica el api-gateway (ADR-004, ADR-012).
 func Registrar(router gin.IRouter, casos CasosDeUso, configuracion Configuracion) {
 	manejador := &manejador{casos: casos}
-	limite := nuevoLimitador(configuracion.LimitePorMinuto, time.Minute, configuracion.Ahora)
 
 	router.GET("/health", salud(configuracion.ChequearSalud))
 	router.GET("/vivo", vivo)
 
-	notificaciones := router.Group("/notificaciones", autenticar(configuracion.ClavesAPI), limitar(limite))
+	notificaciones := router.Group("/notificaciones", autenticar(configuracion.ClavesAPI))
 	notificaciones.POST("", manejador.crear)
 	notificaciones.GET("/:id", manejador.obtener)
 }
@@ -216,21 +210,6 @@ func autenticar(clavesAPI map[string]string) gin.HandlerFunc {
 			return
 		}
 		contexto.Set(claveGrupo, grupo)
-		contexto.Next()
-	}
-}
-
-// limitar aplica el límite de solicitudes por minuto de cada grupo.
-func limitar(limite *limitador) gin.HandlerFunc {
-	return func(contexto *gin.Context) {
-		permitido, espera := limite.permitir(contexto.GetString(claveGrupo))
-		if !permitido {
-			segundos := int(math.Ceil(espera.Seconds()))
-			contexto.Header("Retry-After", strconv.Itoa(max(segundos, 1)))
-			responderError(contexto, http.StatusTooManyRequests, "limite_superado",
-				fmt.Sprintf("Límite de %d solicitudes por minuto superado.", limite.maximo))
-			return
-		}
 		contexto.Next()
 	}
 }

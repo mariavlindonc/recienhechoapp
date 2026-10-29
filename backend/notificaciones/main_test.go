@@ -10,6 +10,7 @@ import (
 func variablesMinimas() map[string]string {
 	return map[string]string{
 		"MONGO_URI":                 "mongodb://localhost:27017",
+		"RABBITMQ_URL":              "amqp://localhost:5672",
 		"SMTP_HOST":                 "mailpit",
 		"SMTP_REMITENTE":            "Recién hecho <avisos@recienhecho.test>",
 		"NOTIFICACIONES_CLAVES_API": "grupo-a:clave-a",
@@ -24,7 +25,7 @@ func TestLeerConfiguracionUsaValoresPorDefecto(prueba *testing.T) {
 	if err != nil {
 		prueba.Fatalf("error inesperado: %v", err)
 	}
-	if leida.puerto != "8084" || leida.puertoMetricas != "9464" || leida.baseMongo != "notificaciones" || leida.limitePorMinuto != 60 {
+	if leida.puerto != "8084" || leida.puertoMetricas != "9464" || leida.baseMongo != "notificaciones" {
 		prueba.Errorf("valores por defecto incorrectos: %+v", leida)
 	}
 	if leida.intervaloDeEnvio != 5*time.Second || leida.smtp.Puerto != 587 || leida.smtp.TiempoMaximo != 10*time.Second || leida.smtp.TiempoMaximoConexion != 2*time.Second {
@@ -43,7 +44,7 @@ func TestLeerConfiguracionInformaTodosLosProblemas(prueba *testing.T) {
 	if err == nil {
 		prueba.Fatal("se esperaba un error")
 	}
-	for _, problema := range []string{"MONGO_URI", "SMTP_HOST", "SMTP_REMITENTE", "NOTIFICACIONES_CLAVES_API", "SMTP_PUERTO", "NOTIFICACIONES_INTERVALO_DE_ENVIO"} {
+	for _, problema := range []string{"MONGO_URI", "RABBITMQ_URL", "SMTP_HOST", "SMTP_REMITENTE", "NOTIFICACIONES_CLAVES_API", "SMTP_PUERTO", "NOTIFICACIONES_INTERVALO_DE_ENVIO"} {
 		if !strings.Contains(err.Error(), problema) {
 			prueba.Errorf("el error no menciona %s: %v", problema, err)
 		}

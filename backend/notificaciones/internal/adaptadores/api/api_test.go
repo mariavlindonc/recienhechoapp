@@ -55,22 +55,19 @@ func notificacionPendiente() dominio.Notificacion {
 	}
 }
 
-// entorno arma el router con un reloj que se puede adelantar.
+// entorno arma el router con casos de uso falsos.
 type entorno struct {
 	router *gin.Engine
 	casos  *casosFalsos
-	reloj  time.Time
 	salud  error
 }
 
-func nuevoEntorno(limitePorMinuto int) *entorno {
+func nuevoEntorno() *entorno {
 	gin.SetMode(gin.TestMode)
-	actual := &entorno{router: gin.New(), casos: &casosFalsos{notificacion: notificacionPendiente()}, reloj: momento}
+	actual := &entorno{router: gin.New(), casos: &casosFalsos{notificacion: notificacionPendiente()}}
 	api.Registrar(actual.router, actual.casos, api.Configuracion{
-		ClavesAPI:       map[string]string{"clave-a": "grupo-a", "clave-b": "grupo-b"},
-		LimitePorMinuto: limitePorMinuto,
-		Ahora:           func() time.Time { return actual.reloj },
-		ChequearSalud:   func(context.Context) error { return actual.salud },
+		ClavesAPI:     map[string]string{"clave-a": "grupo-a", "clave-b": "grupo-b"},
+		ChequearSalud: func(context.Context) error { return actual.salud },
 	})
 	return actual
 }
@@ -116,7 +113,7 @@ func comprobarError(prueba *testing.T, respuesta *httptest.ResponseRecorder, est
 }
 
 func TestCrearRespondeAceptadaSegunElContrato(prueba *testing.T) {
-	actual := nuevoEntorno(60)
+	actual := nuevoEntorno()
 
 	respuesta := actual.pedir(http.MethodPost, "/notificaciones", cuerpoValido, encabezadosPOST())
 
@@ -151,7 +148,7 @@ func TestCrearRespondeAceptadaSegunElContrato(prueba *testing.T) {
 }
 
 func TestAutenticacion(prueba *testing.T) {
-	actual := nuevoEntorno(60)
+	actual := nuevoEntorno()
 	for nombre, clave := range map[string]string{"sin clave": "", "clave desconocida": "otra"} {
 		prueba.Run(nombre, func(prueba *testing.T) {
 			encabezados := encabezadosPOST()
@@ -177,7 +174,7 @@ func TestCrearRechazaPedidosQueNoRespetanElContrato(prueba *testing.T) {
 
 	for nombre, caso := range casos {
 		prueba.Run(nombre, func(prueba *testing.T) {
-			actual := nuevoEntorno(60)
+			actual := nuevoEntorno()
 			encabezados := encabezadosPOST()
 			caso.cambiar(encabezados)
 
@@ -199,7 +196,7 @@ func TestErroresDeLaAplicacionSeTraducenAlContrato(prueba *testing.T) {
 
 	for _, caso := range casos {
 		prueba.Run(caso.codigo, func(prueba *testing.T) {
-			actual := nuevoEntorno(60)
+			actual := nuevoEntorno()
 			actual.casos.err = caso.err
 
 			comprobarError(prueba, actual.pedir(http.MethodPost, "/notificaciones", cuerpoValido, encabezadosPOST()), caso.estado, caso.codigo)
@@ -208,7 +205,7 @@ func TestErroresDeLaAplicacionSeTraducenAlContrato(prueba *testing.T) {
 }
 
 func TestErrorInternoNoSeLeMuestraAlConsumidor(prueba *testing.T) {
-	actual := nuevoEntorno(60)
+	actual := nuevoEntorno()
 	actual.casos.err = errors.New("mongodb://usuario:clave@mongo:27017 no responde")
 
 	respuesta := actual.pedir(http.MethodPost, "/notificaciones", cuerpoValido, encabezadosPOST())
@@ -219,7 +216,7 @@ func TestErrorInternoNoSeLeMuestraAlConsumidor(prueba *testing.T) {
 }
 
 func TestObtener(prueba *testing.T) {
-	actual := nuevoEntorno(60)
+	actual := nuevoEntorno()
 	enviada := notificacionPendiente()
 	enviada.Estado = dominio.EstadoEnviada
 	enviada.EnviadaEn = momento.Add(4 * time.Second)
@@ -242,7 +239,7 @@ func TestObtener(prueba *testing.T) {
 }
 
 func TestObtenerFallidaMuestraElMotivo(prueba *testing.T) {
-	actual := nuevoEntorno(60)
+	actual := nuevoEntorno()
 	fallida := notificacionPendiente()
 	fallida.Estado = dominio.EstadoFallida
 	fallida.Motivo = "El servidor de correo rechazó el destinatario."
@@ -255,33 +252,8 @@ func TestObtenerFallidaMuestraElMotivo(prueba *testing.T) {
 	}
 }
 
-func TestLimiteDeSolicitudesPorMinuto(prueba *testing.T) {
-	actual := nuevoEntorno(2)
-	get := func(clave string) *httptest.ResponseRecorder {
-		return actual.pedir(http.MethodGet, "/notificaciones/9f1c2a7e-3b4d-4e8a-9c21-5d6f7a8b9c0d", "", map[string]string{"X-API-Key": clave})
-	}
-
-	get("clave-a")
-	get("clave-a")
-	actual.reloj = actual.reloj.Add(20 * time.Second)
-	respuesta := get("clave-a")
-
-	comprobarError(prueba, respuesta, http.StatusTooManyRequests, "limite_superado")
-	if espera := respuesta.Header().Get("Retry-After"); espera != "40" {
-		prueba.Errorf("Retry-After = %q, se esperaba 40", espera)
-	}
-	if otroGrupo := get("clave-b"); otroGrupo.Code != http.StatusOK {
-		prueba.Errorf("el límite es por grupo: el grupo b recibió %d", otroGrupo.Code)
-	}
-
-	actual.reloj = actual.reloj.Add(40 * time.Second)
-	if respuesta := get("clave-a"); respuesta.Code != http.StatusOK {
-		prueba.Errorf("pasado el minuto se puede volver a pedir; estado = %d", respuesta.Code)
-	}
-}
-
 func TestSalud(prueba *testing.T) {
-	actual := nuevoEntorno(60)
+	actual := nuevoEntorno()
 	if respuesta := actual.pedir(http.MethodGet, "/health", "", nil); respuesta.Code != http.StatusOK {
 		prueba.Errorf("estado = %d, se esperaba 200", respuesta.Code)
 	}
@@ -293,10 +265,10 @@ func TestSalud(prueba *testing.T) {
 }
 
 func TestVivoNoDependeDeMongoNiDeLaClave(prueba *testing.T) {
-	actual := nuevoEntorno(1)
+	actual := nuevoEntorno()
 	actual.salud = errors.New("mongo caído")
 
-	// Sin X-API-Key y más veces que el límite de uso (1 por minuto en este entorno).
+	// Sin X-API-Key y varias veces seguidas.
 	for intento := range 3 {
 		if respuesta := actual.pedir(http.MethodGet, "/vivo", "", nil); respuesta.Code != http.StatusOK {
 			prueba.Fatalf("intento %d: estado = %d, se esperaba 200 aunque MongoDB esté caído", intento+1, respuesta.Code)

@@ -13,7 +13,7 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 [ADR-001](ADR-001-limites-de-los-servicios.md) anticipaba a `pedidos` como candidato. Al validar los límites en la Entrega 2 cambiamos a `notificaciones`:
 
 - Es el servicio que ya está implementado y probado con tests, y el único que va a recibir tráfico de otro grupo, que no controlamos.
-- Ya es apto para varias instancias: no guarda estado en memoria que importe (salvo el límite de uso, ver Consecuencias) y el proceso de envío toma cada notificación con un `findOneAndUpdate` atómico que la aparta por 2 minutos, así que dos instancias no envían el mismo mail. La excepción es que venza el apartado antes de guardar el resultado: el mail puede salir dos veces ([limitaciones conocidas](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
+- Ya es apto para varias instancias: no guarda estado en memoria que importe (el límite de uso está en el gateway, ver Consecuencias) y el proceso de envío toma cada notificación con un `findOneAndUpdate` atómico que la aparta por 2 minutos, así que dos instancias no envían el mismo mail. La excepción es que venza el apartado antes de guardar el resultado: el mail puede salir dos veces ([limitaciones conocidas](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
 - `pedidos` todavía es un esqueleto que solo expone `/health`. Se puede balancear también cuando esté implementado, con el mismo mecanismo.
 
 ## Decisión
@@ -65,6 +65,6 @@ Lo que más protege no es la estrategia sino la verificación de disponibilidad:
 ## Consecuencias
 
 - Cambia lo que anticipaba [ADR-001](ADR-001-limites-de-los-servicios.md) (se actualiza ahí).
-- El límite de 60 solicitudes por minuto vive en memoria de cada instancia: con 2 instancias un grupo podría llegar a 120. Se acepta por ahora; si hace falta un límite exacto, el control de tráfico pasa al api-gateway, que ve todas las solicitudes antes de repartirlas (como ya dice [ARCHITECTURE](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
+- El límite de 60 solicitudes por minuto vivía en memoria de cada instancia: con 2 instancias un grupo podía llegar a 120. Pasó al api-gateway, que ve todas las solicitudes antes de repartirlas, así que ahora es exacto. Si algún día hay más de una instancia del gateway, vuelve el mismo problema.
 - Para la caída controlada alcanza con `docker compose stop notificaciones-1`: el tráfico pasa a la otra instancia y se ve en el tablero.
 - Si se suman instancias, solo cambia `NOTIFICACIONES_URLS`.

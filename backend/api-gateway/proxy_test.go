@@ -39,7 +39,7 @@ func instanciaFalsa(prueba *testing.T, nombre string, demora time.Duration) (*ur
 
 func routerDePrueba(instancias []*url.URL, tiempoMaximo time.Duration) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return nuevoRouter(nuevoProxyBalanceado("notificaciones", instancias, tiempoMaximo, nil))
+	return nuevoRouter([]byte(secretoDePrueba), nuevoProxyBalanceado("notificaciones", instancias, tiempoMaximo, nil), http.NotFoundHandler(), http.NotFoundHandler(), http.NotFoundHandler())
 }
 
 func pedir(router http.Handler, metodo, ruta, cuerpo string) *httptest.ResponseRecorder {
@@ -147,5 +147,46 @@ func comprobarNoDisponible(prueba *testing.T, respuesta *httptest.ResponseRecord
 	var cuerpo map[string]string
 	if err := json.Unmarshal(respuesta.Body.Bytes(), &cuerpo); err != nil || cuerpo["codigo"] != "no_disponible" || cuerpo["mensaje"] == "" {
 		prueba.Errorf("se esperaba {codigo: no_disponible, mensaje: ...}, llegó %s", respuesta.Body.String())
+	}
+}
+
+func TestCadaRutaVaASuServicio(prueba *testing.T) {
+	notificaciones, recibidasNotificaciones := instanciaFalsa(prueba, "notificaciones", 0)
+	pedidos, recibidasPedidos := instanciaFalsa(prueba, "pedidos", 0)
+	productos, recibidasProductos := instanciaFalsa(prueba, "productos", 0)
+	usuarios, recibidasUsuarios := instanciaFalsa(prueba, "usuarios", 0)
+	gin.SetMode(gin.TestMode)
+	router := nuevoRouter(
+		[]byte(secretoDePrueba),
+		nuevoProxyBalanceado("notificaciones", []*url.URL{notificaciones}, time.Second, nil),
+		nuevoProxyBalanceado("pedidos", []*url.URL{pedidos}, time.Second, nil),
+		nuevoProxyBalanceado("productos", []*url.URL{productos}, time.Second, nil),
+		nuevoProxyBalanceado("usuarios", []*url.URL{usuarios}, time.Second, nil),
+	)
+
+	destinos := map[string]string{
+		"/pedidos": "pedidos", "/pedidos/id-1/cancelacion": "pedidos", "/capacidad": "pedidos", "/capacidad/2026-10-30": "pedidos",
+		"/productos": "productos", "/productos/busqueda?q=torta": "productos", "/productos/id-1/receta": "productos",
+		"/categorias": "productos", "/categorias/id-1": "productos", "/imagenes/foto.png": "productos",
+		"/usuarios": "usuarios", "/usuarios/sesion": "usuarios", "/usuarios/yo": "usuarios",
+	}
+	for ruta, destino := range destinos {
+		if respuesta := pedir(router, http.MethodGet, ruta, ""); respuesta.Header().Get("X-Instancia") != destino {
+			prueba.Errorf("%s fue a %q, se esperaba %s", ruta, respuesta.Header().Get("X-Instancia"), destino)
+		}
+	}
+	if len(*recibidasPedidos) != 4 || len(*recibidasProductos) != 6 || len(*recibidasUsuarios) != 3 || len(*recibidasNotificaciones) != 0 {
+		prueba.Errorf("pedidos recibió %d, productos %d, usuarios %d y notificaciones %d", len(*recibidasPedidos), len(*recibidasProductos), len(*recibidasUsuarios), len(*recibidasNotificaciones))
+	}
+}
+
+// La ruta interna de productos es para pedidos, dentro del compose: desde afuera no existe.
+func TestLaRutaInternaNoSeEnruta(prueba *testing.T) {
+	productos, recibidas := instanciaFalsa(prueba, "productos", 0)
+	gin.SetMode(gin.TestMode)
+	router := nuevoRouter([]byte(secretoDePrueba), http.NotFoundHandler(), http.NotFoundHandler(), nuevoProxyBalanceado("productos", []*url.URL{productos}, time.Second, nil), http.NotFoundHandler())
+
+	if respuesta := pedir(router, http.MethodGet, "/internos/productos/id-1", ""); respuesta.Code != http.StatusNotFound || len(*recibidas) != 0 {
+		prueba.Errorf("estado %d, productos recibió %d", respuesta.Code, len(*recibidas))
 	}
 }

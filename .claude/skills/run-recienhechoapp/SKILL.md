@@ -1,9 +1,9 @@
 ---
 name: run-recienhechoapp
-description: Levantar, correr, probar y manejar Recién hecho (servicio de notificaciones con MongoDB y Mailpit). Usar cuando pidan arrancar o correr la app, probar el contrato de notificaciones con curl, ver el mail en Mailpit, simular la caída del servidor de correo, correr los tests o el test de integración contra MongoDB.
+description: Levantar, correr, probar y manejar Recién hecho (notificaciones con MongoDB y Mailpit; productos con MySQL, Redis y Meilisearch; el compose completo). Usar cuando pidan arrancar o correr la app, probar el contrato de notificaciones o el catálogo con curl, ver el mail en Mailpit, simular caídas, correr los tests o los tests de integración contra MongoDB, MySQL, Redis o Meilisearch.
 ---
 
-El único servicio con lógica es `notificaciones` (los demás y el api-gateway solo exponen `/health`). Se maneja por HTTP con `.claude/skills/run-recienhechoapp/smoke.sh`: levanta MongoDB y Mailpit en Docker, compila y arranca el servicio en la máquina y recorre el contrato con `curl`.
+Los cinco servicios tienen lógica; `usuarios` firma los JWT y el api-gateway los verifica (ADR-016). `notificaciones` se maneja solo con `.claude/skills/run-recienhechoapp/smoke.sh`: levanta MongoDB y Mailpit en Docker, compila y arranca el servicio en la máquina y recorre el contrato con `curl`. Para `productos` y el flujo completo, ver la sección "Productos y el compose completo".
 
 Todas las rutas son relativas a la raíz del repo. Los comandos son para Git Bash (Windows) o Linux.
 
@@ -53,6 +53,41 @@ Integración contra el MongoDB que levanta `arrancar` (sin `MONGO_URI_TEST` los 
 (cd backend/notificaciones && MONGO_URI_TEST=mongodb://localhost:27018 go test -count=1 ./internal/adaptadores/mongodb/...)
 ```
 
+## Productos y el compose completo
+
+Primero dejar WSL despierto en segundo plano, si no Docker se apaga entre comando y comando y se lleva los contenedores:
+
+```bash
+wsl -e sleep 3600   # en segundo plano (run_in_background)
+```
+
+Tests de integración de `productos`, cada uno contra su base (se saltean sin la variable):
+
+```bash
+MSYS_NO_PATHCONV=1 wsl -e docker run -d --name mysql-prueba-productos -p 127.0.0.1:3307:3306 -e MYSQL_ROOT_PASSWORD=prueba -e MYSQL_DATABASE=productos_test mysql:8.4.10
+MSYS_NO_PATHCONV=1 wsl -e docker run -d --name redis-prueba-productos -p 127.0.0.1:6380:6379 redis:7.4.11
+MSYS_NO_PATHCONV=1 wsl -e docker run -d --name meili-prueba-productos -p 127.0.0.1:7701:7700 -e MEILI_MASTER_KEY=clave-de-prueba-de-16 getmeili/meilisearch:v1.54.3
+# esperar a MySQL por TCP (ver trampas) y después:
+(cd backend/productos && MYSQL_DSN_TEST="root:prueba@tcp(127.0.0.1:3307)/productos_test" REDIS_URL_TEST=redis://127.0.0.1:6380/0 MEILI_URL_TEST=http://127.0.0.1:7701 MEILI_CLAVE_TEST=clave-de-prueba-de-16 go test -race -count=1 ./...)
+```
+
+Compose completo: escribir un script y correrlo entero con `MSYS_NO_PATHCONV=1 wsl -e bash script.sh`. Si el `.env` del usuario no tiene todas las variables, no tocarlo: armar uno temporal con su `.env` más lo que falte de `.env.example` y pasarlo con `docker compose --env-file`. Pasos útiles, por el gateway (`localhost:8080`):
+
+```bash
+# El gateway borra los X-*-Usuario del cliente y los arma con el token (ADR-016).
+TOKEN=$(curl -s -X POST localhost:8080/usuarios/sesion -H 'Content-Type: application/json' \
+  -d '{"email":"vendedor@recienhecho.test","clave":"vendedor-desarrollo"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
+V=(-H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json')
+curl -s "${V[@]}" -X POST localhost:8080/categorias -d '{"nombre":"Tortas"}'
+curl -s "${V[@]}" -X POST localhost:8080/productos -d '{"nombre":"Torta de limón","categoriaId":"<id>","precioCentavos":850000,"anticipacionMinimaDias":2,"disponible":true}'
+curl -s -H "Authorization: Bearer $TOKEN" -F "imagen=@foto.png" localhost:8080/productos/<id>/imagen
+curl -s "localhost:8080/productos/busqueda?q=limon&categoria=Tortas&disponible=true&orden=precio_asc"   # a los ~3 s
+docker compose exec -T productos wget -qO- localhost:9464/metrics | grep cache_   # aciertos y fallos
+docker compose exec -T productos /servicio reindexar
+```
+
+Caídas para probar: `docker compose stop meilisearch` (búsqueda en 503, catálogo sigue, los cambios se aplican al volver) y `docker compose stop redis-productos` (el catálogo lee de MySQL).
+
 ## Trampas
 
 - **`docker compose up --build -d` también levanta notificaciones** (con `cp .env.example .env` antes), con Mongo, Mailpit y las claves de desarrollo del `.env.example`. `smoke.sh` corre el binario directo para no depender de Docker en el build y para tener dos grupos de claves.
@@ -66,3 +101,6 @@ Integración contra el MongoDB que levanta `arrancar` (sin `MONGO_URI_TEST` los 
 - **No hay `jq` en Git Bash**: el script saca `id` y `estado` del JSON con `sed`.
 - **`smoke.sh` se baja siempre en LF** por el `.gitattributes` de esta carpeta. Con `core.autocrlf=true` llegaba con CRLF: Git Bash lo tolera, pero bash en Linux o WSL no.
 - **`kill` desde Git Bash sí cierra el `.exe` de Windows.** Después de `detener`, `/health` deja de responder y `tasklist` no lo muestra.
+- **MySQL arranca dos veces.** La imagen levanta un servidor temporal para inicializarse y después se reinicia. Un `select 1` por socket le pega al temporal y da un "listo" falso: esperar con `mysqladmin ping -h127.0.0.1 --protocol=tcp`, porque el temporal no escucha en la red.
+- **La clave maestra de Meilisearch tiene que tener al menos 16 caracteres.**
+- **Los puertos de prueba de `productos` (3307, 6380, 7701) chocan con el compose** (`mysql-productos` también usa 3307). Borrar los contenedores de prueba antes de levantar el compose.
