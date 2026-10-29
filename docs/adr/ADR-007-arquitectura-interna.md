@@ -5,9 +5,9 @@
 - **Aceptado** para `notificaciones` (hexagonal) y `api-gateway`, Entrega 2.
 - **Aceptado** para `pedidos` (hexagonal), implementado el 26/10/2026.
 - **Aceptado** para `productos` (hexagonal) por Agustín el 26/10/2026, implementado el mismo día.
-- **Propuesto** para `usuarios` (capas): se acepta al implementarlo.
+- **Aceptado** para `usuarios` (capas) por Agustín el 28/10/2026.
 
-Implementación: `notificaciones`, `pedidos` y `productos` (26/10/2026) ya tienen esta estructura. `usuarios` todavía solo expone `/health`.
+Implementación: `notificaciones`, `pedidos` y `productos` (26/10/2026) ya tienen esta estructura, y `usuarios` (capas) desde el 28/10/2026.
 
 ## Contexto
 

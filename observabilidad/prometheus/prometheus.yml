@@ -12,6 +12,10 @@ scrape_configs:
     static_configs:
       - targets: ["api-gateway:9464"]
 
+  - job_name: usuarios
+    static_configs:
+      - targets: ["usuarios:9464"]
+
   - job_name: notificaciones
     static_configs:
       - targets: ["notificaciones:9464"]

@@ -57,7 +57,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 
 ## Criterios de aceptación
 
-**C1. Registrarse e iniciar sesión** (propuestos el 26/10/2026; el equipo los confirma junto con [ADR-016](adr/ADR-016-autenticacion.md))
+**C1. Registrarse e iniciar sesión** (confirmados el 28/10/2026 con [ADR-016](adr/ADR-016-autenticacion.md))
 - Dado un email ya registrado, cuando alguien se registra con ese email, entonces se rechaza el registro.
 - Dada una contraseña incorrecta, cuando el usuario intenta iniciar sesión, entonces no entra, y el mensaje no dice si el email existe.
 - Dado un usuario sin sesión, cuando intenta ver sus pedidos o encargar, entonces se le pide iniciar sesión.
