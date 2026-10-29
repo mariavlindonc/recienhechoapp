@@ -23,11 +23,8 @@ import (
 
 const largoMaximoCuerpoHTTP = 16 << 10
 
-// Headers con la identidad del usuario.
-//
-// shortcut: los manda el cliente y nadie los verifica. Cuando exista la
-// autenticación, los pone el api-gateway a partir del token y descarta los que
-// mande el cliente; hasta entonces cualquiera puede hacerse pasar por otro.
+// Headers con la identidad del usuario. Los pone el api-gateway a partir del
+// token y descarta los que mande el cliente (ADR-016).
 const (
 	headerIDUsuario    = "X-Id-Usuario"
 	headerEmailUsuario = "X-Email-Usuario"

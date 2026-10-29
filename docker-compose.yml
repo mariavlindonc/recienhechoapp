@@ -12,11 +12,14 @@ services:
       NOTIFICACIONES_URLS: http://notificaciones:${NOTIFICACIONES_PORT}
       PEDIDOS_URLS: http://pedidos:${PEDIDOS_PORT}
       PRODUCTOS_URLS: http://productos:${PRODUCTOS_PORT}
+      USUARIOS_URLS: http://usuarios:${USUARIOS_PORT}
+      # Verifica los tokens que firma usuarios (ADR-016).
+      JWT_SECRETO: ${JWT_SECRETO}
       # Destino de las trazas (ADR-006). Si Jaeger no está, el gateway funciona igual.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
-    depends_on: [notificaciones, pedidos, productos]
+    depends_on: [notificaciones, pedidos, productos, usuarios]
     networks: [interna]
 
   usuarios:

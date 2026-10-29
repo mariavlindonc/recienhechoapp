@@ -29,11 +29,8 @@ const (
 	largoMaximoSubida = dominio.MaximoBytesImagen + 64<<10
 )
 
-// Headers con la identidad del usuario.
-//
-// shortcut: los manda el cliente y nadie los verifica, igual que en pedidos.
-// Cuando exista la autenticación (ADR-016), los pone el api-gateway a partir del
-// token y descarta los que mande el cliente.
+// Headers con la identidad del usuario. Los pone el api-gateway a partir del
+// token y descarta los que mande el cliente (ADR-016).
 const (
 	headerIDUsuario  = "X-Id-Usuario"
 	headerRolUsuario = "X-Rol-Usuario"

@@ -25,10 +25,8 @@ const (
 	largoMaximoCuerpoHTTP = 16 << 10
 )
 
-// headerIDUsuario lo pone el api-gateway con el id del token (ADR-016).
-//
-// shortcut: hasta que el gateway verifique el token, lo manda el cliente y nadie
-// lo verifica, igual que en pedidos y productos.
+// headerIDUsuario lo pone el api-gateway con el id del token y descarta el que
+// mande el cliente (ADR-016).
 const headerIDUsuario = "X-Id-Usuario"
 
 // Servicio es lo que esta capa necesita de la de abajo. Lo cumple

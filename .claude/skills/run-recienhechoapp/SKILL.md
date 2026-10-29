@@ -3,7 +3,7 @@ name: run-recienhechoapp
 description: Levantar, correr, probar y manejar Recién hecho (notificaciones con MongoDB y Mailpit; productos con MySQL, Redis y Meilisearch; el compose completo). Usar cuando pidan arrancar o correr la app, probar el contrato de notificaciones o el catálogo con curl, ver el mail en Mailpit, simular caídas, correr los tests o los tests de integración contra MongoDB, MySQL, Redis o Meilisearch.
 ---
 
-`notificaciones`, `pedidos` y `productos` tienen lógica; `usuarios` solo expone `/health`. `notificaciones` se maneja solo con `.claude/skills/run-recienhechoapp/smoke.sh`: levanta MongoDB y Mailpit en Docker, compila y arranca el servicio en la máquina y recorre el contrato con `curl`. Para `productos` y el flujo completo, ver la sección "Productos y el compose completo".
+Los cinco servicios tienen lógica; `usuarios` firma los JWT y el api-gateway los verifica (ADR-016). `notificaciones` se maneja solo con `.claude/skills/run-recienhechoapp/smoke.sh`: levanta MongoDB y Mailpit en Docker, compila y arranca el servicio en la máquina y recorre el contrato con `curl`. Para `productos` y el flujo completo, ver la sección "Productos y el compose completo".
 
 Todas las rutas son relativas a la raíz del repo. Los comandos son para Git Bash (Windows) o Linux.
 
@@ -74,10 +74,13 @@ MSYS_NO_PATHCONV=1 wsl -e docker run -d --name meili-prueba-productos -p 127.0.0
 Compose completo: escribir un script y correrlo entero con `MSYS_NO_PATHCONV=1 wsl -e bash script.sh`. Si el `.env` del usuario no tiene todas las variables, no tocarlo: armar uno temporal con su `.env` más lo que falte de `.env.example` y pasarlo con `docker compose --env-file`. Pasos útiles, por el gateway (`localhost:8080`):
 
 ```bash
-V=(-H 'X-Id-Usuario: v1' -H 'X-Rol-Usuario: vendedor' -H 'Content-Type: application/json')
+# El gateway borra los X-*-Usuario del cliente y los arma con el token (ADR-016).
+TOKEN=$(curl -s -X POST localhost:8080/usuarios/sesion -H 'Content-Type: application/json' \
+  -d '{"email":"vendedor@recienhecho.test","clave":"vendedor-desarrollo"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
+V=(-H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json')
 curl -s "${V[@]}" -X POST localhost:8080/categorias -d '{"nombre":"Tortas"}'
 curl -s "${V[@]}" -X POST localhost:8080/productos -d '{"nombre":"Torta de limón","categoriaId":"<id>","precioCentavos":850000,"anticipacionMinimaDias":2,"disponible":true}'
-curl -s -H 'X-Id-Usuario: v1' -H 'X-Rol-Usuario: vendedor' -F "imagen=@foto.png" localhost:8080/productos/<id>/imagen
+curl -s -H "Authorization: Bearer $TOKEN" -F "imagen=@foto.png" localhost:8080/productos/<id>/imagen
 curl -s "localhost:8080/productos/busqueda?q=limon&categoria=Tortas&disponible=true&orden=precio_asc"   # a los ~3 s
 docker compose exec -T productos wget -qO- localhost:9464/metrics | grep cache_   # aciertos y fallos
 docker compose exec -T productos /servicio reindexar

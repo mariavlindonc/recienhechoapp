@@ -60,9 +60,10 @@ func ejecutar() error {
 	proxyNotificaciones := nuevoProxyBalanceado("notificaciones", configuracion.instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
 	proxyPedidos := nuevoProxyBalanceado("pedidos", configuracion.instanciasPedidos, tiempoMaximoServicios, medidor.contarReenvio("pedidos"))
 	proxyProductos := nuevoProxyBalanceado("productos", configuracion.instanciasProductos, tiempoMaximoServicios, medidor.contarReenvio("productos"))
+	proxyUsuarios := nuevoProxyBalanceado("usuarios", configuracion.instanciasUsuarios, tiempoMaximoServicios, medidor.contarReenvio("usuarios"))
 	servidor := &http.Server{
 		Addr:              ":" + configuracion.puerto,
-		Handler:           nuevoRouter(proxyNotificaciones, proxyPedidos, proxyProductos, medidor.medirSolicitudes()),
+		Handler:           nuevoRouter(configuracion.secretoJWT, proxyNotificaciones, proxyPedidos, proxyProductos, proxyUsuarios, medidor.medirSolicitudes()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -105,18 +106,18 @@ func ejecutar() error {
 
 // nuevoRouter arma las rutas públicas. Todo lo que empieza con /notificaciones va
 // al servicio de notificaciones tal cual llega (headers, cuerpo y respuesta);
-// /pedidos y /capacidad van a pedidos, y /productos, /categorias e /imagenes van
-// a productos. /internos no se enruta: es solo para llamadas entre servicios.
-//
-// shortcut: los headers X-Id-Usuario, X-Email-Usuario y X-Rol-Usuario pasan tal
-// cual los manda el cliente. Cuando exista la autenticación, el gateway los arma a
-// partir del token y descarta los del cliente.
-func nuevoRouter(notificaciones, pedidos, productos http.Handler, extras ...gin.HandlerFunc) *gin.Engine {
+// /pedidos y /capacidad van a pedidos, /productos, /categorias e /imagenes van
+// a productos, y /usuarios va a usuarios. /internos no se enruta: es solo para
+// llamadas entre servicios. Los headers de identidad salen del token, nunca del
+// cliente (ADR-016).
+func nuevoRouter(secretoJWT []byte, notificaciones, pedidos, productos, usuarios http.Handler, extras ...gin.HandlerFunc) *gin.Engine {
 	router := gin.New()
 	// otelgin va primero: abre el span de la solicitud y así el middleware de logs
 	// ya ve el trace_id.
 	router.Use(otelgin.Middleware(nombreServicio, otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registrarSolicitudes(slog.Default()))
 	router.Use(extras...)
+	// Después de las métricas, para que los 401 también se cuenten.
+	router.Use(autenticar(secretoJWT))
 	router.GET("/health", func(contexto *gin.Context) {
 		contexto.JSON(http.StatusOK, gin.H{"status": "ok", "service": nombreServicio})
 	})
@@ -128,6 +129,8 @@ func nuevoRouter(notificaciones, pedidos, productos http.Handler, extras ...gin.
 	for _, ruta := range []string{"/productos", "/productos/*resto", "/categorias", "/categorias/*resto", "/imagenes/*resto"} {
 		router.Any(ruta, gin.WrapH(productos))
 	}
+	router.Any("/usuarios", gin.WrapH(usuarios))
+	router.Any("/usuarios/*resto", gin.WrapH(usuarios))
 	return router
 }
 
