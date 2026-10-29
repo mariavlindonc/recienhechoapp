@@ -18,7 +18,6 @@ type configuracion struct {
 	direccionRabbit  string
 	baseMongo        string
 	clavesAPI        map[string]string
-	limitePorMinuto  int
 	intervaloDeEnvio time.Duration
 	smtp             smtp.Configuracion
 }
@@ -62,7 +61,6 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 		direccionMongo:   obligatoria("MONGO_URI"),
 		baseMongo:        conValorPorDefecto("MONGO_BASE", "notificaciones"),
 		direccionRabbit:  obligatoria("RABBITMQ_URL"),
-		limitePorMinuto:  entero("NOTIFICACIONES_LIMITE_POR_MINUTO", "60"),
 		intervaloDeEnvio: duracion("NOTIFICACIONES_INTERVALO_DE_ENVIO", "5s"),
 		smtp: smtp.Configuracion{
 			Host:                 obligatoria("SMTP_HOST"),

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -17,6 +18,10 @@ type configuracion struct {
 	instanciasUsuarios       []*url.URL
 	// secretoJWT es el mismo con el que usuarios firma los tokens (ADR-016).
 	secretoJWT []byte
+	// clavesAPI asocia cada clave de notificaciones con su grupo (clave -> grupo),
+	// para contar el límite por grupo (ADR-004).
+	clavesAPI       map[string]string
+	limitePorMinuto int
 }
 
 // largoMinimoSecreto es el mínimo de JWT_SECRETO, igual que en usuarios (ADR-016).
@@ -44,6 +49,18 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 	leida := configuracion{
 		puerto:         conValorPorDefecto("PORT", "8080"),
 		puertoMetricas: conValorPorDefecto("METRICAS_PORT", "9464"),
+	}
+	limite, err := strconv.Atoi(conValorPorDefecto("NOTIFICACIONES_LIMITE_POR_MINUTO", "60"))
+	if err != nil || limite <= 0 {
+		problemas = append(problemas, errors.New("NOTIFICACIONES_LIMITE_POR_MINUTO tiene que ser un entero positivo"))
+	}
+	leida.limitePorMinuto = limite
+	if texto := obligatoria("NOTIFICACIONES_CLAVES_API"); texto != "" {
+		claves, err := parsearClavesAPI(texto)
+		if err != nil {
+			problemas = append(problemas, fmt.Errorf("NOTIFICACIONES_CLAVES_API: %w", err))
+		}
+		leida.clavesAPI = claves
 	}
 	if texto := obligatoria("NOTIFICACIONES_URLS"); texto != "" {
 		instancias, err := parsearInstancias(texto)
@@ -105,4 +122,30 @@ func parsearInstancias(texto string) ([]*url.URL, error) {
 		return nil, fmt.Errorf("no hay ninguna instancia configurada")
 	}
 	return instancias, nil
+}
+
+// parsearClavesAPI lee NOTIFICACIONES_CLAVES_API, con el formato
+// "grupo-a:clave1,grupo-b:clave2", y devuelve el mapa clave -> grupo. Copiado de
+// notificaciones: las dos lecturas tienen que coincidir.
+func parsearClavesAPI(texto string) (map[string]string, error) {
+	claves := map[string]string{}
+	for _, par := range strings.Split(texto, ",") {
+		par = strings.TrimSpace(par)
+		if par == "" {
+			continue
+		}
+		grupo, clave, tieneSeparador := strings.Cut(par, ":")
+		grupo, clave = strings.TrimSpace(grupo), strings.TrimSpace(clave)
+		if !tieneSeparador || grupo == "" || clave == "" {
+			return nil, fmt.Errorf("claves de API: %q no tiene el formato grupo:clave", par)
+		}
+		if _, repetida := claves[clave]; repetida {
+			return nil, fmt.Errorf("claves de API: la clave del grupo %q está repetida", grupo)
+		}
+		claves[clave] = grupo
+	}
+	if len(claves) == 0 {
+		return nil, errors.New("claves de API: no hay ninguna configurada")
+	}
+	return claves, nil
 }
