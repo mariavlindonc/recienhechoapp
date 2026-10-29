@@ -35,7 +35,7 @@ export default function Capacidad() {
             <span>{dia}: {valores.reservados} reservados de {valores.capacidad}</span>
             {/* La barra se llena con una transición al guardar una capacidad nueva. */}
             <span className="cupo" aria-hidden="true">
-              <span className="cupo-lleno" style={{ display: 'block', transform: `scaleX(${valores.capacidad ? Math.min(valores.reservados / valores.capacidad, 1) : 0})` }} />
+              <span className="cupo-lleno" style={{ transform: `scaleX(${valores.capacidad ? Math.min(valores.reservados / valores.capacidad, 1) : 0})` }} />
             </span>
           </li>
         ))}

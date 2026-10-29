@@ -158,6 +158,7 @@ md-button:active {
 }
 
 .cupo-lleno {
+  display: block;
   height: 100%;
   background: var(--md-sys-color-tertiary);
   transform-origin: left;

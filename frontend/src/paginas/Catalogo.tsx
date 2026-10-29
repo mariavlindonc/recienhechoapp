@@ -19,14 +19,20 @@ export default function Catalogo() {
   }, [])
 
   useEffect(() => {
+    // Cada letra dispara una búsqueda; si vuelven desordenadas, solo vale la última.
+    let vigente = true
     setCargando(true)
     buscarProductos(filtros)
       .then(encontrados => {
+        if (!vigente) return
         setError('')
         setResultado(encontrados)
       })
-      .catch(errorBusqueda => setError(mensajeDe(errorBusqueda)))
-      .finally(() => setCargando(false))
+      .catch(errorBusqueda => vigente && setError(mensajeDe(errorBusqueda)))
+      .finally(() => vigente && setCargando(false))
+    return () => {
+      vigente = false
+    }
   }, [filtros])
 
   const cambiar = (cambios: Partial<Filtros>) => setFiltros(anteriores => ({ ...anteriores, ...cambios, pagina: 1 }))
@@ -62,8 +68,9 @@ export default function Catalogo() {
       {error && <p className="aviso-error">{error}</p>}
       {!cargando && resultado.items.length === 0 && !error && <p>No hay productos con esos filtros.</p>}
 
-      {cargando ? (
-        <div className="rejilla" aria-busy="true" aria-label="Cargando el catálogo">
+      {/* Esqueletos solo en la primera carga: al buscar quedan las tarjetas anteriores hasta que llega el resultado. */}
+      {cargando && resultado.items.length === 0 ? (
+        <div className="rejilla" role="status" aria-busy="true" aria-label="Cargando el catálogo">
           {Array.from({ length: 6 }, (_sinUso, posicion) => <div key={posicion} className="esqueleto" />)}
         </div>
       ) : (
