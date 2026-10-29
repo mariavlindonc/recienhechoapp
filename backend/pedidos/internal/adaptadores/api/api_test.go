@@ -51,6 +51,18 @@ func (casos *casosFalsos) DefinirCapacidad(_ context.Context, fecha string, capa
 func (casos *casosFalsos) ListarCapacidad(context.Context, string, string) ([]dominio.Dia, error) {
 	return []dominio.Dia{{Fecha: "2026-10-30", Capacidad: 10, Reservados: 6}}, nil
 }
+func (casos *casosFalsos) SolicitarEspecial(context.Context, dominio.Comprador, string, string, string) (dominio.Pedido, error) {
+	return dominio.Pedido{ID: "especial-1", Tipo: dominio.TipoEspecial, Estado: dominio.EstadoSolicitado}, nil
+}
+func (casos *casosFalsos) ListarEspecialesAbiertos(context.Context) ([]dominio.Pedido, error) {
+	return nil, nil
+}
+func (casos *casosFalsos) CotizarEspecial(context.Context, string, int64) (dominio.Pedido, error) {
+	return dominio.Pedido{}, nil
+}
+func (casos *casosFalsos) ResponderEspecial(context.Context, string, string, bool) (dominio.Pedido, error) {
+	return dominio.Pedido{}, dominio.ErrCotizacionVencida
+}
 
 var comprador = map[string]string{"X-Id-Usuario": "comprador-1", "X-Email-Usuario": "cliente@ejemplo.com", "X-Rol-Usuario": "comprador"}
 var vendedor = map[string]string{"X-Id-Usuario": "vendedor-1", "X-Rol-Usuario": "vendedor"}
@@ -163,6 +175,38 @@ func TestCancelarEnProduccion(prueba *testing.T) {
 
 	if respuesta.Code != http.StatusConflict || datos["codigo"] != "transicion_invalida" {
 		prueba.Errorf("estado %d, datos %v", respuesta.Code, datos)
+	}
+}
+
+func TestRutasDeEspeciales(prueba *testing.T) {
+	casos := map[string]struct {
+		metodo, ruta, cuerpo string
+		headers              map[string]string
+		estado               int
+	}{
+		"solicitar sin clave":       {http.MethodPost, "/pedidos/especiales", `{"descripcion":"Torta","fecha":"2026-11-05"}`, comprador, http.StatusBadRequest},
+		"el vendedor no solicita":   {http.MethodPost, "/pedidos/especiales", `{}`, vendedor, http.StatusForbidden},
+		"el comprador no cotiza":    {http.MethodPut, "/pedidos/especiales/e1/cotizacion", `{"precioCentavos":100}`, comprador, http.StatusForbidden},
+		"el comprador no lista":     {http.MethodGet, "/pedidos/especiales", "", comprador, http.StatusForbidden},
+		"el vendedor lista":         {http.MethodGet, "/pedidos/especiales", "", vendedor, http.StatusOK},
+		"cotización vencida es 409": {http.MethodPost, "/pedidos/especiales/e1/aceptacion", "", comprador, http.StatusConflict},
+	}
+	for nombre, caso := range casos {
+		prueba.Run(nombre, func(prueba *testing.T) {
+			if respuesta, datos := pedir(&casosFalsos{}, caso.metodo, caso.ruta, caso.cuerpo, caso.headers); respuesta.Code != caso.estado {
+				prueba.Errorf("estado %d, se esperaba %d (%v)", respuesta.Code, caso.estado, datos)
+			}
+		})
+	}
+	headers := map[string]string{"Idempotency-Key": "clave-1"}
+	for nombre, valor := range comprador {
+		headers[nombre] = valor
+	}
+	if respuesta, datos := pedir(&casosFalsos{}, http.MethodPost, "/pedidos/especiales", `{"descripcion":"Torta","fecha":"2026-11-05"}`, headers); respuesta.Code != http.StatusCreated || datos["estado"] != "solicitado" {
+		prueba.Errorf("solicitar: estado %d, datos %v", respuesta.Code, datos)
+	}
+	if _, datos := pedir(&casosFalsos{}, http.MethodPost, "/pedidos/especiales/e1/aceptacion", "", comprador); datos["codigo"] != "cotizacion_vencida" {
+		prueba.Errorf("se esperaba cotizacion_vencida, llegó %v", datos)
 	}
 }
 

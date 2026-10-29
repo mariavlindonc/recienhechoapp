@@ -21,6 +21,9 @@ type Cambio struct {
 	Evento *dominio.Evento
 	// LiberarCupo devuelve al día el cupo del pedido (al cancelar, R7).
 	LiberarCupo bool
+	// ReservarCupo ocupa el cupo del día (al aceptar un especial). Si no alcanza,
+	// no se guarda nada y devuelve dominio.ErrSinCupo.
+	ReservarCupo bool
 }
 
 // Repositorio guarda los pedidos, los cupos por día y la bandeja de salida de
@@ -48,6 +51,9 @@ type Repositorio interface {
 
 	// ListarDelDia devuelve los pedidos que se producen en esa fecha (calendario, VE4).
 	ListarDelDia(contexto context.Context, fecha string) ([]dominio.Pedido, error)
+
+	// ListarEspecialesAbiertos devuelve los especiales solicitados o cotizados (VE5).
+	ListarEspecialesAbiertos(contexto context.Context) ([]dominio.Pedido, error)
 
 	// TomarParaConfirmar aparta hasta `hasta` un pedido pendiente de confirmación
 	// cuya próxima confirmación ya llegó, para que otra instancia no lo tome.

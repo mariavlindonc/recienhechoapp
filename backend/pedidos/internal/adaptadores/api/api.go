@@ -46,6 +46,10 @@ type CasosDeUso interface {
 	CambiarEstado(contexto context.Context, id string, nuevo dominio.Estado) (dominio.Pedido, error)
 	DefinirCapacidad(contexto context.Context, fecha string, capacidad int) (dominio.Dia, error)
 	ListarCapacidad(contexto context.Context, desde, hasta string) ([]dominio.Dia, error)
+	SolicitarEspecial(contexto context.Context, comprador dominio.Comprador, clave, descripcion, fecha string) (dominio.Pedido, error)
+	ListarEspecialesAbiertos(contexto context.Context) ([]dominio.Pedido, error)
+	CotizarEspecial(contexto context.Context, id string, precioCentavos int64) (dominio.Pedido, error)
+	ResponderEspecial(contexto context.Context, idComprador, id string, acepta bool) (dominio.Pedido, error)
 }
 
 // Registrar agrega las rutas al router. chequearSalud dice si las dependencias
@@ -62,6 +66,13 @@ func Registrar(router gin.IRouter, casos CasosDeUso, chequearSalud func(contexto
 	pedidos.GET("/:id", manejador.obtener)
 	pedidos.POST("/:id/cancelacion", soloRol(rolComprador), manejador.cancelar)
 	pedidos.PUT("/:id/estado", soloRol(rolVendedor), manejador.cambiarEstado)
+
+	// Pedidos especiales (C6, VE5, R8; ADR-017). El comprador ve los suyos en GET /pedidos.
+	pedidos.POST("/especiales", soloRol(rolComprador), manejador.solicitarEspecial)
+	pedidos.GET("/especiales", soloRol(rolVendedor), manejador.listarEspeciales)
+	pedidos.PUT("/especiales/:id/cotizacion", soloRol(rolVendedor), manejador.cotizarEspecial)
+	pedidos.POST("/especiales/:id/aceptacion", soloRol(rolComprador), manejador.responderEspecial(true))
+	pedidos.POST("/especiales/:id/rechazo", soloRol(rolComprador), manejador.responderEspecial(false))
 
 	capacidad := router.Group("/capacidad", identificar, soloRol(rolVendedor))
 	capacidad.GET("", manejador.listarCapacidad)
@@ -319,6 +330,8 @@ func responderErrorDeDominio(contexto *gin.Context, err error) {
 		responderError(contexto, http.StatusConflict, "transicion_invalida", "El pedido no puede pasar a ese estado. "+err.Error()+".")
 	case errors.Is(err, dominio.ErrConflictoIdempotencia):
 		responderError(contexto, http.StatusConflict, "conflicto_idempotencia", "La clave de idempotencia ya se usó con otro pedido.")
+	case errors.Is(err, dominio.ErrCotizacionVencida):
+		responderError(contexto, http.StatusConflict, "cotizacion_vencida", "La cotización venció: pasaron más de 48 horas.")
 	case errors.Is(err, dominio.ErrModificadoAlMismoTiempo):
 		responderError(contexto, http.StatusConflict, "modificado_al_mismo_tiempo", "El pedido cambió mientras se lo modificaba. Volvé a cargarlo.")
 	case errors.Is(err, puertos.ErrProductoNoDisponible):

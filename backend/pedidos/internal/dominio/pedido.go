@@ -223,6 +223,8 @@ type Pedido struct {
 	Tipo              Tipo
 	Estado            Estado
 	MotivoCancelacion string
+	// CotizadoEn es cuándo se cotizó un pedido especial; desde ahí corren las 48 h (R8).
+	CotizadoEn time.Time
 
 	ClaveIdempotencia string
 	Huella            string

@@ -65,6 +65,20 @@ func TestEventoRepetidoCreaUnaSolaNotificacion(prueba *testing.T) {
 	}
 }
 
+// C6: cuando el vendedor cotiza, el comprador recibe un mail con el precio.
+func TestLaCotizacionLlevaElPrecio(prueba *testing.T) {
+	casos := &casosFalsos{}
+	cotizado := strings.NewReplacer(`"estadoNuevo":"listo"`, `"estadoNuevo":"cotizado","totalCentavos":9000050`).Replace(eventoListo)
+
+	if err := Procesar(context.Background(), casos, []byte(cotizado)); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+
+	if solicitud := casos.creadas["evento-1"]; solicitud.Asunto != "Cotizamos tu pedido especial" || !strings.Contains(solicitud.Cuerpo, "$90000,50") || !strings.Contains(solicitud.Cuerpo, "48 horas") {
+		prueba.Errorf("solicitud = %+v", solicitud)
+	}
+}
+
 func TestMensajesNoProcesablesVanAFallidos(prueba *testing.T) {
 	casos := []struct {
 		nombre string

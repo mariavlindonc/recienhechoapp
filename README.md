@@ -123,3 +123,4 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 | D10 Resiliencia | [ADR-011](docs/adr/ADR-011-resiliencia.md) | Aceptado para gateway y notificaciones; propuesto para el resto |
 | D12 Balanceo de carga | [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md) | Aceptado (se implementa para la presentación) |
 | D13 Capacidad y costos | [ADR-013](docs/adr/ADR-013-capacidad-y-costos.md) | Propuesto |
+| Pedidos especiales (C6, VE5, R8) | [ADR-017](docs/adr/ADR-017-pedidos-especiales.md) | Propuesto; implementado, a confirmar por el equipo |

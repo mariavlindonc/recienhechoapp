@@ -34,6 +34,7 @@ type documentoPedido struct {
 	Tipo                 string             `bson:"tipo"`
 	Estado               string             `bson:"estado"`
 	MotivoCancelacion    string             `bson:"motivoCancelacion,omitempty"`
+	CotizadoEn           time.Time          `bson:"cotizadoEn,omitempty"`
 	ClaveIdempotencia    string             `bson:"claveIdempotencia"`
 	Huella               string             `bson:"huella"`
 	IntentosConfirmacion int                `bson:"intentosConfirmacion"`
@@ -127,6 +128,7 @@ func aDocumento(pedido dominio.Pedido, version int) documentoPedido {
 		Tipo:                 string(pedido.Tipo),
 		Estado:               string(pedido.Estado),
 		MotivoCancelacion:    pedido.MotivoCancelacion,
+		CotizadoEn:           pedido.CotizadoEn,
 		ClaveIdempotencia:    pedido.ClaveIdempotencia,
 		Huella:               pedido.Huella,
 		IntentosConfirmacion: pedido.IntentosConfirmacion,
@@ -161,6 +163,7 @@ func aDominio(documento documentoPedido) dominio.Pedido {
 		Tipo:                 dominio.Tipo(documento.Tipo),
 		Estado:               dominio.Estado(documento.Estado),
 		MotivoCancelacion:    documento.MotivoCancelacion,
+		CotizadoEn:           documento.CotizadoEn.UTC(),
 		ClaveIdempotencia:    documento.ClaveIdempotencia,
 		Huella:               documento.Huella,
 		IntentosConfirmacion: documento.IntentosConfirmacion,
