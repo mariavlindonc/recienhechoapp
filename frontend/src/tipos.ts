@@ -1,6 +1,5 @@
-// Formas de los datos que viajan entre las pantallas y api.ts. Cuando existan los servicios,
-// estos tipos son el contrato que hay que respetar (docs/SPEC.md y docs/ARCHITECTURE.md).
-// Los montos son centavos enteros (R5).
+// Formas de los datos que viajan entre las pantallas y api.ts. api.ts traduce a estos tipos lo
+// que responden los servicios. Los montos son centavos enteros (R5).
 
 export type EstadoPedido =
   | 'pendiente_confirmacion'
@@ -21,12 +20,18 @@ export type Producto = {
   aptoCeliacos: boolean
   disponible: boolean
   descripcion: string
+  imagenUrl: string
 }
 
 export type DatosProducto = Partial<Producto> &
   Pick<Producto, 'nombre' | 'categoria' | 'precioCentavos' | 'anticipacionDias' | 'aptoCeliacos' | 'descripcion'>
 
-export type Ingrediente = { ingrediente: string; cantidad: string }
+export type Categoria = { id: string; nombre: string }
+
+// Cantidad entera por unidad de producto, en las unidades que acepta productos.
+export type Ingrediente = { ingrediente: string; cantidad: number; unidad: 'g' | 'ml' | 'unidad' }
+
+export type Usuario = { id: string; email: string; nombre: string; rol: 'comprador' | 'vendedor' }
 
 export type DiaCapacidad = { capacidad: number; reservados: number }
 
@@ -56,8 +61,8 @@ export type FiltrosCatalogo = {
   categoria?: string
   precioMaximo?: number
   aptoCeliacos?: boolean
-  orden?: 'nombre' | 'precio-asc' | 'precio-desc'
+  orden?: 'relevancia' | 'precio-asc' | 'precio-desc'
   pagina?: number
 }
 
-export type PaginaDeProductos = { items: Producto[]; total: number; pagina: number }
+export type PaginaDeProductos = { items: Producto[]; total: number; pagina: number; porPagina: number }

@@ -23,7 +23,7 @@ export default function Productos() {
   const [formulario, setFormulario] = useState(VACIO)
   const [error, setError] = useState('')
 
-  const cargar = () => listarProductosVendedor().then(setProductos)
+  const cargar = () => listarProductosVendedor().then(setProductos).catch(errorListar => setError(mensajeDe(errorListar)))
   useEffect(() => {
     cargar()
   }, [])
@@ -32,26 +32,28 @@ export default function Productos() {
 
   const guardar = (evento: FormEvent) => {
     evento.preventDefault()
-    try {
-      guardarProducto({
-        id: formulario.id,
-        nombre: formulario.nombre,
-        categoria: formulario.categoria,
-        descripcion: formulario.descripcion,
-        anticipacionDias: Number(formulario.anticipacionDias),
-        aptoCeliacos: formulario.aptoCeliacos,
-        // Pesos a centavos enteros (R5).
-        precioCentavos: Math.round(Number(formulario.precio) * 100),
-      }).then(() => {
+    guardarProducto({
+      id: formulario.id,
+      nombre: formulario.nombre,
+      categoria: formulario.categoria,
+      descripcion: formulario.descripcion,
+      anticipacionDias: Number(formulario.anticipacionDias),
+      aptoCeliacos: formulario.aptoCeliacos,
+      // Pesos a centavos enteros (R5).
+      precioCentavos: Math.round(Number(formulario.precio) * 100),
+    })
+      .then(() => {
         setFormulario(VACIO)
+        setError('')
         cargar()
       })
-    } catch (errorGuardar) {
-      setError(mensajeDe(errorGuardar))
-    }
+      .catch(errorGuardar => setError(mensajeDe(errorGuardar)))
   }
 
-  const borrar = (id: string) => borrarProducto(id).then(cargar)
+  const borrar = (id: string) =>
+    borrarProducto(id)
+      .then(cargar)
+      .catch(errorBorrar => setError(mensajeDe(errorBorrar)))
 
   return (
     <section>

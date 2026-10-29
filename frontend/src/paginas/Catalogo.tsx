@@ -1,25 +1,33 @@
 import { useEffect, useState } from 'react'
-import { buscarProductos } from '../api.ts'
+import { buscarProductos, listarCategorias } from '../api.ts'
 import TarjetaProducto from '../componentes/TarjetaProducto.tsx'
-import type { FiltrosCatalogo, PaginaDeProductos } from '../tipos.ts'
+import type { Categoria, FiltrosCatalogo, PaginaDeProductos } from '../tipos.ts'
 import { mensajeDe, valorDe } from '../ayudas.ts'
 
 type Filtros = FiltrosCatalogo & { pagina: number }
 
-const CATEGORIAS = ['tortas', 'postres', 'galletitas', 'tartas']
-
-// C2 y C3: catálogo con filtros, orden y paginación de a 20.
+// C2 y C3: catálogo con filtros, orden y paginación.
 export default function Catalogo() {
-  const [filtros, setFiltros] = useState<Filtros>({ texto: '', categoria: '', precioMaximo: undefined, aptoCeliacos: false, orden: 'nombre', pagina: 1 })
-  const [resultado, setResultado] = useState<PaginaDeProductos>({ items: [], total: 0, pagina: 1 })
+  const [filtros, setFiltros] = useState<Filtros>({ texto: '', categoria: '', precioMaximo: undefined, aptoCeliacos: false, orden: 'relevancia', pagina: 1 })
+  const [resultado, setResultado] = useState<PaginaDeProductos>({ items: [], total: 0, pagina: 1, porPagina: 20 })
+  const [categorias, setCategorias] = useState<Categoria[]>([])
   const [error, setError] = useState('')
 
   useEffect(() => {
-    buscarProductos(filtros).then(setResultado).catch(errorBusqueda => setError(mensajeDe(errorBusqueda)))
+    listarCategorias().then(setCategorias).catch(errorCategorias => setError(mensajeDe(errorCategorias)))
+  }, [])
+
+  useEffect(() => {
+    buscarProductos(filtros)
+      .then(encontrados => {
+        setError('')
+        setResultado(encontrados)
+      })
+      .catch(errorBusqueda => setError(mensajeDe(errorBusqueda)))
   }, [filtros])
 
   const cambiar = (cambios: Partial<Filtros>) => setFiltros(anteriores => ({ ...anteriores, ...cambios, pagina: 1 }))
-  const hayMasPaginas = filtros.pagina * 20 < resultado.total
+  const hayMasPaginas = filtros.pagina * resultado.porPagina < resultado.total
 
   return (
     <section>
@@ -31,14 +39,14 @@ export default function Catalogo() {
           <md-select-option value="">
             <div slot="headline">Todas</div>
           </md-select-option>
-          {CATEGORIAS.map(categoria => (
-            <md-select-option key={categoria} value={categoria}>
-              <div slot="headline">{categoria}</div>
+          {categorias.map(categoria => (
+            <md-select-option key={categoria.id} value={categoria.nombre}>
+              <div slot="headline">{categoria.nombre}</div>
             </md-select-option>
           ))}
         </md-select>
         <md-select label="Orden" value={filtros.orden} onChange={evento => cambiar({ orden: valorDe(evento) as Filtros['orden'] })}>
-          <md-select-option value="nombre"><div slot="headline">Nombre</div></md-select-option>
+          <md-select-option value="relevancia"><div slot="headline">Relevancia</div></md-select-option>
           <md-select-option value="precio-asc"><div slot="headline">Precio: menor a mayor</div></md-select-option>
           <md-select-option value="precio-desc"><div slot="headline">Precio: mayor a menor</div></md-select-option>
         </md-select>

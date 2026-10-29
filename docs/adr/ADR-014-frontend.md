@@ -21,8 +21,8 @@ No hay una librería oficial de Google con Material 3 Expressive para web. `mate
 - **Framework:** React 19.3.0, con React Router 8.4.0 para las rutas. Construido con Vite 8.3.4.
 - **Componentes:** [material-esm](https://github.com/material-esm/material) (fork de `material-web`), fijado al tag `v3.3.11` en `frontend/package.json`. Se importan los componentes que se usan, uno por uno, desde `main.jsx`.
 - **Gestor y runtime:** Bun 1.4.3. `bun.lock` queda versionado.
-- **Servidor de producción:** un servidor de Bun (`frontend/servidor.js`) que sirve la app compilada y reenvía `/api/*` al api-gateway. Con esto el navegador habla con un solo origen y no hace falta CORS.
-- **Datos:** `src/api.js` es el único punto de acceso a datos. Hoy resuelve contra datos de ejemplo en memoria; después cambia a `fetch` sin tocar las pantallas.
+- **Servidor de producción:** un servidor de Bun (`frontend/servidor.ts`) que sirve la app compilada y reenvía `/api/*` al api-gateway. Con esto el navegador habla con un solo origen y no hace falta CORS.
+- **Datos:** `src/api.ts` es el único punto de acceso a datos. Llama a los servicios por `/api` y traduce sus respuestas a los tipos de las pantallas.
 - **Lenguaje:** TypeScript 7.0.2 en modo `strict`. Los tipos del dominio están en `src/tipos.ts`. `bun run build` corre `tsc` antes de `vite build`. Dependencias de desarrollo nuevas: `typescript`, `@types/react`, `@types/react-dom` y `@types/bun`.
 - **Propuesto, sin confirmar por el equipo:** navegación con un `md-nav-rail` en todos los anchos.
 
@@ -45,6 +45,5 @@ No hay una librería oficial de Google con Material 3 Expressive para web. `mate
 
 ## Limitaciones conocidas
 
-- Sin autenticación: ingreso y registro no envían datos (C1 pendiente).
-- Sin conexión a los servicios reales, datos en memoria.
+- Los pedidos especiales (C6, VE5) siguen en memoria del navegador hasta que `pedidos` tenga sus rutas.
 - Sin WebSocket (B2) ni tests e2e (B1).

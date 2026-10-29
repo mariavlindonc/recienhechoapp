@@ -1,4 +1,6 @@
 import { Outlet, useLocation, useNavigate } from 'react-router'
+import { cerrarSesion } from '../api.ts'
+import { leerSesion } from '../sesion.ts'
 
 const DESTINOS_COMPRADOR = [
   { ruta: '/', etiqueta: 'Catálogo', icono: 'storefront' },
@@ -14,24 +16,32 @@ const DESTINOS_VENDEDOR = [
   { ruta: '/vendedor/pedidos', etiqueta: 'Pedidos', icono: 'bakery_dining' },
 ]
 
-// Mientras no haya autenticación (C1 pendiente), el cambio de rol es manual.
+// La navegación depende del rol de la sesión: el vendedor ve sus pantallas y el resto, las del comprador.
 export default function Marco() {
   const { pathname } = useLocation()
   const navegar = useNavigate()
-  const esVendedor = pathname.startsWith('/vendedor')
-  const destinos = esVendedor ? DESTINOS_VENDEDOR : DESTINOS_COMPRADOR
+  const sesion = leerSesion()
+  const destinos = sesion?.usuario.rol === 'vendedor' ? DESTINOS_VENDEDOR : DESTINOS_COMPRADOR
   const indiceActivo = Math.max(0, destinos.findIndex(destino => pathname === destino.ruta))
+
+  const salir = () => {
+    cerrarSesion()
+    navegar('/ingresar')
+  }
 
   return (
     <>
       <md-app-bar>
         <div slot="title">Recién hecho</div>
-        <md-button slot="end" color={esVendedor ? 'tonal' : 'text'} onClick={() => navegar('/')}>
-          Comprador
-        </md-button>
-        <md-button slot="end" color={esVendedor ? 'text' : 'tonal'} onClick={() => navegar('/vendedor/productos')}>
-          Vendedor
-        </md-button>
+        {sesion ? (
+          <md-button slot="end" color="text" onClick={salir}>
+            Salir ({sesion.usuario.nombre})
+          </md-button>
+        ) : (
+          <md-button slot="end" color="tonal" onClick={() => navegar('/ingresar')}>
+            Ingresar
+          </md-button>
+        )}
       </md-app-bar>
       <div className="marco">
         <md-nav-rail active-index={indiceActivo}>

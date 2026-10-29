@@ -24,10 +24,12 @@ El `dev` server reenvía `/api` al api-gateway en `API_GATEWAY_URL` (por defecto
 
 ## Estado
 
-- Las pantallas usan **datos de ejemplo en memoria** (`src/datosDeEjemplo.js`). Todo pasa por `src/api.js`: cuando existan `productos`, `pedidos` y `usuarios`, cada función pasa a `fetch('/api/...')` sin tocar las pantallas.
+- Todo pasa por `src/api.ts`, que llama a `usuarios`, `productos` y `pedidos` por `/api` (el api-gateway) y traduce sus respuestas a los tipos de `src/tipos.ts`.
+- Sesión: el token de `POST /usuarios/sesion` se guarda en `sessionStorage` y va en `Authorization: Bearer` ([ADR-016](../docs/adr/ADR-016-autenticacion.md)). Un `401` borra la sesión y manda a ingresar. La navegación muestra las pantallas del vendedor solo con una sesión de vendedor (cuenta de desarrollo: `VENDEDOR_EMAIL` y `VENDEDOR_CLAVE` del `.env`).
+- Los **pedidos especiales** siguen en memoria del navegador: `pedidos` todavía no tiene sus rutas.
+- Las pantallas del vendedor miran desde una semana atrás hasta un mes adelante: `pedidos` lista por día, así que se piden solo los días con algo reservado.
 - La navegación es un `md-nav-rail` en todos los anchos. El plan original preveía `md-nav-bar` debajo de 600 px; se simplificó para no sumar un segundo componente de navegación.
-- Sin autenticación: ingreso y registro no envían datos (C1 pendiente). El cambio comprador/vendedor es manual desde la barra superior.
-- Los pedidos inmediatos (sin fecha) se rechazan para productos con anticipación mínima mayor a cero, porque la regla R2 exige anticipación.
+- Un pedido sin fecha es inmediato: `pedidos` busca el primer día con cupo que respete la anticipación del producto.
 
 ## Tests y tipos
 
@@ -41,4 +43,4 @@ bunx tsc          # chequeo de tipos; `bun run build` también lo corre
 - `src/rutas.tsx`: tabla de rutas. `src/paginas/`: una página por ruta; `src/paginas/vendedor/`: pantallas del vendedor.
 - `src/componentes/`: marco con navegación, tarjeta de producto, estado del pedido.
 - `src/tema/`: tokens de color de material-esm (claro y oscuro, copiados del demo del tag `v3.3.11`).
-- `servidor.js`: servidor de producción con Bun. Sirve `dist/` y reenvía `/api/*` al api-gateway.
+- `servidor.ts`: servidor de producción con Bun. Sirve `dist/` y reenvía `/api/*` al api-gateway.

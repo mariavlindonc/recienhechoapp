@@ -24,20 +24,16 @@ export default function Encargar() {
 
   const enviar = (evento: FormEvent) => {
     evento.preventDefault()
-    try {
-      crearPedido({ productoId: id, cantidad, fecha: fecha || hoyIso(), franja: fecha ? franja : undefined })
-        .then(() => navegar('/mis-pedidos'))
-        .catch(errorPedido => setError(mensajeDe(errorPedido)))
-    } catch (errorPedido) {
-      setError(mensajeDe(errorPedido))
-    }
+    crearPedido({ productoId: id, cantidad, fecha: fecha || undefined, franja: fecha ? franja : undefined })
+      .then(() => navegar('/mis-pedidos'))
+      .catch(errorPedido => setError(mensajeDe(errorPedido)))
   }
 
   return (
     <form className="formulario" onSubmit={enviar}>
       <h1>Encargar {producto.nombre}</h1>
       <md-text-field label="Cantidad" type="number" min="1" value={cantidad} onInput={evento => setCantidad(Number(valorDe(evento)))}></md-text-field>
-      <md-text-field label="Fecha (vacío = para hoy)" type="date" value={fecha} onInput={evento => setFecha(valorDe(evento))}></md-text-field>
+      <md-text-field label="Fecha (vacío = lo antes posible)" type="date" min={hoyIso()} value={fecha} onInput={evento => setFecha(valorDe(evento))}></md-text-field>
       <md-select label="Franja" value={franja} onChange={evento => setFranja(valorDe(evento))} disabled={!fecha}>
         <md-select-option value="mañana"><div slot="headline">Mañana</div></md-select-option>
         <md-select-option value="tarde"><div slot="headline">Tarde</div></md-select-option>
