@@ -25,6 +25,12 @@ const tiempoMaximoServicios = 3 * time.Second
 // curso y mandar los últimos spans (igual que en notificaciones).
 const esperaAlApagar = 10 * time.Second
 
+// intervaloChequeo y tiempoMaximoChequeo son los del chequeo activo de /vivo (ADR-012).
+const (
+	intervaloChequeo    = 5 * time.Second
+	tiempoMaximoChequeo = 1 * time.Second
+)
+
 func main() {
 	// Todos los logs del gateway salen en JSON con el nombre del servicio (ADR-006).
 	slog.SetDefault(nuevoLogger(os.Stdout, nombreServicio))
@@ -58,8 +64,10 @@ func ejecutar() error {
 
 	medidor := nuevasMetricas()
 	limite := nuevoLimitador(configuracion.limitePorMinuto, time.Minute, time.Now)
-	proxyNotificaciones := limitarPorGrupo(limite, configuracion.clavesAPI,
-		nuevoProxyBalanceado("notificaciones", configuracion.instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones")))
+	// Notificaciones es el servicio balanceado: solo a sus instancias se les chequea /vivo (ADR-012).
+	balanceadorNotificaciones := nuevoProxyBalanceado("notificaciones", configuracion.instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
+	balanceadorNotificaciones.alCambiarSalud = medidor.marcarSalud("notificaciones")
+	proxyNotificaciones := limitarPorGrupo(limite, configuracion.clavesAPI, balanceadorNotificaciones)
 	proxyPedidos := nuevoProxyBalanceado("pedidos", configuracion.instanciasPedidos, tiempoMaximoServicios, medidor.contarReenvio("pedidos"))
 	proxyProductos := nuevoProxyBalanceado("productos", configuracion.instanciasProductos, tiempoMaximoServicios, medidor.contarReenvio("productos"))
 	proxyUsuarios := nuevoProxyBalanceado("usuarios", configuracion.instanciasUsuarios, tiempoMaximoServicios, medidor.contarReenvio("usuarios"))
@@ -70,7 +78,11 @@ func ejecutar() error {
 	}
 
 	var procesos sync.WaitGroup
-	procesos.Add(1)
+	procesos.Add(2)
+	go func() {
+		defer procesos.Done()
+		balanceadorNotificaciones.vigilar(contexto, intervaloChequeo, tiempoMaximoChequeo)
+	}()
 	go func() {
 		defer procesos.Done()
 		// Sin métricas el gateway sigue atendiendo: el problema queda en el log.

@@ -2,9 +2,13 @@
 
 ## Estado
 
-Aceptado (Entrega 2; se implementa para la presentación)
+Aceptado (Entrega 2). Implementado el 29/10/2026 en `feature/balanceo-notificaciones`: el compose levanta `notificaciones-1` y `notificaciones-2`, y el gateway las chequea con `/vivo` y reparte solo entre las sanas, como dice la Decisión.
 
-Implementación: todavía no hay balanceo. El api-gateway solo expone `/health` y el compose tiene una sola instancia de `notificaciones`. A `notificaciones` le falta el endpoint `/vivo` que el gateway va a consultar.
+El agente de código aplicó tres detalles que la Decisión no define, y el equipo tiene que confirmarlos:
+
+- El chequeo pasivo saca una instancia solo si el servicio tiene dos o más. Con una sola no hay otra a la cual mandar el tráfico, y como `pedidos`, `productos` y `usuarios` no tienen chequeo activo, una instancia que saliera no volvería.
+- El chequeo activo corre solo para `notificaciones`, que es el servicio balanceado.
+- El intervalo (5 s) y el timeout (1 s) del chequeo son constantes en `main.go`, no variables de entorno.
 
 ## Contexto
 
@@ -66,5 +70,6 @@ Lo que más protege no es la estrategia sino la verificación de disponibilidad:
 
 - Cambia lo que anticipaba [ADR-001](ADR-001-limites-de-los-servicios.md) (se actualiza ahí).
 - El límite de 60 solicitudes por minuto vivía en memoria de cada instancia: con 2 instancias un grupo podía llegar a 120. Pasó al api-gateway, que ve todas las solicitudes antes de repartirlas, así que ahora es exacto. Si algún día hay más de una instancia del gateway, vuelve el mismo problema.
-- Para la caída controlada alcanza con `docker compose stop notificaciones-1`: el tráfico pasa a la otra instancia y se ve en el tablero.
+- Para la caída controlada alcanza con `docker compose stop notificaciones-1`: el tráfico pasa a la otra instancia y se ve en el tablero, en "Reparto del tráfico entre instancias" e "Instancias de notificaciones en el balanceo". Solo las solicitudes que estaban en curso en la instancia caída pueden dar `503`. Con `docker compose start notificaciones-1` vuelve en el próximo chequeo.
+- Cada vez que una instancia sale del balanceo o vuelve, el gateway lo deja en el log (`instancia fuera del balanceo` o `instancia de vuelta en el balanceo`, con `destino`, `instancia` y `motivo`).
 - Si se suman instancias, solo cambia `NOTIFICACIONES_URLS`.

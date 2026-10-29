@@ -27,6 +27,7 @@ type metricasGateway struct {
 	solicitudes *prometheus.CounterVec
 	duracion    *prometheus.HistogramVec
 	reenvios    *prometheus.CounterVec
+	sanas       *prometheus.GaugeVec
 }
 
 func nuevasMetricas() *metricasGateway {
@@ -45,9 +46,13 @@ func nuevasMetricas() *metricasGateway {
 			Name: "gateway_solicitudes_total",
 			Help: "Solicitudes reenviadas a cada instancia de cada servicio, por estado de la respuesta (ADR-012).",
 		}, []string{"servicio", "instancia", "estado"}),
+		sanas: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "gateway_instancia_sana",
+			Help: "1 si la instancia está en el balanceo y 0 si quedó afuera (ADR-012).",
+		}, []string{"servicio", "instancia"}),
 	}
 	metricas.registro.MustRegister(
-		metricas.solicitudes, metricas.duracion, metricas.reenvios,
+		metricas.solicitudes, metricas.duracion, metricas.reenvios, metricas.sanas,
 		collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 	return metricas
@@ -73,6 +78,18 @@ func (metricas *metricasGateway) medirSolicitudes() gin.HandlerFunc {
 func (metricas *metricasGateway) contarReenvio(servicio string) func(instancia string, estado int) {
 	return func(instancia string, estado int) {
 		metricas.reenvios.WithLabelValues(servicio, instancia, strconv.Itoa(estado)).Inc()
+	}
+}
+
+// marcarSalud devuelve la función que el proxy llama cuando una instancia sale del
+// balanceo o vuelve.
+func (metricas *metricasGateway) marcarSalud(servicio string) func(instancia string, sana bool) {
+	return func(instancia string, sana bool) {
+		valor := 0.0
+		if sana {
+			valor = 1
+		}
+		metricas.sanas.WithLabelValues(servicio, instancia).Set(valor)
 	}
 }
 
