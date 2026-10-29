@@ -36,3 +36,24 @@ groups:
         annotations:
           resumen: "Prometheus no puede leer las métricas de {{ $labels.job }}"
           descripcion: El servicio está caído o no responde en el puerto de métricas.
+
+  - name: pedidos
+    rules:
+      # ADR-010: un rechazo por formato es un error nuestro o un cambio del contrato
+      # del proveedor; reintentar no lo arregla.
+      - alert: InventarioRechazaReservas
+        expr: sum(increase(pedidos_inventario_llamadas_total{resultado="rechazada"}[10m])) > 0
+        labels:
+          severidad: critica
+        annotations:
+          resumen: El inventario del proveedor rechazó reservas por un error de formato
+          descripcion: Revisar el log "llamada al inventario fallida" y el contrato en docs/contracts. Los pedidos afectados quedan marcados para el vendedor.
+
+      - alert: CircuitoDelInventarioAbierto
+        expr: pedidos_circuito_inventario{estado="abierto"} == 1
+        for: 1m
+        labels:
+          severidad: aviso
+        annotations:
+          resumen: El disyuntor del inventario está abierto
+          descripcion: El proveedor de inventario no responde. Los pedidos nuevos quedan pendiente_confirmacion y se reconfirman cuando vuelva (ADR-010).

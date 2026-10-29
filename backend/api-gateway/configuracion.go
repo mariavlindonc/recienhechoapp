@@ -12,6 +12,7 @@ type configuracion struct {
 	puerto                   string
 	puertoMetricas           string
 	instanciasNotificaciones []*url.URL
+	instanciasPedidos        []*url.URL
 }
 
 // leerConfiguracion recibe la función que busca cada variable (os.Getenv en el
@@ -43,6 +44,13 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 			problemas = append(problemas, fmt.Errorf("NOTIFICACIONES_URLS: %w", err))
 		}
 		leida.instanciasNotificaciones = instancias
+	}
+	if texto := obligatoria("PEDIDOS_URLS"); texto != "" {
+		instancias, err := parsearInstancias(texto)
+		if err != nil {
+			problemas = append(problemas, fmt.Errorf("PEDIDOS_URLS: %w", err))
+		}
+		leida.instanciasPedidos = instancias
 	}
 
 	if len(problemas) > 0 {

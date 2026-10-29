@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto (Entrega 2; se acepta al implementar `productos`, para la presentación)
+Aceptado por Agustín el 26/10/2026; se implementa con `productos`, para la presentación.
 
 ## Contexto
 

@@ -15,6 +15,7 @@ type configuracion struct {
 	puerto           string
 	puertoMetricas   string
 	direccionMongo   string
+	direccionRabbit  string
 	baseMongo        string
 	clavesAPI        map[string]string
 	limitePorMinuto  int
@@ -60,6 +61,7 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 		puertoMetricas:   conValorPorDefecto("METRICAS_PORT", "9464"),
 		direccionMongo:   obligatoria("MONGO_URI"),
 		baseMongo:        conValorPorDefecto("MONGO_BASE", "notificaciones"),
+		direccionRabbit:  obligatoria("RABBITMQ_URL"),
 		limitePorMinuto:  entero("NOTIFICACIONES_LIMITE_POR_MINUTO", "60"),
 		intervaloDeEnvio: duracion("NOTIFICACIONES_INTERVALO_DE_ENVIO", "5s"),
 		smtp: smtp.Configuracion{

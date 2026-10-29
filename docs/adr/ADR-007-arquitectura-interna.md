@@ -3,9 +3,10 @@
 ## Estado
 
 - **Aceptado** para `notificaciones` (hexagonal) y `api-gateway`, Entrega 2.
-- **Propuesto** para `pedidos`, `productos` y `usuarios`: se acepta al implementar cada servicio.
+- **Aceptado** para `pedidos` (hexagonal), implementado el 26/10/2026.
+- **Propuesto** para `productos` y `usuarios`: se acepta al implementar cada servicio.
 
-Implementación: `notificaciones` ya tiene esta estructura. El api-gateway y los demás servicios todavía solo exponen `/health`.
+Implementación: `notificaciones` y `pedidos` (26/10/2026) ya tienen esta estructura. `usuarios` y `productos` todavía solo exponen `/health`.
 
 ## Contexto
 
