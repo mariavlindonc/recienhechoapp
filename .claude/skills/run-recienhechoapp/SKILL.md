@@ -1,23 +1,61 @@
 ---
 name: run-recienhechoapp
-description: Levantar, correr, probar y manejar Recién hecho (notificaciones con MongoDB y Mailpit; productos con MySQL, Redis y Meilisearch; el compose completo). Usar cuando pidan arrancar o correr la app, probar el contrato de notificaciones o el catálogo con curl, ver el mail en Mailpit, simular caídas, correr los tests o los tests de integración contra MongoDB, MySQL, Redis o Meilisearch.
+description: Levantar, correr, probar y manejar Recién hecho completo (frontend React, api-gateway y los cinco servicios en el compose). Usar cuando pidan arrancar o correr la app, abrir o sacar capturas del frontend, probar el flujo del comprador en el navegador, cargar budines de ejemplo, pegarle a la API por el gateway con curl, probar notificaciones sola con Mailpit, simular caídas o correr los tests unitarios y de integración.
 ---
 
-Los cinco servicios tienen lógica; `usuarios` firma los JWT y el api-gateway los verifica (ADR-016). `notificaciones` se maneja solo con `.claude/skills/run-recienhechoapp/smoke.sh`: levanta MongoDB y Mailpit en Docker, compila y arranca el servicio en la máquina y recorre el contrato con `curl`. Para `productos` y el flujo completo, ver la sección "Productos y el compose completo".
+La app entera corre en el compose: frontend en `localhost:5173` (sirve la app y reenvía `/api` al gateway), api-gateway en `localhost:8080` y atrás `usuarios`, `productos`, `pedidos` y `notificaciones` con sus bases. Se maneja con dos herramientas de esta carpeta: `app.sh` levanta y carga datos, y `navegador.ts` maneja el frontend con Chrome sin ventana (protocolo de DevTools, sin dependencias: Bun trae `WebSocket`).
 
-Todas las rutas son relativas a la raíz del repo. Los comandos son para Git Bash (Windows) o Linux.
+Todas las rutas son relativas a la raíz del repo. Los comandos son para Git Bash en Windows (la máquina de desarrollo) y sirven igual en Linux.
 
 ## Prerequisitos
 
-- Go 1.27 (`go version`).
-- Docker. En la máquina de desarrollo Windows no hay `docker.exe`: está dentro de WSL (Ubuntu). El script usa `docker` si existe y si no `wsl -e docker`. Los puertos que publica WSL se ven en `localhost` de Windows.
-- Imágenes, una sola vez:
+- Go 1.27, Bun 1.4 y Chrome o Edge instalados (`navegador.ts` los busca solos; si no, `NAVEGADOR=/ruta/al/chrome`).
+- Docker. En Windows no hay `docker.exe`: está dentro de WSL (Ubuntu). Los scripts usan `docker` si existe y si no `wsl -e docker`; los puertos de WSL se ven en `localhost` de Windows.
+
+## Correr la app completa (camino para agentes)
 
 ```bash
-wsl -e sh -c 'docker pull -q mongo:8 && docker pull -q axllent/mailpit'
+bash .claude/skills/run-recienhechoapp/app.sh levantar
+bash .claude/skills/run-recienhechoapp/app.sh cargar
+MSYS_NO_PATHCONV=1 bun .claude/skills/run-recienhechoapp/navegador.ts flujo
+MSYS_NO_PATHCONV=1 bun .claude/skills/run-recienhechoapp/navegador.ts captura / oscuro
+MSYS_NO_PATHCONV=1 bun .claude/skills/run-recienhechoapp/navegador.ts eval / "[...document.querySelectorAll('.rejilla md-card h3')].map(titulo => titulo.textContent)"
+bash .claude/skills/run-recienhechoapp/app.sh detener
 ```
 
-## Correr (camino para agentes)
+| Comando | Qué hace |
+|---|---|
+| `app.sh levantar` | Arma `.tmp/env` (tu `.env` más lo que falte de `.env.example`, sin tocar tu `.env`), deja WSL despierto, `docker compose up --build -d` y espera al gateway, al frontend y a que `/api` del frontend llegue al gateway. Unos 15 s con las imágenes hechas |
+| `app.sh cargar` | Entra como el vendedor del `.env`, crea las categorías Zanahoria, Cítricos y Sin harina de trigo, tres budines (si no estaban) y cupo de 10 para hoy y los próximos 7 días |
+| `app.sh estado` | `docker compose ps -a` del proyecto |
+| `app.sh detener` | `docker compose down` (los volúmenes y los budines quedan) y suelta WSL |
+| `navegador.ts flujo` | Registra un comprador nuevo, abre un budín, lo encarga para mañana y comprueba que quede en "Mis pedidos" resaltado. Saca `flujo-1-catalogo`, `flujo-2-detalle` y `flujo-3-mis-pedidos`. Corta con error si no termina en `/mis-pedidos` |
+| `navegador.ts captura <ruta> [oscuro]` | Abre la ruta y saca una captura de 1280x860, en modo claro u oscuro |
+| `navegador.ts eval <ruta> '<js>'` | Abre la ruta, evalúa la expresión (acepta `await`) e imprime el resultado en JSON |
+
+Las capturas quedan en `.claude/skills/run-recienhechoapp/.tmp/capturas/`. Mirarlas: que el comando termine bien no garantiza que la pantalla tenga datos.
+
+Cada llamada a `navegador.ts` abre un Chrome nuevo, así que la sesión no pasa de una a otra: una pantalla que pide sesión, sin ella, manda a `/ingresar`. Para entrar, completar el formulario dentro del mismo `eval`:
+
+```bash
+MSYS_NO_PATHCONV=1 bun .claude/skills/run-recienhechoapp/navegador.ts eval /ingresar "await (async () => { const llenar = (etiqueta, valor) => { const campo = [...document.querySelectorAll('md-text-field')].find(elemento => elemento.label?.startsWith(etiqueta)); campo.value = valor; campo.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true })) }; llenar('Email', 'vendedor@recienhecho.test'); llenar('Contraseña', 'vendedor-desarrollo'); await new Promise(listo => setTimeout(listo, 200)); document.querySelector('form').requestSubmit(); await new Promise(listo => setTimeout(listo, 2000)); return location.pathname + ' | ' + document.querySelector('main').innerText.slice(0, 120) })()"
+```
+
+## Pegarle a la API por el gateway
+
+Con la app levantada. El gateway borra los `X-*-Usuario` que mande el cliente y los arma con el token (ADR-016):
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8080/usuarios/sesion -H 'Content-Type: application/json' \
+  -d '{"email":"vendedor@recienhecho.test","clave":"vendedor-desarrollo"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
+curl -s localhost:8080/usuarios/yo -H "Authorization: Bearer $TOKEN"
+curl -s "localhost:8080/productos/busqueda?q=limon&disponible=true"
+curl -s "localhost:8080/pedidos/especiales" -H "Authorization: Bearer $TOKEN"
+```
+
+## Notificaciones sola (sin el compose)
+
+`smoke.sh` levanta MongoDB y Mailpit en Docker, compila notificaciones, lo corre en la máquina con dos grupos de claves y recorre el contrato con `curl`. Usa los puertos de Mailpit del compose: bajar el compose antes.
 
 ```bash
 bash .claude/skills/run-recienhechoapp/smoke.sh arrancar
@@ -26,81 +64,56 @@ bash .claude/skills/run-recienhechoapp/smoke.sh caida
 bash .claude/skills/run-recienhechoapp/smoke.sh detener
 ```
 
-| Comando | Qué hace |
-|---|---|
-| `arrancar` | MongoDB en `localhost:27018`, Mailpit en `1025` (SMTP) y `8025` (web), compila `backend/notificaciones` y lo arranca en `localhost:8084` con dos grupos (`grupo-a:clave-grupo-a`, `grupo-b:clave-grupo-b`). Espera a `/health` |
-| `flujo` | `POST` 202, repetido devuelve el mismo id, otro cuerpo con la misma clave 409, sin clave 401, `GET` con la clave del otro grupo 404, espera `enviada` y busca el mail en la API de Mailpit. Corta en la primera falla con `FALLA: ...` |
-| `caida` | Apaga Mailpit, hace un `POST` (sigue en 202 y queda `pendiente`) y vuelve a levantar Mailpit |
-| `detener` | Mata el servicio y borra los dos contenedores |
-
-El log del servicio queda en `.claude/skills/run-recienhechoapp/.tmp/notificaciones.log`. Los mails se ven en http://localhost:8025.
-
-Para pegarle a mano con el servicio arriba:
-
-```bash
-curl -i -X POST http://localhost:8084/notificaciones -H "X-API-Key: clave-grupo-a" -H "Idempotency-Key: prueba-1" -H "Content-Type: application/json" -d '{"canal":"email","destinatario":"cliente@ejemplo.com","asunto":"Hola","cuerpo":"Prueba."}'
-```
+`flujo`: POST 202, repetido devuelve el mismo id, misma clave con otro cuerpo 409, sin clave 401, GET con la clave de otro grupo 404, espera `enviada` y busca el mail en Mailpit. `caida`: apaga Mailpit, el POST sigue en 202 y queda `pendiente`, y lo vuelve a levantar. El log queda en `.claude/skills/run-recienhechoapp/.tmp/notificaciones.log`. El límite de 60 por minuto no se prueba acá: lo aplica el gateway.
 
 ## Tests
 
 ```bash
-for servicio in backend/*/; do (cd "$servicio" && go test ./... && go vet ./...) || break; done; gofmt -l backend
+for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet ./...) || break; done; gofmt -l backend
+(cd frontend && bunx tsc && bun test)
 ```
 
-Integración contra el MongoDB que levanta `arrancar` (sin `MONGO_URI_TEST` los 7 tests se saltean en silencio):
-
-```bash
-(cd backend/notificaciones && MONGO_URI_TEST=mongodb://localhost:27018 go test -count=1 ./internal/adaptadores/mongodb/...)
-```
-
-## Productos y el compose completo
-
-Primero dejar WSL despierto en segundo plano, si no Docker se apaga entre comando y comando y se lleva los contenedores:
-
-```bash
-wsl -e sleep 3600   # en segundo plano (run_in_background)
-```
-
-Tests de integración de `productos`, cada uno contra su base (se saltean sin la variable):
+Integración de `productos` contra bases reales (sin las variables se saltean en silencio). Bajar el compose antes: `mysql-productos` también usa el 3307.
 
 ```bash
 MSYS_NO_PATHCONV=1 wsl -e docker run -d --name mysql-prueba-productos -p 127.0.0.1:3307:3306 -e MYSQL_ROOT_PASSWORD=prueba -e MYSQL_DATABASE=productos_test mysql:8.4.10
 MSYS_NO_PATHCONV=1 wsl -e docker run -d --name redis-prueba-productos -p 127.0.0.1:6380:6379 redis:7.4.11
 MSYS_NO_PATHCONV=1 wsl -e docker run -d --name meili-prueba-productos -p 127.0.0.1:7701:7700 -e MEILI_MASTER_KEY=clave-de-prueba-de-16 getmeili/meilisearch:v1.54.3
-# esperar a MySQL por TCP (ver trampas) y después:
+until MSYS_NO_PATHCONV=1 wsl -e docker exec mysql-prueba-productos mysqladmin ping -h127.0.0.1 --protocol=tcp -uroot -pprueba >/dev/null 2>&1; do sleep 2; done
 (cd backend/productos && MYSQL_DSN_TEST="root:prueba@tcp(127.0.0.1:3307)/productos_test" REDIS_URL_TEST=redis://127.0.0.1:6380/0 MEILI_URL_TEST=http://127.0.0.1:7701 MEILI_CLAVE_TEST=clave-de-prueba-de-16 go test -race -count=1 ./...)
+MSYS_NO_PATHCONV=1 wsl -e docker rm -f mysql-prueba-productos redis-prueba-productos meili-prueba-productos
 ```
 
-Compose completo: escribir un script y correrlo entero con `MSYS_NO_PATHCONV=1 wsl -e bash script.sh`. Si el `.env` del usuario no tiene todas las variables, no tocarlo: armar uno temporal con su `.env` más lo que falte de `.env.example` y pasarlo con `docker compose --env-file`. Pasos útiles, por el gateway (`localhost:8080`):
+Con `smoke.sh arrancar` corriendo, la integración de notificaciones: `(cd backend/notificaciones && MONGO_URI_TEST=mongodb://localhost:27018 go test -count=1 ./internal/adaptadores/mongodb/...)`.
 
-```bash
-# El gateway borra los X-*-Usuario del cliente y los arma con el token (ADR-016).
-TOKEN=$(curl -s -X POST localhost:8080/usuarios/sesion -H 'Content-Type: application/json' \
-  -d '{"email":"vendedor@recienhecho.test","clave":"vendedor-desarrollo"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
-V=(-H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json')
-curl -s "${V[@]}" -X POST localhost:8080/categorias -d '{"nombre":"Tortas"}'
-curl -s "${V[@]}" -X POST localhost:8080/productos -d '{"nombre":"Torta de limón","categoriaId":"<id>","precioCentavos":850000,"anticipacionMinimaDias":2,"disponible":true}'
-curl -s -H "Authorization: Bearer $TOKEN" -F "imagen=@foto.png" localhost:8080/productos/<id>/imagen
-curl -s "localhost:8080/productos/busqueda?q=limon&categoria=Tortas&disponible=true&orden=precio_asc"   # a los ~3 s
-docker compose exec -T productos wget -qO- localhost:9464/metrics | grep cache_   # aciertos y fallos
-docker compose exec -T productos /servicio reindexar
-```
+## Correr a mano (personas)
 
-Caídas para probar: `docker compose stop meilisearch` (búsqueda en 503, catálogo sigue, los cambios se aplican al volver) y `docker compose stop redis-productos` (el catálogo lee de MySQL).
+`cp .env.example .env` una vez y `docker compose up --build -d`; después http://localhost:5173. Para el frontend con recarga automática, `cd frontend && bun run dev` (Vite en el 5173 reenvía `/api` a `localhost:8080`): no dejarlo corriendo junto con el compose (ver trampas).
 
 ## Trampas
 
-- **`docker compose up --build -d` también levanta notificaciones** (con `cp .env.example .env` antes), con Mongo, Mailpit y las claves de desarrollo del `.env.example`. `smoke.sh` corre el binario directo para no depender de Docker en el build y para tener dos grupos de claves.
-- **En Windows el Docker de WSL se apaga por inactividad** cuando termina el comando de `wsl`, y con él los contenedores del compose (salen con código 0 tras un apagado ordenado). Para una prueba larga con compose, meter todo en un solo `wsl -e bash script.sh`, y desde Git Bash usar `MSYS_NO_PATHCONV=1` para que no cambie las rutas `/mnt/c/...`.
-- **`SMTP_PUERTO` por defecto es 587.** Contra Mailpit hay que poner `1025` o el envío falla.
-- **El envío sondea cada 5 s.** El script pone `NOTIFICACIONES_INTERVALO_DE_ENVIO=1s` para que `enviada` llegue en uno o dos segundos.
-- **Mongo va en 27018**, como en el comentario de `repositorio_test.go`, para no chocar con un Mongo local en 27017.
-- **Mailpit guarda los mails en memoria.** `caida` lo recrea, así que después de correrla la bandeja queda vacía; volver a correr `flujo` para ver un mail.
-- **Con Mailpit caído la notificación tarda unos 3,5 minutos en pasar a `fallida`** (reintentos a los 30, 60 y 120 s). `caida` solo muestra el `pendiente`.
-- **Los logs todavía son texto**, mezcla de `[GIN-debug]` y `slog` sin JSON ni `trace_id` (eso llega con el paso 3).
-- **No hay `jq` en Git Bash**: el script saca `id` y `estado` del JSON con `sed`.
-- **`smoke.sh` se baja siempre en LF** por el `.gitattributes` de esta carpeta. Con `core.autocrlf=true` llegaba con CRLF: Git Bash lo tolera, pero bash en Linux o WSL no.
-- **`kill` desde Git Bash sí cierra el `.exe` de Windows.** Después de `detener`, `/health` deja de responder y `tasklist` no lo muestra.
-- **MySQL arranca dos veces.** La imagen levanta un servidor temporal para inicializarse y después se reinicia. Un `select 1` por socket le pega al temporal y da un "listo" falso: esperar con `mysqladmin ping -h127.0.0.1 --protocol=tcp`, porque el temporal no escucha en la red.
-- **La clave maestra de Meilisearch tiene que tener al menos 16 caracteres.**
-- **Los puertos de prueba de `productos` (3307, 6380, 7701) chocan con el compose** (`mysql-productos` también usa 3307). Borrar los contenedores de prueba antes de levantar el compose.
+- **Git Bash cambia las rutas que empiezan con `/`** cuando llama a un `.exe` como Bun: `navegador.ts captura /` llegaba como `C:/Program Files/Git/` y Chrome sacaba captura de esa carpeta. Siempre `MSYS_NO_PATHCONV=1` delante; el script corta con un aviso si le llega una ruta así.
+- **`git rev-parse --show-toplevel` devuelve `C:/Users/...` en Git Bash**, no `/c/Users/...`. `app.sh` convierte las dos formas a `/mnt/c/...` para WSL.
+- **Un `bun run dev` olvidado le gana al contenedor.** Vite escucha en `[::1]:5173` y el compose en `127.0.0.1:5173`; `localhost` va primero a `::1`, así que el navegador ve Vite y `/api` devuelve el HTML de la app (`Unexpected token '<'`). Al cortar `bun run dev` desde una herramienta puede quedar vivo el `node.exe` hijo: buscarlo con `netstat -ano | grep :5173`. `app.sh levantar` lo detecta y corta.
+- **Chrome sin ventana copia el tema de Windows.** Con Windows en oscuro, todas las capturas salían oscuras. `navegador.ts` fija claro u oscuro en cada llamada.
+- **En Windows el Docker de WSL se apaga por inactividad** cuando no queda ningún proceso de `wsl` vivo, y se lleva los contenedores. `app.sh` deja un `wsl -e sleep` en segundo plano (PID en `.tmp/wsl.pid`) y lo mata en `detener`.
+- **Un contenedor viejo con el mismo nombre frena el compose** (`Conflict. The container name "/recienhecho-frontend" is already in use`). Pasa con contenedores de otro proyecto de compose (otro `-p` o carpeta). Ver de dónde es con `wsl -e docker ps -a --filter name=recienhecho`; si está parado y es de otra corrida, borrarlo.
+- **`docker compose ps --format '...'` pierde las comillas** al pasar por `wsl -e bash -c`: `app.sh estado` usa `ps -a` sin formato.
+- **La búsqueda tarda unos 3 s en ver un cambio** (bandeja de Meilisearch, ADR-008). Recién cargados o borrados, los budines pueden no aparecer en el catálogo.
+- **Los budines quedan en los volúmenes** después de `detener`. `cargar` no los duplica. Los precios son de relleno a propósito: no sabemos los reales.
+- **Los `md-text-field` no son `input`:** para llenarlos desde JS hay que poner `.value` y disparar un `InputEvent` con `composed: true`. Buscarlos por `.label` (es propiedad, no atributo).
+- **Enter no siempre envía los formularios de material-esm** (pasó en el navegador del panel de Claude): `navegador.ts` usa `form.requestSubmit()`.
+- **MySQL arranca dos veces.** La imagen levanta un servidor temporal y después se reinicia. Esperar con `mysqladmin ping --protocol=tcp`, porque el temporal no escucha en la red.
+- **Mailpit guarda los mails en memoria**: `smoke.sh caida` lo recrea y la bandeja queda vacía. Con Mailpit caído, una notificación tarda unos 3,5 minutos en pasar a `fallida`.
+- **`SMTP_PUERTO` por defecto es 587**; contra Mailpit va `1025`. **La clave maestra de Meilisearch** tiene que tener al menos 16 caracteres.
+- **Los `.sh` se bajan en LF** por el `.gitattributes` de esta carpeta: con CRLF, bash de WSL falla.
+
+## Si algo falla
+
+| Síntoma | Qué hacer |
+|---|---|
+| `FALLA: el compose no levantó` | Mirar `.claude/skills/run-recienhechoapp/.tmp/compose.log` (buscar `Error`). El caso visto fue el conflicto de nombre de arriba |
+| `FALLA: .../api no llega al gateway` | Otro proceso en el 5173 (trampa de Vite). `netstat -ano \| grep :5173` y cerrarlo |
+| El catálogo muestra `Unexpected token '<'` | Lo mismo: el navegador está viendo Vite, no el contenedor |
+| `la ruta llegó como C:/...` | Faltó `MSYS_NO_PATHCONV=1` |
+| `flujo` corta en el registro (`sesion=false`) | Mirar `flujo-1-catalogo.png`: muestra el error del formulario |
