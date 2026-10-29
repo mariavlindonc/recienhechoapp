@@ -12,16 +12,16 @@ Trabajo Práctico Integrador de Arquitectura de Software 2026, Facultad de Ingen
 
 ## Estado
 
-Versión 0.2.0 (Entrega 2): `notificaciones` funcionando de punta a punta detrás del api-gateway, con MongoDB, logs, trazas y métricas.
+Última versión publicada: 0.2.0 (Entrega 2), con `notificaciones` funcionando de punta a punta detrás del api-gateway, con MongoDB, logs, trazas y métricas. La tabla de abajo es el estado de `develop` y de las ramas en revisión, que ya incluyen el resto de los servicios y el frontend.
 
 | Componente | Estado |
 |---|---|
 | `notificaciones` | Implementado: `POST` y `GET /notificaciones` del contrato, idempotencia, clave de API por grupo, límite de uso (lo aplica el api-gateway), envío de mails en segundo plano con reintentos, MongoDB y SMTP |
-| `api-gateway` | Reenvía `/notificaciones*` a `notificaciones`; `/pedidos*` y `/capacidad*` a `pedidos`; y `/productos*`, `/categorias*` e `/imagenes*` a `productos`, con timeout de 3 s (`503 no_disponible` si no responde). Todavía no enruta `/usuarios*` ni verifica los tokens de sesión ([ADR-016](docs/adr/ADR-016-autenticacion.md)) |
-| `pedidos` | Implementado: encargar (inmediato y programado) con reserva de cupo en una transacción, idempotencia, cancelar, avanzar estados, capacidad por día, inventario falso con disyuntor y reconfirmación, eventos a RabbitMQ por outbox |
+| `api-gateway` | Reenvía `/notificaciones*` a `notificaciones`; `/pedidos*` y `/capacidad*` a `pedidos`; y `/productos*`, `/categorias*` e `/imagenes*` a `productos`, con timeout de 3 s (`503 no_disponible` si no responde). Enruta `/usuarios*` a `usuarios`, verifica el JWT de `Authorization: Bearer` y arma con él los headers de identidad ([ADR-016](docs/adr/ADR-016-autenticacion.md)). Aplica el límite de 60 solicitudes por minuto por grupo de `notificaciones` ([ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md)) |
+| `pedidos` | Implementado: encargar (inmediato y programado) con reserva de cupo en una transacción, idempotencia, cancelar, avanzar estados, capacidad por día, inventario falso con disyuntor y reconfirmación, eventos a RabbitMQ por outbox, y pedidos especiales con cotización que vence a las 48 h ([ADR-017](docs/adr/ADR-017-pedidos-especiales.md)) |
 | `productos` | Implementado: catálogo con caché en Redis, búsqueda con Meilisearch sincronizada por outbox, ABM de categorías y productos, receta, subida de imágenes y ruta interna para `pedidos` |
 | `usuarios` | Registro, inicio de sesión con token JWT y perfil, en MySQL ([ADR-016](docs/adr/ADR-016-autenticacion.md)) |
-| Frontend | Pendiente |
+| Frontend | React, TypeScript y material-esm ([ADR-014](docs/adr/ADR-014-frontend.md)), en `localhost:5173`: catálogo con búsqueda, encargar, pedidos especiales, ingreso y registro, y las pantallas del vendedor, todo contra los servicios por el gateway. Tema "Etiqueta kraft" de la marca |
 | Logs JSON con `trace_id`, trazas (Jaeger), métricas y alertas (Prometheus y Grafana) | Implementados en el api-gateway, `notificaciones`, `pedidos` y `productos` |
 | Balanceo de carga | El gateway ya reparte entre las instancias de `NOTIFICACIONES_URLS` ([ADR-012](docs/adr/ADR-012-balanceo-de-carga.md)); el compose levanta una sola, la segunda se suma para la presentación |
 
@@ -51,11 +51,12 @@ Requisitos: Docker con Compose.
 cp .env.example .env && docker compose up --build -d
 ```
 
-Levanta los cuatro servicios, el api-gateway, las bases (MongoDB, MySQL, Redis y Meilisearch), RabbitMQ, Mailpit, el mock del contrato y la observabilidad (Jaeger, Prometheus y Grafana). Para bajarlo: `docker compose down`. Si ya tenías un `.env`, copiá de `.env.example` las variables que te falten.
+Levanta los cuatro servicios, el api-gateway, el frontend, las bases (MongoDB, MySQL, Redis y Meilisearch), RabbitMQ, Mailpit, el mock del contrato y la observabilidad (Jaeger, Prometheus y Grafana). Para bajarlo: `docker compose down`. Si ya tenías un `.env`, copiá de `.env.example` las variables que te falten.
 
 | Qué | URL local |
 |---|---|
-| api-gateway, entrada del sistema (`/notificaciones`, `/pedidos`, `/capacidad`, `/productos`, `/categorias`) | http://localhost:8080 |
+| Frontend, la interfaz web (reenvía `/api` al gateway) | http://localhost:5173 |
+| api-gateway, entrada del sistema (`/notificaciones`, `/pedidos`, `/capacidad`, `/productos`, `/categorias`, `/usuarios`) | http://localhost:8080 |
 | Meilisearch, para probar búsquedas (clave en `.env`, `MEILI_CLAVE`) | http://localhost:7700 |
 | Grafana, tablero de métricas (sin usuario, solo lectura) | http://localhost:3000 |
 | Prometheus, métricas y alertas | http://localhost:9090 |
@@ -75,7 +76,8 @@ El `GET /notificaciones/{id}` pasa de `pendiente` a `enviada` en unos segundos y
 Tests y lint (en Windows, con Git Bash):
 
 ```bash
-for servicio in backend/*/; do (cd "$servicio" && go test ./... && go vet ./...) || break; done; gofmt -l backend
+for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet ./...) || break; done; gofmt -l backend
+(cd frontend && bunx tsc && bun test)
 ```
 
 Los tests de integración corren solo si existe la variable de su base: `MONGO_URI_TEST`, `MYSQL_DSN_TEST`, `REDIS_URL_TEST` y `MEILI_URL_TEST` (cada test dice cómo levantar la base en Docker). Ver [AGENTS.md](AGENTS.md) y `.claude/skills/run-recienhechoapp/`.
@@ -123,4 +125,7 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 | D10 Resiliencia | [ADR-011](docs/adr/ADR-011-resiliencia.md) | Aceptado para gateway y notificaciones; propuesto para el resto |
 | D12 Balanceo de carga | [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md) | Aceptado (se implementa para la presentación) |
 | D13 Capacidad y costos | [ADR-013](docs/adr/ADR-013-capacidad-y-costos.md) | Propuesto |
+| Frontend | [ADR-014](docs/adr/ADR-014-frontend.md) | Propuesto (stack, tema y animaciones elegidos por Agustín) |
+| D4 Consistencia y concurrencia | [ADR-015](docs/adr/ADR-015-consistencia-y-concurrencia.md) | Aceptado para las transacciones de MongoDB; propuesto para el resto |
+| Autenticación | [ADR-016](docs/adr/ADR-016-autenticacion.md) | Aceptado |
 | Pedidos especiales (C6, VE5, R8) | [ADR-017](docs/adr/ADR-017-pedidos-especiales.md) | Propuesto; implementado, a confirmar por el equipo |
