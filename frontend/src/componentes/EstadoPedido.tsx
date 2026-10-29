@@ -10,6 +10,7 @@ const ETIQUETAS: Record<Estado, string> = {
   cancelado: 'Cancelado',
 }
 
+// La key por estado vuelve a montar la etiqueta, así un cambio de estado entra por fundido.
 export default function EstadoPedido({ estado }: { estado: Estado }) {
-  return <md-chip type="assist" label={ETIQUETAS[estado] ?? estado}></md-chip>
+  return <md-chip key={estado} className="estado-pedido" type="assist" label={ETIQUETAS[estado] ?? estado}></md-chip>
 }

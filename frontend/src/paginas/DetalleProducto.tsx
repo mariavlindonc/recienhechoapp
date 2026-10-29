@@ -17,9 +17,10 @@ export default function DetalleProducto() {
   if (producto === null) return <p>Ese producto no existe.</p>
 
   return (
-    <section className="formulario">
+    <section className="formulario" style={{ viewTransitionName: `producto-${producto.id}` }}>
+      <span className="etiqueta">{producto.categoria}</span>
       <h1>{producto.nombre}</h1>
-      <p>{producto.descripcion}</p>
+      <p className="descripcion">{producto.descripcion}</p>
       <strong>{formatearPrecio(producto.precioCentavos)}</strong>
       <p>Anticipación mínima: {producto.anticipacionDias} días.</p>
       <Link to={`/pedir/${producto.id}`}>

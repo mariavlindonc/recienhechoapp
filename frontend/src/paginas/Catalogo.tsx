@@ -12,18 +12,21 @@ export default function Catalogo() {
   const [resultado, setResultado] = useState<PaginaDeProductos>({ items: [], total: 0, pagina: 1, porPagina: 20 })
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [error, setError] = useState('')
+  const [cargando, setCargando] = useState(true)
 
   useEffect(() => {
     listarCategorias().then(setCategorias).catch(errorCategorias => setError(mensajeDe(errorCategorias)))
   }, [])
 
   useEffect(() => {
+    setCargando(true)
     buscarProductos(filtros)
       .then(encontrados => {
         setError('')
         setResultado(encontrados)
       })
       .catch(errorBusqueda => setError(mensajeDe(errorBusqueda)))
+      .finally(() => setCargando(false))
   }, [filtros])
 
   const cambiar = (cambios: Partial<Filtros>) => setFiltros(anteriores => ({ ...anteriores, ...cambios, pagina: 1 }))
@@ -57,11 +60,17 @@ export default function Catalogo() {
       </div>
 
       {error && <p className="aviso-error">{error}</p>}
-      {resultado.items.length === 0 && !error && <p>No hay productos con esos filtros.</p>}
+      {!cargando && resultado.items.length === 0 && !error && <p>No hay productos con esos filtros.</p>}
 
-      <div className="rejilla">
-        {resultado.items.map(producto => <TarjetaProducto key={producto.id} producto={producto} />)}
-      </div>
+      {cargando ? (
+        <div className="rejilla" aria-busy="true" aria-label="Cargando el catálogo">
+          {Array.from({ length: 6 }, (_sinUso, posicion) => <div key={posicion} className="esqueleto" />)}
+        </div>
+      ) : (
+        <div className="rejilla">
+          {resultado.items.map((producto, orden) => <TarjetaProducto key={producto.id} producto={producto} orden={orden} />)}
+        </div>
+      )}
 
       <div className="fila">
         <md-button disabled={filtros.pagina === 1} onClick={() => setFiltros(anteriores => ({ ...anteriores, pagina: anteriores.pagina - 1 }))}>Anterior</md-button>

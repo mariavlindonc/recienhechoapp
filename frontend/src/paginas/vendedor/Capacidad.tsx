@@ -31,7 +31,13 @@ export default function Capacidad() {
       {error && <p className="aviso-error">{error}</p>}
       <ul>
         {Object.entries(dias).sort(([primera], [segunda]) => primera.localeCompare(segunda)).map(([dia, valores]) => (
-          <li key={dia}>{dia}: {valores.reservados} reservados de {valores.capacidad}</li>
+          <li key={dia} className="fila">
+            <span>{dia}: {valores.reservados} reservados de {valores.capacidad}</span>
+            {/* La barra se llena con una transición al guardar una capacidad nueva. */}
+            <span className="cupo" aria-hidden="true">
+              <span className="cupo-lleno" style={{ display: 'block', transform: `scaleX(${valores.capacidad ? Math.min(valores.reservados / valores.capacidad, 1) : 0})` }} />
+            </span>
+          </li>
         ))}
       </ul>
       <form className="formulario" onSubmit={guardar}>

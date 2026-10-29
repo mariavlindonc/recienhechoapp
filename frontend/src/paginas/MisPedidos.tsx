@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router'
 import { cancelarPedido, listarEspeciales, listarMisPedidos, responderCotizacion } from '../api.ts'
 import EstadoPedido from '../componentes/EstadoPedido.tsx'
+import PrecioQueSube from '../componentes/PrecioQueSube.tsx'
 import { formatearFecha, formatearPrecio } from '../formato.ts'
 import type { Pedido, PedidoEspecial } from '../tipos.ts'
 import { mensajeDe } from '../ayudas.ts'
@@ -9,6 +11,8 @@ import { mensajeDe } from '../ayudas.ts'
 export default function MisPedidos() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [error, setError] = useState('')
+  // Encargar manda el id del pedido recién creado para resaltarlo.
+  const recienCreado = (useLocation().state as { recienCreado?: string } | null)?.recienCreado
 
   const [especiales, setEspeciales] = useState<PedidoEspecial[]>([])
 
@@ -45,7 +49,8 @@ export default function MisPedidos() {
             <div className="formulario" style={{ padding: 16 }}>
               <h3>{especial.descripcion}</h3>
               <p>Para el {formatearFecha(especial.fecha)} · {especial.estado}</p>
-              {especial.precioCentavos !== null && <strong>{formatearPrecio(especial.precioCentavos)}</strong>}
+              {especial.precioCentavos !== null &&
+                (especial.estado === 'cotizado' ? <PrecioQueSube centavos={especial.precioCentavos} /> : <strong>{formatearPrecio(especial.precioCentavos)}</strong>)}
               {especial.estado === 'cotizado' && (
                 <div className="fila">
                   <md-button color="filled" onClick={() => responder(especial.id, true)}>Aceptar</md-button>
@@ -59,7 +64,7 @@ export default function MisPedidos() {
       {pedidos.length > 0 && <h2>Pedidos</h2>}
       <div className="rejilla">
         {pedidos.map(pedido => (
-          <md-card key={pedido.id} variant="outlined">
+          <md-card key={pedido.id} variant="outlined" className={pedido.id === recienCreado ? 'recien-creado' : undefined}>
             <div className="formulario" style={{ padding: 16 }}>
               <h3>{pedido.nombreProducto} × {pedido.cantidad}</h3>
               <p>{formatearFecha(pedido.fecha)} {pedido.franja ?? ''}</p>

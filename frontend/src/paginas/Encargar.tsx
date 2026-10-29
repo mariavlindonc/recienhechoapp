@@ -14,6 +14,7 @@ export default function Encargar() {
   const [fecha, setFecha] = useState('')
   const [franja, setFranja] = useState('mañana')
   const [error, setError] = useState('')
+  const [enviando, setEnviando] = useState(false)
 
   useEffect(() => {
     obtenerProducto(id).then(setProducto)
@@ -24,9 +25,15 @@ export default function Encargar() {
 
   const enviar = (evento: FormEvent) => {
     evento.preventDefault()
+    if (enviando) return
+    setEnviando(true)
     crearPedido({ productoId: id, cantidad, fecha: fecha || undefined, franja: fecha ? franja : undefined })
-      .then(() => navegar('/mis-pedidos'))
-      .catch(errorPedido => setError(mensajeDe(errorPedido)))
+      // Mis pedidos resalta el que se acaba de crear.
+      .then(pedido => navegar('/mis-pedidos', { state: { recienCreado: pedido.id } }))
+      .catch(errorPedido => {
+        setError(mensajeDe(errorPedido))
+        setEnviando(false)
+      })
   }
 
   return (
@@ -39,7 +46,7 @@ export default function Encargar() {
         <md-select-option value="tarde"><div slot="headline">Tarde</div></md-select-option>
       </md-select>
       {error && <p className="aviso-error">{error}</p>}
-      <md-button color="filled" type="submit">Confirmar pedido</md-button>
+      <md-button color="filled" type="submit" aria-busy={enviando}>{enviando ? 'Encargando…' : 'Confirmar pedido'}</md-button>
     </form>
   )
 }
