@@ -66,6 +66,62 @@ func TestUnaFallaDeConexionSacaLaInstanciaSinEsperarAlChequeo(prueba *testing.T)
 	}
 }
 
+func TestSiCortaElClienteLaInstanciaSigueEnElBalanceo(prueba *testing.T) {
+	lenta, _ := instanciaFalsa(prueba, "lenta", 2*time.Second)
+	otra, _ := instanciaFalsa(prueba, "otra", 0)
+	balanceador := nuevoProxyBalanceado("notificaciones", []*url.URL{lenta, otra}, time.Second, nil)
+	contexto, cortar := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cortar()
+	pedido := httptest.NewRequest(http.MethodGet, "/notificaciones/x", nil).WithContext(contexto)
+	pedido.Header.Set("X-API-Key", "clave-a")
+
+	routerConBalanceador(balanceador).ServeHTTP(httptest.NewRecorder(), pedido)
+
+	balanceador.mutex.Lock()
+	defer balanceador.mutex.Unlock()
+	if !balanceador.sanas[0] {
+		prueba.Error("la instancia salió del balanceo, pero el que cortó fue el cliente")
+	}
+}
+
+func TestSiVenceElTiempoDelGatewayLaInstanciaSale(prueba *testing.T) {
+	lenta, _ := instanciaFalsa(prueba, "lenta", 2*time.Second)
+	otra, _ := instanciaFalsa(prueba, "otra", 0)
+	balanceador := nuevoProxyBalanceado("notificaciones", []*url.URL{lenta, otra}, 50*time.Millisecond, nil)
+
+	comprobarNoDisponible(prueba, pedir(routerConBalanceador(balanceador), http.MethodGet, "/notificaciones/x", ""))
+
+	balanceador.mutex.Lock()
+	defer balanceador.mutex.Unlock()
+	if balanceador.sanas[0] {
+		prueba.Error("la instancia que no respondió a tiempo tenía que salir del balanceo")
+	}
+}
+
+func TestLaMetricaInicialNoPisaUnaFallaAnterior(prueba *testing.T) {
+	uno, _ := instanciaFalsa(prueba, "uno", 0)
+	dos, _ := instanciaFalsa(prueba, "dos", 0)
+	balanceador := nuevoProxyBalanceado("notificaciones", []*url.URL{uno, dos}, time.Second, nil)
+	var mutex sync.Mutex
+	ultimo := map[string]bool{}
+	balanceador.alCambiarSalud = func(instancia string, sana bool) {
+		mutex.Lock()
+		defer mutex.Unlock()
+		ultimo[instancia] = sana
+	}
+	balanceador.sacarPorFalla(0, errChequeo)
+
+	contexto, apagar := context.WithCancel(context.Background())
+	apagar()
+	balanceador.vigilar(contexto, time.Hour, time.Second)
+
+	mutex.Lock()
+	defer mutex.Unlock()
+	if ultimo[uno.Host] || !ultimo[dos.Host] {
+		prueba.Errorf("valores publicados = %v, se esperaba uno caída y dos sana", ultimo)
+	}
+}
+
 func TestConUnaSolaInstanciaUnaFallaNoLaSaca(prueba *testing.T) {
 	lenta, _ := instanciaFalsa(prueba, "lenta", 200*time.Millisecond)
 	balanceador := nuevoProxyBalanceado("pedidos", []*url.URL{lenta}, 50*time.Millisecond, nil)

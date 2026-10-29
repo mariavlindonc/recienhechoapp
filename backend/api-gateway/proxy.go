@@ -46,6 +46,11 @@ type proxyBalanceado struct {
 // claveInstancia guarda en el contexto de la solicitud la instancia elegida.
 type claveInstancia struct{}
 
+// errTiempoAgotado es la causa del corte cuando vence el tiempo máximo del
+// gateway, para distinguirlo de un cliente que corta (por cancelación o por su
+// propio plazo).
+var errTiempoAgotado = errors.New("la instancia no respondió a tiempo")
+
 // Todas las instancias arrancan sanas: el primer chequeo corrige las que no lo están.
 func nuevoProxyBalanceado(servicio string, instancias []*url.URL, tiempoMaximo time.Duration, alTerminar func(instancia string, estado int)) *proxyBalanceado {
 	balanceador := &proxyBalanceado{
@@ -76,7 +81,7 @@ func (balanceador *proxyBalanceado) ServeHTTP(escritor http.ResponseWriter, pedi
 		responderNoDisponible(escritor)
 		return
 	}
-	contexto, cancelar := context.WithTimeout(pedido.Context(), balanceador.tiempoMaximo)
+	contexto, cancelar := context.WithTimeoutCause(pedido.Context(), balanceador.tiempoMaximo, errTiempoAgotado)
 	defer cancelar()
 	contexto = context.WithValue(contexto, claveInstancia{}, elegida)
 
@@ -131,7 +136,7 @@ func (balanceador *proxyBalanceado) responderFalla(escritor http.ResponseWriter,
 		"destino", balanceador.servicio,
 		"instancia", balanceador.instancias[indice].Host,
 		"metodo", pedido.Method, "ruta", pedido.URL.Path, "error", err)
-	if !errors.Is(err, context.Canceled) {
+	if causa := context.Cause(pedido.Context()); causa == nil || errors.Is(causa, errTiempoAgotado) {
 		balanceador.sacarPorFalla(indice, err)
 	}
 	responderNoDisponible(escritor)
@@ -189,11 +194,14 @@ func (balanceador *proxyBalanceado) cambiarSalud(indice int, sana bool, motivo s
 // MongoDB, que comparten las instancias: una caída de Mongo las sacaría a todas.
 func (balanceador *proxyBalanceado) vigilar(contexto context.Context, intervalo, tiempoMaximo time.Duration) {
 	cliente := &http.Client{Timeout: tiempoMaximo}
+	// Con el mutex: un reenvío fallido al arrancar no queda pisado por el valor inicial.
+	balanceador.mutex.Lock()
 	if balanceador.alCambiarSalud != nil {
-		for _, instancia := range balanceador.instancias {
-			balanceador.alCambiarSalud(instancia.Host, true)
+		for indice, instancia := range balanceador.instancias {
+			balanceador.alCambiarSalud(instancia.Host, balanceador.sanas[indice])
 		}
 	}
+	balanceador.mutex.Unlock()
 	reloj := time.NewTicker(intervalo)
 	defer reloj.Stop()
 	for {
