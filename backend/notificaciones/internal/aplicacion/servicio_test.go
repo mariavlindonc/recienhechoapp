@@ -226,6 +226,20 @@ func TestProcesarPendientesEnviaYMarcaEnviada(prueba *testing.T) {
 	}
 }
 
+func TestElApagadoDuranteElEnvioNoPierdeElEstado(prueba *testing.T) {
+	entorno := nuevoEscenario()
+	creada, _ := entorno.servicio.Crear(contexto, "grupo-a", "clave-1", solicitudValida())
+	contextoDelProceso, apagar := context.WithCancel(contexto)
+	entorno.remitente.alEnviar = apagar
+
+	entorno.servicio.ProcesarPendientes(contextoDelProceso)
+
+	guardada, _ := entorno.servicio.Obtener(contexto, "grupo-a", creada.ID)
+	if guardada.Estado != dominio.EstadoEnviada {
+		prueba.Errorf("estado = %s, se esperaba enviada", guardada.Estado)
+	}
+}
+
 func TestProcesarPendientesEnviaTodasLasListas(prueba *testing.T) {
 	entorno := nuevoEscenario()
 	entorno.servicio.Crear(contexto, "grupo-a", "clave-1", solicitudValida())

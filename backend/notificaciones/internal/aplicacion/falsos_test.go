@@ -82,7 +82,11 @@ func (repositorio *repositorioEnMemoria) TomarPendiente(_ context.Context, ahora
 	return dominio.Notificacion{}, false, nil
 }
 
-func (repositorio *repositorioEnMemoria) Actualizar(_ context.Context, notificacion dominio.Notificacion) error {
+func (repositorio *repositorioEnMemoria) Actualizar(contexto context.Context, notificacion dominio.Notificacion) error {
+	// Como MongoDB, no guarda con el contexto cancelado.
+	if err := contexto.Err(); err != nil {
+		return err
+	}
 	repositorio.mutex.Lock()
 	defer repositorio.mutex.Unlock()
 	if _, existe := repositorio.notificaciones[notificacion.ID]; !existe {
@@ -99,13 +103,18 @@ func (repositorio *repositorioEnMemoria) cantidad() int {
 }
 
 // remitenteFalso cumple puertos.Remitente: anota lo que le piden enviar y
-// devuelve, en orden, los errores programados (nil cuando se acaban).
+// devuelve, en orden, los errores programados (nil cuando se acaban). Si tiene
+// alEnviar, lo llama durante el envío.
 type remitenteFalso struct {
 	enviados []puertos.Mensaje
 	errores  []error
+	alEnviar func()
 }
 
 func (remitente *remitenteFalso) Enviar(_ context.Context, mensaje puertos.Mensaje) error {
+	if remitente.alEnviar != nil {
+		remitente.alEnviar()
+	}
 	remitente.enviados = append(remitente.enviados, mensaje)
 	if len(remitente.errores) == 0 {
 		return nil
