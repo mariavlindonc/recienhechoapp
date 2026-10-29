@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type SyntheticEvent } from 'react'
 import { useParams } from 'react-router'
 import { guardarReceta, obtenerReceta } from '../../api.ts'
 import type { Ingrediente } from '../../tipos.ts'
@@ -12,6 +12,11 @@ export default function Receta() {
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([])
   const [nuevo, setNuevo] = useState(VACIO)
   const [error, setError] = useState('')
+  // Actualiza sobre el estado más nuevo: dos cambios seguidos no se pisan.
+  const cambiar = (campo: keyof typeof VACIO) => (evento: SyntheticEvent) => {
+    const valor = valorDe(evento)
+    setNuevo(anteriores => ({ ...anteriores, [campo]: valor }))
+  }
 
   useEffect(() => {
     obtenerReceta(id).then(setIngredientes).catch(errorReceta => setError(mensajeDe(errorReceta)))
@@ -39,9 +44,9 @@ export default function Receta() {
         ))}
       </ul>
       <form className="formulario" onSubmit={agregar}>
-        <md-text-field label="Ingrediente" value={nuevo.ingrediente} onInput={evento => setNuevo({ ...nuevo, ingrediente: valorDe(evento) })} required></md-text-field>
-        <md-text-field label="Cantidad" type="number" min="1" value={nuevo.cantidad} onInput={evento => setNuevo({ ...nuevo, cantidad: valorDe(evento) })} required></md-text-field>
-        <md-select label="Unidad" value={nuevo.unidad} onChange={evento => setNuevo({ ...nuevo, unidad: valorDe(evento) as Ingrediente['unidad'] })}>
+        <md-text-field label="Ingrediente" value={nuevo.ingrediente} onInput={cambiar('ingrediente')} required></md-text-field>
+        <md-text-field label="Cantidad" type="number" min="1" value={nuevo.cantidad} onInput={cambiar('cantidad')} required></md-text-field>
+        <md-select label="Unidad" value={nuevo.unidad} onChange={cambiar('unidad')}>
           <md-select-option value="g"><div slot="headline">gramos</div></md-select-option>
           <md-select-option value="ml"><div slot="headline">mililitros</div></md-select-option>
           <md-select-option value="unidad"><div slot="headline">unidades</div></md-select-option>

@@ -36,7 +36,10 @@ export default function Especiales() {
               {especial.precioCentavos !== null && <strong>{formatearPrecio(especial.precioCentavos)}</strong>}
               {especial.estado === 'solicitado' && (
                 <>
-                  <md-text-field label="Precio (pesos)" type="number" value={precios[especial.id] ?? ''} onInput={evento => setPrecios({ ...precios, [especial.id]: valorDe(evento) })}></md-text-field>
+                  <md-text-field label="Precio (pesos)" type="number" value={precios[especial.id] ?? ''} onInput={evento => {
+                    const valor = valorDe(evento)
+                    setPrecios(anteriores => ({ ...anteriores, [especial.id]: valor }))
+                  }}></md-text-field>
                   <md-button color="filled" onClick={() => cotizar(especial)}>Cotizar</md-button>
                 </>
               )}
