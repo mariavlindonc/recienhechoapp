@@ -57,7 +57,9 @@ func ejecutar() error {
 	}()
 
 	medidor := nuevasMetricas()
-	proxyNotificaciones := nuevoProxyBalanceado("notificaciones", configuracion.instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones"))
+	limite := nuevoLimitador(configuracion.limitePorMinuto, time.Minute, time.Now)
+	proxyNotificaciones := limitarPorGrupo(limite, configuracion.clavesAPI,
+		nuevoProxyBalanceado("notificaciones", configuracion.instanciasNotificaciones, tiempoMaximoServicios, medidor.contarReenvio("notificaciones")))
 	proxyPedidos := nuevoProxyBalanceado("pedidos", configuracion.instanciasPedidos, tiempoMaximoServicios, medidor.contarReenvio("pedidos"))
 	proxyProductos := nuevoProxyBalanceado("productos", configuracion.instanciasProductos, tiempoMaximoServicios, medidor.contarReenvio("productos"))
 	proxyUsuarios := nuevoProxyBalanceado("usuarios", configuracion.instanciasUsuarios, tiempoMaximoServicios, medidor.contarReenvio("usuarios"))

@@ -9,6 +9,23 @@ func variablesValidas() map[string]string {
 	return map[string]string{
 		"NOTIFICACIONES_URLS": "http://notificaciones:8084", "PEDIDOS_URLS": "http://pedidos:8083", "PRODUCTOS_URLS": "http://productos:8082",
 		"USUARIOS_URLS": "http://usuarios:8081", "JWT_SECRETO": secretoDePrueba,
+		"NOTIFICACIONES_CLAVES_API": "grupo-a:clave-a1, grupo-a:clave-a2,grupo-b:clave-b",
+	}
+}
+
+func TestLeerConfiguracionLeeElLimiteYLasClaves(prueba *testing.T) {
+	variables := variablesValidas()
+
+	leida, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
+
+	if err != nil || leida.limitePorMinuto != 60 || leida.clavesAPI["clave-a2"] != "grupo-a" || len(leida.clavesAPI) != 3 {
+		prueba.Fatalf("límite %d, claves %v, err %v", leida.limitePorMinuto, leida.clavesAPI, err)
+	}
+	for _, invalida := range []string{"0", "-1", "muchas"} {
+		variables["NOTIFICACIONES_LIMITE_POR_MINUTO"] = invalida
+		if _, err := leerConfiguracion(func(nombre string) string { return variables[nombre] }); err == nil {
+			prueba.Errorf("NOTIFICACIONES_LIMITE_POR_MINUTO=%q tenía que dar error", invalida)
+		}
 	}
 }
 
@@ -65,7 +82,7 @@ func TestParsearInstancias(prueba *testing.T) {
 }
 
 func TestLeerConfiguracionExigeLasDemasVariables(prueba *testing.T) {
-	for _, variable := range []string{"PEDIDOS_URLS", "PRODUCTOS_URLS", "USUARIOS_URLS", "JWT_SECRETO"} {
+	for _, variable := range []string{"PEDIDOS_URLS", "PRODUCTOS_URLS", "USUARIOS_URLS", "JWT_SECRETO", "NOTIFICACIONES_CLAVES_API"} {
 		variables := variablesValidas()
 		variables[variable] = "sin-esquema"
 

@@ -15,6 +15,8 @@ services:
       USUARIOS_URLS: http://usuarios:${USUARIOS_PORT}
       # Verifica los tokens que firma usuarios (ADR-016).
       JWT_SECRETO: ${JWT_SECRETO}
+      # Las mismas claves que notificaciones, para contar el límite por grupo (ADR-004).
+      NOTIFICACIONES_CLAVES_API: ${NOTIFICACIONES_CLAVES_API}
       # Destino de las trazas (ADR-006). Si Jaeger no está, el gateway funciona igual.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:

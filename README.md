@@ -16,7 +16,7 @@ Versión 0.2.0 (Entrega 2): `notificaciones` funcionando de punta a punta detrá
 
 | Componente | Estado |
 |---|---|
-| `notificaciones` | Implementado: `POST` y `GET /notificaciones` del contrato, idempotencia, clave de API por grupo, límite de uso, envío de mails en segundo plano con reintentos, MongoDB y SMTP |
+| `notificaciones` | Implementado: `POST` y `GET /notificaciones` del contrato, idempotencia, clave de API por grupo, límite de uso (lo aplica el api-gateway), envío de mails en segundo plano con reintentos, MongoDB y SMTP |
 | `api-gateway` | Reenvía `/notificaciones*` a `notificaciones`; `/pedidos*` y `/capacidad*` a `pedidos`; y `/productos*`, `/categorias*` e `/imagenes*` a `productos`, con timeout de 3 s (`503 no_disponible` si no responde). Todavía no enruta `/usuarios*` ni verifica los tokens de sesión ([ADR-016](docs/adr/ADR-016-autenticacion.md)) |
 | `pedidos` | Implementado: encargar (inmediato y programado) con reserva de cupo en una transacción, idempotencia, cancelar, avanzar estados, capacidad por día, inventario falso con disyuntor y reconfirmación, eventos a RabbitMQ por outbox |
 | `productos` | Implementado: catálogo con caché en Redis, búsqueda con Meilisearch sincronizada por outbox, ABM de categorías y productos, receta, subida de imágenes y ruta interna para `pedidos` |

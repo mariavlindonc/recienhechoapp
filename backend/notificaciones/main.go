@@ -98,9 +98,7 @@ func ejecutar() error {
 	// en traceparent) y así el middleware de logs ya ve el trace_id.
 	router.Use(otelgin.Middleware(nombreServicio, otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registro.Solicitudes(slog.Default()), medidor.Solicitudes())
 	api.Registrar(router, servicio, api.Configuracion{
-		ClavesAPI:       configuracion.clavesAPI,
-		LimitePorMinuto: configuracion.limitePorMinuto,
-		Ahora:           ahora,
+		ClavesAPI: configuracion.clavesAPI,
 		ChequearSalud: func(contextoSalud context.Context) error {
 			contextoSalud, cancelarSalud := context.WithTimeout(contextoSalud, esperaSalud)
 			defer cancelarSalud()
