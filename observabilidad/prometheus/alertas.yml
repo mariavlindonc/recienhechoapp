@@ -57,3 +57,15 @@ groups:
         annotations:
           resumen: El disyuntor del inventario está abierto
           descripcion: El proveedor de inventario no responde. Los pedidos nuevos quedan pendiente_confirmacion y se reconfirman cuando vuelva (ADR-010).
+
+  - name: productos
+    rules:
+      # RNF1: un cambio en un producto aparece en la búsqueda en menos de 10 s (ADR-008).
+      - alert: BusquedaAtrasada
+        expr: indice_pendiente_antiguedad_segundos > 10
+        for: 1m
+        labels:
+          severidad: aviso
+        annotations:
+          resumen: Hay cambios de productos que tardan más de 10 s en aparecer en la búsqueda
+          descripcion: Meilisearch está caído o lento. Los cambios esperan en la bandeja indice_pendiente y se aplican solos cuando vuelve; revisar el log "no se pudo reflejar cambios en la búsqueda".

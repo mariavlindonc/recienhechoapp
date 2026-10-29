@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado por Agustín el 26/10/2026; se implementa con `productos`, para la presentación.
+Aceptado por Agustín el 26/10/2026. Implementado con `productos` el mismo día; lo marcado con *(propuesto)* se confirma en el PR.
 
 ## Contexto
 
@@ -31,7 +31,8 @@ El retraso máximo entre un cambio en `productos` y su aparición en la búsqued
 | `precioCentavos`, `creadoEn` | Orden |
 | `imagenUrl`, `anticipacionMinimaDias` | Solo se muestran |
 
-- Los productos dados de baja se borran del índice; los no disponibles quedan con `disponible: false` y el frontend filtra por defecto los disponibles.
+- Los productos dados de baja se borran del índice; los no disponibles quedan con `disponible: false` y el frontend filtra por defecto los disponibles (`disponible=true` en la búsqueda).
+- `categoria` es el nombre de la categoría. Las categorías son una tabla con ABM del vendedor ([ADR-002](ADR-002-persistencia.md)): renombrar una vuelve a indexar sus productos, por la misma bandeja de salida.
 - Paginación por número de página, 20 por página.
 - La búsqueda entra por el api-gateway a `productos` (`GET /productos/busqueda`), que consulta Meilisearch. El frontend no habla con el motor.
 
@@ -65,3 +66,40 @@ Si la cátedra espera Elasticsearch, se cambia el adaptador del motor y el conte
 - La búsqueda tiene consistencia eventual: hasta 10 segundos de retraso aceptados.
 - `productos` tiene que mantener el outbox y el proceso que lo vacía.
 - El precio que se ve en la búsqueda puede estar unos segundos desactualizado; el que vale es el que `pedidos` pide a `productos` al crear el pedido ([ADR-002](ADR-002-persistencia.md)).
+
+## Validación (implementación de productos, 26/10/2026)
+
+Cliente oficial `github.com/meilisearch/meilisearch-go` v0.36.3; servidor `getmeili/meilisearch:v1.54.3`.
+
+**API:** `GET /productos/busqueda` con estos parámetros:
+
+| Parámetro | Para qué |
+|---|---|
+| `q` | Texto a buscar |
+| `categoria` | Nombre de la categoría |
+| `precioMin`, `precioMax` | Rango de precio, en centavos |
+| `aptoCeliacos`, `disponible` | `true` o `false` |
+| `orden` | `precio_asc`, `precio_desc` o `novedad`; sin él, por relevancia |
+| `pagina` | Desde 1 |
+
+Responde `{productos, pagina, porPagina, total}`.
+
+**Medido:**
+- Tests de integración contra Meilisearch real (`MEILI_URL_TEST`):
+  - "limon" encuentra "limón", y "chocolte" encuentra "chocolate";
+  - cumple el criterio de aceptación de C3 (tortas de la más barata a la más cara);
+  - un nombre de categoría con comillas no puede cambiar el filtro, porque los valores van escapados;
+  - mientras se reconstruye, la búsqueda sigue con el índice vigente.
+- Prueba de punta a punta con el compose:
+  - un producto nuevo aparece en la búsqueda a los 3 s;
+  - con Meilisearch detenido, la búsqueda responde `503 busqueda_no_disponible` y el catálogo sigue respondiendo;
+  - un cambio de precio hecho en ese momento aparece solo 2 s después de que Meilisearch vuelve.
+- La métrica `indice_pendiente_antiguedad_segundos` mide el retraso. *(propuesto)* La alerta `BusquedaAtrasada` se dispara si pasa los 10 s durante 1 minuto.
+
+**Decisiones de implementación** *(propuesto)*:
+- `creadoEn` se guarda como milisegundos desde 1970, para ordenar por novedad.
+- Guardar y borrar esperan a que Meilisearch termine la tarea, revisando cada 50 ms y hasta 30 s. Recién ahí se borran las filas de la bandeja. Cada búsqueda se corta a los 2 s.
+- Si Meilisearch no responde al arrancar, `productos` arranca igual y reintenta configurar el índice cada 5 s. Mientras tanto, los cambios esperan en la bandeja.
+- La bandeja se lee de a 100 filas, y la misma vuelta sigue mientras el lote venga lleno: renombrar una categoría con cientos de productos se refleja en una sola vuelta. Si un producto aparece varias veces, vale su última operación. Si al indexarlo ya no existe, se borra del índice.
+- La reconstrucción carga el índice `productos_reconstruccion`, lo intercambia con `productos` y borra el viejo. Si falla, descarta el nuevo y el vigente no cambia. El comando es `docker compose exec productos /servicio reindexar`.
+- Con dos instancias de `productos`, las dos pueden procesar las mismas filas. No hace daño, porque guardar y borrar se pueden repetir. Un producto que cambia mientras corre `reindexar` puede quedar desactualizado hasta su próximo cambio.

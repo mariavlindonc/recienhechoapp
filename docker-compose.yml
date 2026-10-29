@@ -11,11 +11,12 @@ services:
       # Instancias de notificaciones entre las que reparte el gateway (ADR-012).
       NOTIFICACIONES_URLS: http://notificaciones:${NOTIFICACIONES_PORT}
       PEDIDOS_URLS: http://pedidos:${PEDIDOS_PORT}
+      PRODUCTOS_URLS: http://productos:${PRODUCTOS_PORT}
       # Destino de las trazas (ADR-006). Si Jaeger no está, el gateway funciona igual.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
-    depends_on: [notificaciones, pedidos]
+    depends_on: [notificaciones, pedidos, productos]
     networks: [interna]
 
   usuarios:
@@ -31,7 +32,71 @@ services:
     container_name: recienhecho-productos
     environment:
       PORT: ${PRODUCTOS_PORT}
+      GIN_MODE: release
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      # Cada operación con MySQL se corta a los 2 s (ADR-011).
+      MYSQL_DSN: ${PRODUCTOS_MYSQL_USUARIO}:${PRODUCTOS_MYSQL_CLAVE}@tcp(mysql-productos:3306)/productos?timeout=2s&readTimeout=2s&writeTimeout=2s
+      REDIS_URL: redis://redis-productos:6379/0
+      CACHE_HABILITADA: ${CACHE_HABILITADA}
+      MEILI_URL: http://meilisearch:7700
+      MEILI_CLAVE: ${MEILI_CLAVE}
+      IMAGENES_DIR: /datos/imagenes
+    volumes:
+      # Las fotos que sube el vendedor (ADR-002).
+      - productos-imagenes:/datos/imagenes
     # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
+    # Solo espera a MySQL: sin Redis lee de MySQL, y sin Meilisearch los cambios
+    # esperan en la bandeja del índice (ADR-011).
+    depends_on:
+      mysql-productos:
+        condition: service_healthy
+    networks: [interna]
+
+  # Base propia de productos (ADR-002). La clave de root es al azar: el servicio
+  # usa su propio usuario.
+  mysql-productos:
+    image: mysql:8.4.10
+    container_name: recienhecho-mysql-productos
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+      MYSQL_DATABASE: productos
+      MYSQL_USER: ${PRODUCTOS_MYSQL_USUARIO}
+      MYSQL_PASSWORD: ${PRODUCTOS_MYSQL_CLAVE}
+    volumes:
+      - mysql-productos-datos:/var/lib/mysql
+    ports:
+      # Solo desde esta compu (127.0.0.1), como las demás bases (ADR-006).
+      - "127.0.0.1:${PRODUCTOS_MYSQL_PORT}:3306"
+    # Por TCP: el servidor temporal que MySQL levanta para inicializarse no
+    # escucha en la red, así que no da un "listo" falso.
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --protocol=tcp -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [interna]
+
+  # Caché del catálogo (ADR-009). Sin volumen: lo que guarda se puede perder.
+  redis-productos:
+    image: redis:7.4.11
+    container_name: recienhecho-redis-productos
+    ports:
+      # Solo desde esta compu (127.0.0.1): no tiene clave.
+      - "127.0.0.1:${PRODUCTOS_REDIS_PORT}:6379"
+    networks: [interna]
+
+  # Motor de búsqueda de productos (ADR-008). Su web sirve para probar búsquedas.
+  meilisearch:
+    image: getmeili/meilisearch:v1.54.3
+    container_name: recienhecho-meilisearch
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_CLAVE}
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meilisearch-datos:/meili_data
+    ports:
+      # Solo desde esta compu (127.0.0.1), como las demás herramientas de desarrollo (ADR-006).
+      - "127.0.0.1:${MEILI_PORT}:7700"
     networks: [interna]
 
   pedidos:
@@ -222,6 +287,9 @@ volumes:
   mongo-notificaciones-datos:
   mongo-pedidos-datos:
   rabbitmq-datos:
+  mysql-productos-datos:
+  meilisearch-datos:
+  productos-imagenes:
 
 networks:
   interna:

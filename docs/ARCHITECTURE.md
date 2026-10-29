@@ -28,7 +28,7 @@ flowchart TB
 
 ### Diagrama de contenedores
 
-Los componentes con borde continuo ya están en el `docker-compose` (Entrega 2). Los de borde punteado están decididos en los ADRs y se suman para la presentación ([ADR-002](adr/ADR-002-persistencia.md), [ADR-003](adr/ADR-003-comunicacion-entre-servicios.md), [ADR-008](adr/ADR-008-busqueda.md), [ADR-009](adr/ADR-009-cache.md)). `usuarios`, `productos` y `pedidos` existen, pero por ahora solo responden `/health`.
+Los componentes con borde continuo ya están en el `docker-compose`. Los de borde punteado están decididos en los ADRs y se suman para la presentación ([ADR-002](adr/ADR-002-persistencia.md)). `usuarios` existe, pero por ahora solo responde `/health`.
 
 Desde afuera solo se entra por el api-gateway (`localhost:8080`). Los servicios no publican puerto, y las herramientas de desarrollo (MongoDB, Mailpit, Jaeger, Prometheus, Grafana) se ven solo desde la propia computadora ([ADR-006](adr/ADR-006-observabilidad.md), [ADR-012](adr/ADR-012-balanceo-de-carga.md)).
 
@@ -42,8 +42,8 @@ flowchart TB
         frontend["Frontend web"]
         gateway["api-gateway<br/>Go + Gin<br/>entrada, proxy con timeout, ruteo"]
         usuarios["usuarios<br/>Go + Gin"]
-        productos["productos<br/>Go + Gin"]
-        pedidos["pedidos<br/>Go + Gin"]
+        productos["productos<br/>Go + Gin, hexagonal"]
+        pedidos["pedidos<br/>Go + Gin, hexagonal"]
         notificaciones["notificaciones<br/>Go + Gin, hexagonal"]
         busqueda[("Meilisearch<br/>búsqueda")]
         myU[("MySQL<br/>usuarios")]
@@ -84,13 +84,17 @@ flowchart TB
     notificaciones -- "SMTP" --> correo
     gateway -. "trazas (OTLP)" .-> jaeger
     notificaciones -. "trazas (OTLP)" .-> jaeger
+    pedidos -. "trazas (OTLP)" .-> jaeger
+    productos -. "trazas (OTLP)" .-> jaeger
     prometheus -. "lee /metrics" .-> gateway
     prometheus -. "lee /metrics" .-> notificaciones
+    prometheus -. "lee /metrics" .-> pedidos
+    prometheus -. "lee /metrics" .-> productos
     grafana --> prometheus
     grafana --> jaeger
 
     classDef propuesto stroke-dasharray: 5 5
-    class frontend,busqueda,myU,myP,redis,mongoPed,rabbit propuesto
+    class frontend,myU propuesto
 ```
 
 ## Servicios
@@ -107,7 +111,7 @@ Cada servicio es el único dueño de sus datos ([ADR-001](adr/ADR-001-limites-de
 
 La capacidad de producción vive en `pedidos` porque reservar el cupo y crear el pedido tienen que ser una sola operación atómica: es la operación del sistema que no puede duplicar ni perder información.
 
-Cada servicio vive en `backend/<servicio>/`, con su propio `go.mod` y `Dockerfile`, y ningún servicio importa código de otro. `notificaciones` y `pedidos` son hexagonales (dominio, aplicación, puertos y adaptadores) y el api-gateway es un proxy sin dominio; la arquitectura interna de cada uno está en [ADR-007](adr/ADR-007-arquitectura-interna.md). `usuarios` y `productos` por ahora solo responden `/health`. El puerto de la tabla es el interno: desde afuera solo se entra por el api-gateway.
+Cada servicio vive en `backend/<servicio>/`, con su propio `go.mod` y `Dockerfile`, y ningún servicio importa código de otro. `notificaciones`, `pedidos` y `productos` son hexagonales (dominio, aplicación, puertos y adaptadores) y el api-gateway es un proxy sin dominio; la arquitectura interna de cada uno está en [ADR-007](adr/ADR-007-arquitectura-interna.md). `usuarios` por ahora solo responde `/health`. El puerto de la tabla es el interno: desde afuera solo se entra por el api-gateway, salvo `GET /internos/productos/{id}`, que `pedidos` llama dentro del compose y el gateway no enruta ([ADR-003](adr/ADR-003-comunicacion-entre-servicios.md)).
 
 ### Estados de un pedido
 
@@ -153,9 +157,9 @@ Exchange `pedidos` (topic), cola quorum `notificaciones.pedidos` con hasta 3 ree
 Decisiones en [ADR-006](adr/ADR-006-observabilidad.md) (D11).
 
 - **Logs:** api-gateway y notificaciones escriben una línea JSON por evento en la salida estándar (`docker compose logs`), con `servicio` y, cuando hay una traza activa, `trace_id` y `span_id`. Cada solicitud HTTP deja una línea con `metodo`, `ruta`, `estado` y `duracion_ms`, y cada envío fallido de una notificación, una con `id`, `intento`, `resultado` y `error` (con los emails tapados). No se registran claves de API, claves de idempotencia, destinatarios ni contenidos de mails.
-- **Trazas:** OpenTelemetry en api-gateway, pedidos y notificaciones, exportadas por OTLP a Jaeger (http://localhost:16686). Una solicitud a `POST /notificaciones` por el gateway queda como una sola traza: api-gateway → reenvío HTTP → notificaciones → comandos de MongoDB. Los logs de esa solicitud llevan el mismo `trace_id`. Un `POST /pedidos` también queda como una sola traza, que sigue por RabbitMQ (el `traceparent` viaja en los headers del mensaje) hasta el consumidor de notificaciones. Si Jaeger está caído, los servicios siguen funcionando y solo se pierden las trazas.
-- **Métricas:** cada servicio publica `/metrics` en un puerto interno (9464) que no sale del compose; Prometheus lo lee cada 15 s. Las dos tienen `solicitudes_http_total` por método, ruta y estado, y `duracion_solicitud_http_segundos` por método y ruta. El gateway suma `gateway_solicitudes_total` por instancia (reparto del balanceo, ADR-012) y notificaciones suma `notificaciones_envios_total` por resultado (`enviada`, `reintento`, `fallida`), que la aplicación avisa por el puerto `Eventos`: el adaptador `eventos` decide qué contar y qué loguear, así la aplicación no depende de Prometheus ni de `slog`.
-- **Alertas** (`observabilidad/prometheus/alertas.yml`): `NotificacionesFallidas` (más de 5 en 10 minutos), `InventarioRechazaReservas`, `CircuitoDelInventarioAbierto`, `ObjetivoDeLatenciaIncumplido` (menos del 99 % de los `POST /notificaciones` en menos de 300 ms en la última hora) y `ServicioSinMetricas`.
+- **Trazas:** OpenTelemetry en api-gateway, pedidos, productos y notificaciones, exportadas por OTLP a Jaeger (http://localhost:16686). Una solicitud a `POST /notificaciones` por el gateway queda como una sola traza: api-gateway → reenvío HTTP → notificaciones → comandos de MongoDB. Los logs de esa solicitud llevan el mismo `trace_id`. Un `POST /pedidos` también queda como una sola traza, que sigue por RabbitMQ (el `traceparent` viaja en los headers del mensaje) hasta el consumidor de notificaciones. Si Jaeger está caído, los servicios siguen funcionando y solo se pierden las trazas.
+- **Métricas:** cada servicio publica `/metrics` en un puerto interno (9464) que no sale del compose; Prometheus lo lee cada 15 s. Las dos tienen `solicitudes_http_total` por método, ruta y estado, y `duracion_solicitud_http_segundos` por método y ruta. El gateway suma `gateway_solicitudes_total` por instancia (reparto del balanceo, ADR-012) y notificaciones suma `notificaciones_envios_total` por resultado (`enviada`, `reintento`, `fallida`), que la aplicación avisa por el puerto `Eventos`: el adaptador `eventos` decide qué contar y qué loguear, así la aplicación no depende de Prometheus ni de `slog`. Productos suma `cache_aciertos_total` y `cache_fallos_total` por tipo (la tasa de aciertos de [ADR-009](adr/ADR-009-cache.md)) e `indice_pendiente_antiguedad_segundos`, el retraso de la búsqueda (RNF1).
+- **Alertas** (`observabilidad/prometheus/alertas.yml`): `NotificacionesFallidas` (más de 5 en 10 minutos), `InventarioRechazaReservas`, `CircuitoDelInventarioAbierto`, `ObjetivoDeLatenciaIncumplido` (menos del 99 % de los `POST /notificaciones` en menos de 300 ms en la última hora), `BusquedaAtrasada` (un cambio de producto lleva más de 10 s sin aparecer en la búsqueda) y `ServicioSinMetricas`.
 - **Tablero:** Grafana (http://localhost:3000) con Prometheus y Jaeger como fuentes, cargados desde `observabilidad/grafana`: objetivo de latencia, solicitudes por segundo, errores 5xx, alertas disparadas, latencia p95, envíos por resultado y reparto por instancia.
 - **Acceso:** en desarrollo, las herramientas de observabilidad se ven solo desde la propia computadora (ADR-006).
 
@@ -176,4 +180,6 @@ Soluciones más simples que la ideal, elegidas a conciencia. Cada una dice qué 
 | **Los avisos se entregan "al menos una vez".** Si el servidor de correo acepta un mail pero falla el guardado del estado `enviada`, la notificación se vuelve a tomar cuando vence el apartado (2 minutos) y el mail sale dos veces. | El destinatario puede recibir un mail repetido, solo cuando MongoDB falla justo después de un envío exitoso. | Entre duplicar un aviso y perderlo, es preferible duplicarlo. Garantizar "exactamente una vez" con un servidor SMTP externo no es posible: el servidor no participa de nuestras transacciones. | No hay una solución completa. Se puede reducir la ventana reintentando el guardado del estado antes de soltar la notificación. |
 | **La identidad del usuario viaja en headers que nadie verifica.** `pedidos` lee `X-Id-Usuario`, `X-Email-Usuario` y `X-Rol-Usuario`, y el gateway los pasa tal cual los manda el cliente. | Cualquiera puede hacerse pasar por otro comprador o por el vendedor. | La autenticación todavía no está decidida ([ADR-016](adr/ADR-016-autenticacion.md), propuesto); con los headers, `pedidos` ya funciona como va a funcionar después. | Cuando exista la autenticación, el gateway arma esos headers a partir del token y descarta los que mande el cliente. `pedidos` no cambia. |
 | **Crear un pedido puede tardar más que el timeout del gateway.** Con `productos` lento, sus reintentos (3 × 1 s) más la reserva de insumos (1,5 s) superan los 3 s del gateway. | El comprador recibe `503` aunque el pedido se haya creado. | Si reintenta con la misma `Idempotency-Key`, recibe el pedido ya creado sin reservar de nuevo. | Ajustar los tiempos con los tests de carga ([ADR-013](adr/ADR-013-capacidad-y-costos.md)). |
+| **Las fotos de los productos están en un volumen de una sola máquina.** | Con `productos` repartido en varias máquinas, cada una vería solo las fotos que recibió. | Se despliega en una sola máquina, y el volumen lo comparten todas las instancias de esa máquina. | Pasar las fotos a un almacenamiento compartido (por ejemplo, tipo S3) cambiando solo el adaptador `imagenes` ([ADR-002](adr/ADR-002-persistencia.md)). |
+| **Renombrar una categoría no borra de la caché el detalle de sus productos.** | El detalle de un producto puede mostrar el nombre viejo de la categoría hasta 60 s. El catálogo y la búsqueda se actualizan enseguida. | Invalidar uno por uno exige listar los productos de la categoría, y el nombre viejo se ve poco tiempo. | Invalidar cada producto de la categoría al renombrarla, si molesta. |
 | **Los listados de pedidos no tienen paginación.** | Un comprador o un día con cientos de pedidos devuelven todo junto. | Alcanza para el volumen de una pastelería. | Agregar paginación cuando haga falta. |

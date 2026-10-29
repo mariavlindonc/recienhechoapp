@@ -14,7 +14,8 @@ import (
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/puertos"
 )
 
-const torta = `{"id":"torta","nombre":"Torta","precioCentavos":1250000,"anticipacionDias":3,"disponible":true,
+// torta tiene la forma de GET /internos/productos/{id} de productos.
+const torta = `{"id":"torta","nombre":"Torta","precioCentavos":1250000,"anticipacionMinimaDias":3,"disponible":true,
 	"receta":[{"ingrediente":"harina","cantidad":500,"unidad":"g"}]}`
 
 // servidor responde con los estados dados, uno por llamada, y después con el último.
@@ -24,7 +25,7 @@ func servidor(prueba *testing.T, estados ...int) (*Catalogo, *atomic.Int32) {
 	productos := httptest.NewServer(http.HandlerFunc(func(escritor http.ResponseWriter, pedido *http.Request) {
 		numero := int(llamadas.Add(1)) - 1
 		estado := estados[min(numero, len(estados)-1)]
-		if pedido.URL.Path != "/productos/torta" {
+		if pedido.URL.Path != "/internos/productos/torta" {
 			estado = http.StatusNotFound
 		}
 		escritor.WriteHeader(estado)
