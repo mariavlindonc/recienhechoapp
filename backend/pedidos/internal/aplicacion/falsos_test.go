@@ -37,12 +37,11 @@ func (repositorio *repositorioFalso) Registrar(_ context.Context, pedido dominio
 			return dominio.ErrPedidoRepetido
 		}
 	}
-	dia := repositorio.dias[pedido.Fecha]
-	if dia.Reservados+pedido.Unidades() > dia.Capacidad {
-		return dominio.ErrSinCupo
+	if !pedido.EsperaCotizacion() {
+		if err := repositorio.reservarCupo(pedido); err != nil {
+			return err
+		}
 	}
-	dia.Reservados += pedido.Unidades()
-	repositorio.dias[pedido.Fecha] = dia
 	repositorio.pedidos[pedido.ID] = pedido
 	repositorio.eventos = append(repositorio.eventos, puertos.EventoGuardado{Evento: evento})
 	return nil
@@ -58,6 +57,11 @@ func (repositorio *repositorioFalso) GuardarCambio(_ context.Context, cambio pue
 		return dominio.ErrModificadoAlMismoTiempo
 	}
 	pedido := cambio.Pedido
+	if cambio.ReservarCupo {
+		if err := repositorio.reservarCupo(pedido); err != nil {
+			return err
+		}
+	}
 	pedido.Version = cambio.VersionAnterior + 1
 	repositorio.pedidos[pedido.ID] = pedido
 	if cambio.LiberarCupo {
@@ -98,6 +102,23 @@ func (repositorio *repositorioFalso) ListarDeComprador(_ context.Context, idComp
 
 func (repositorio *repositorioFalso) ListarDelDia(_ context.Context, fecha string) ([]dominio.Pedido, error) {
 	return repositorio.filtrar(func(pedido dominio.Pedido) bool { return pedido.Fecha == fecha }), nil
+}
+
+func (repositorio *repositorioFalso) ListarEspecialesAbiertos(context.Context) ([]dominio.Pedido, error) {
+	return repositorio.filtrar(func(pedido dominio.Pedido) bool {
+		return pedido.EsperaCotizacion()
+	}), nil
+}
+
+// reservarCupo se llama con el mutex tomado.
+func (repositorio *repositorioFalso) reservarCupo(pedido dominio.Pedido) error {
+	dia := repositorio.dias[pedido.Fecha]
+	if dia.Reservados+pedido.Unidades() > dia.Capacidad {
+		return dominio.ErrSinCupo
+	}
+	dia.Reservados += pedido.Unidades()
+	repositorio.dias[pedido.Fecha] = dia
+	return nil
 }
 
 func (repositorio *repositorioFalso) filtrar(incluir func(dominio.Pedido) bool) []dominio.Pedido {

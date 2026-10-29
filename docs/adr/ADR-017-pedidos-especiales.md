@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto el 28/10/2026, con las opciones abiertas. Falta que el equipo elija en los tres puntos de abajo.
+Propuesto el 28/10/2026. Agustín pidió seguir lo que dicen los docs; el agente de código implementó la lectura más literal (abajo) en `feature/pedidos-especiales`. Falta que el equipo la confirme o elija otra opción.
 
 ## Contexto
 
@@ -14,7 +14,7 @@ Lo que ya está definido:
 - Los estados son `solicitado` → `cotizado` → `aceptado`, `rechazado` o `vencido`. Un especial aceptado "sigue como `pendiente_confirmacion`" ([ARCHITECTURE](../ARCHITECTURE.md)).
 - Un pedido normal reserva el cupo del día al entrar en `pendiente_confirmacion` y pasa a `confirmado` cuando el inventario reserva los insumos de la receta (R1, R3).
 
-Lo que no está definido, y por eso los pedidos especiales siguen en la memoria del navegador:
+Lo que los docs no definen:
 
 1. **Inventario al aceptar.** Un especial no tiene producto ni receta, así que no hay insumos que reservar, y el proceso que confirma pedidos no tiene qué mandarle al proveedor.
 2. **Cupo.** Cuánto cupo ocupa un especial: el cupo se cuenta en unidades de producto.
@@ -22,18 +22,26 @@ Lo que no está definido, y por eso los pedidos especiales siguen en la memoria 
 
 ## Decisión
 
-Pendiente. Se proponen las opciones de abajo. La recomendación, a confirmar por el equipo, es **A1, B1 y C1**: lo más corto que cumple el SPEC sin tocar el contrato con el proveedor.
+**Implementado, a confirmar:** un especial aceptado "sigue como `pendiente_confirmacion`" al pie de la letra, es decir, por el mismo camino que cualquier pedido:
 
-Rutas propuestas, bajo el mismo grupo que ya usa el gateway:
+- Se guarda como un pedido de tipo `especial` con un solo ítem (la descripción, cantidad 1) y sin insumos.
+- Al aceptar, reserva 1 unidad del cupo del día en la misma transacción (B1) y pasa a `pendiente_confirmacion`. Sin cupo, `409 sin_cupo` y sigue `cotizado`.
+- Lo confirma el proceso de siempre con el inventario, que recibe la lista de insumos vacía (variante de A3 sin insumos: no cambia el contrato ni el proceso).
+- Cada cambio publica `pedido.estado_cambiado` con el total (C1). `notificaciones` arma un mail propio para `solicitado`, `cotizado` (con el precio y las 48 h), `rechazado` y `vencido`.
+- Los especiales sin aceptar no aparecen en el calendario del día (`GET /pedidos?fecha=`).
+
+Si el equipo prefiere A1 (confirmar sin inventario) o A2 (confirma el vendedor), se cambia solo `ResponderEspecial` en la aplicación.
+
+Rutas:
 
 | Ruta | Quién | Qué hace |
 |---|---|---|
-| `POST /pedidos/especiales` | comprador | Solicita (`descripcion`, `fecha`, datos libres) con `Idempotency-Key` |
-| `GET /pedidos/especiales` | comprador: los suyos; vendedor: todos los `solicitado` y `cotizado` | Lista |
+| `POST /pedidos/especiales` | comprador | Solicita (`descripcion`, `fecha`) con `Idempotency-Key` |
+| `GET /pedidos/especiales` | vendedor | Lista los `solicitado` y `cotizado`; el comprador ve los suyos en `GET /pedidos` |
 | `PUT /pedidos/especiales/:id/cotizacion` | vendedor | Cotiza (`precioCentavos`) |
 | `POST /pedidos/especiales/:id/aceptacion` y `/rechazo` | comprador | Responde; después de 48 h, `409 cotizacion_vencida` |
 
-El vencimiento se calcula al leer o responder (cotizado hace más de 48 h es `vencido`), sin un proceso en segundo plano.
+El vencimiento se controla cuando el comprador responde, como pide el SPEC: pasadas 48 h desde la cotización, el especial queda `vencido` y la respuesta es `409 cotizacion_vencida`. No hay un proceso en segundo plano, así que hasta ese momento sigue figurando como `cotizado`.
 
 ## Alternativas consideradas
 
@@ -61,6 +69,6 @@ El vencimiento se calcula al leer o responder (cotizado hace más de 48 h es `ve
 
 ## Consecuencias
 
-- Hasta que se decida, el frontend guarda los especiales en la memoria del navegador: el vendedor no ve lo que pide el comprador desde otra pestaña o dispositivo.
-- Con A1 o A2, los especiales no pasan por el disyuntor del inventario ([ADR-011](ADR-011-resiliencia.md)).
-- Con C1, `notificaciones` tiene que tolerar el campo nuevo y el estado `cotizado`; hoy cae en el mensaje genérico "Tu pedido cambió de estado", que no dice el precio.
+- El evento suma el campo opcional `totalCentavos`; la versión sigue en 1 porque un consumidor viejo lo ignora ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
+- El proveedor de inventario recibe reservas sin insumos para los especiales. Cuando publique su contrato (D9) hay que confirmar que lo acepta; si no, se pasa a A1.
+- Con A1 o A2, los especiales no pasarían por el disyuntor del inventario ([ADR-011](ADR-011-resiliencia.md)).

@@ -58,8 +58,9 @@ type evento struct {
 			NombreProducto string `json:"nombreProducto"`
 			Cantidad       int    `json:"cantidad"`
 		} `json:"items"`
-		Fecha  string `json:"fecha"`
-		Motivo string `json:"motivo"`
+		Fecha         string `json:"fecha"`
+		Motivo        string `json:"motivo"`
+		TotalCentavos int64  `json:"totalCentavos"`
 	} `json:"datos"`
 }
 
@@ -209,6 +210,15 @@ func mensajeDe(recibido evento) (string, string) {
 	}
 	pedido := fmt.Sprintf("tu pedido (%s) para el %s", strings.Join(productos, ", "), datos.Fecha)
 	switch datos.EstadoNuevo {
+	// Pedidos especiales (C6, ADR-017).
+	case "solicitado":
+		return "Recibimos tu pedido especial", fmt.Sprintf("Recibimos %s. Te avisamos cuando lo coticemos.", pedido)
+	case "cotizado":
+		return "Cotizamos tu pedido especial", fmt.Sprintf("El precio de %s es $%d,%02d. Tenés 48 horas para aceptarlo.", pedido, datos.TotalCentavos/100, datos.TotalCentavos%100)
+	case "rechazado":
+		return "Rechazaste la cotización", fmt.Sprintf("Registramos que no aceptaste la cotización de %s.", pedido)
+	case "vencido":
+		return "La cotización venció", fmt.Sprintf("Pasaron más de 48 horas y venció la cotización de %s.", pedido)
 	case "pendiente_confirmacion":
 		return "Recibimos tu pedido", fmt.Sprintf("Recibimos %s. Te avisamos cuando esté confirmado.", pedido)
 	case "confirmado":

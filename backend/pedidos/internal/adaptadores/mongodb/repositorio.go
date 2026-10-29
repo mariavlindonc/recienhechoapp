@@ -133,25 +133,34 @@ func (repositorio *Repositorio) Registrar(contexto context.Context, pedido domin
 			}
 			return fmt.Errorf("insertar pedido: %w", err)
 		}
-		// Reserva condicional: solo suma si después de sumar no se pasa de la
-		// capacidad. Si el día no existe, su capacidad es 0 y no hay cupo.
-		resultado, err := repositorio.dias.UpdateOne(contexto,
-			bson.D{
-				{Key: "_id", Value: pedido.Fecha},
-				{Key: "$expr", Value: bson.D{{Key: "$lte", Value: bson.A{
-					bson.D{{Key: "$add", Value: bson.A{"$reservados", pedido.Unidades()}}}, "$capacidad",
-				}}}},
-			},
-			bson.D{{Key: "$inc", Value: bson.D{{Key: "reservados", Value: pedido.Unidades()}}}},
-		)
-		if err != nil {
-			return fmt.Errorf("reservar cupo del %s: %w", pedido.Fecha, err)
-		}
-		if resultado.MatchedCount == 0 {
-			return dominio.ErrSinCupo
+		if !pedido.EsperaCotizacion() {
+			if err := repositorio.reservarCupo(contexto, pedido); err != nil {
+				return err
+			}
 		}
 		return repositorio.guardarEvento(contexto, evento)
 	})
+}
+
+// reservarCupo es la reserva condicional: solo suma si después de sumar no se
+// pasa de la capacidad. Si el día no existe, su capacidad es 0 y no hay cupo.
+func (repositorio *Repositorio) reservarCupo(contexto context.Context, pedido dominio.Pedido) error {
+	resultado, err := repositorio.dias.UpdateOne(contexto,
+		bson.D{
+			{Key: "_id", Value: pedido.Fecha},
+			{Key: "$expr", Value: bson.D{{Key: "$lte", Value: bson.A{
+				bson.D{{Key: "$add", Value: bson.A{"$reservados", pedido.Unidades()}}}, "$capacidad",
+			}}}},
+		},
+		bson.D{{Key: "$inc", Value: bson.D{{Key: "reservados", Value: pedido.Unidades()}}}},
+	)
+	if err != nil {
+		return fmt.Errorf("reservar cupo del %s: %w", pedido.Fecha, err)
+	}
+	if resultado.MatchedCount == 0 {
+		return dominio.ErrSinCupo
+	}
+	return nil
 }
 
 // GuardarCambio reemplaza el pedido si sigue en la versión leída y, en la misma
@@ -167,6 +176,11 @@ func (repositorio *Repositorio) GuardarCambio(contexto context.Context, cambio p
 		}
 		if resultado.MatchedCount == 0 {
 			return dominio.ErrModificadoAlMismoTiempo
+		}
+		if cambio.ReservarCupo {
+			if err := repositorio.reservarCupo(contexto, cambio.Pedido); err != nil {
+				return err
+			}
 		}
 		if cambio.LiberarCupo {
 			_, err := repositorio.dias.UpdateOne(contexto,
@@ -227,8 +241,19 @@ func (repositorio *Repositorio) ListarDeComprador(contexto context.Context, idCo
 }
 
 // ListarDelDia devuelve los pedidos de esa fecha, en el orden en que se hicieron.
+// Los especiales sin aceptar no se producen: no aparecen.
 func (repositorio *Repositorio) ListarDelDia(contexto context.Context, fecha string) ([]dominio.Pedido, error) {
-	return repositorio.listar(contexto, bson.D{{Key: "fecha", Value: fecha}}, bson.D{{Key: "creadoEn", Value: 1}})
+	return repositorio.listar(contexto, bson.D{{Key: "fecha", Value: fecha}, {Key: "estado", Value: bson.D{{Key: "$nin", Value: estadosSinProduccion}}}}, bson.D{{Key: "creadoEn", Value: 1}})
+}
+
+var estadosSinProduccion = bson.A{dominio.EstadoSolicitado, dominio.EstadoCotizado, dominio.EstadoRechazado, dominio.EstadoVencido}
+
+// ListarEspecialesAbiertos devuelve los especiales que el vendedor tiene que cotizar
+// o que esperan respuesta del comprador, del más viejo al más nuevo.
+func (repositorio *Repositorio) ListarEspecialesAbiertos(contexto context.Context) ([]dominio.Pedido, error) {
+	return repositorio.listar(contexto,
+		bson.D{{Key: "tipo", Value: dominio.TipoEspecial}, {Key: "estado", Value: bson.D{{Key: "$in", Value: bson.A{dominio.EstadoSolicitado, dominio.EstadoCotizado}}}}},
+		bson.D{{Key: "creadoEn", Value: 1}})
 }
 
 // shortcut: los listados no tienen paginación; alcanza para el volumen de una

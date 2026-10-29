@@ -29,6 +29,7 @@ type DatosEstadoCambiado struct {
 	Items          []ItemEvento
 	Fecha          string
 	Motivo         string // de la cancelación, si hay
+	TotalCentavos  int64  // el precio, que el mail de la cotización le muestra al comprador (C6)
 }
 
 // NuevoEventoEstadoCambiado describe el estado actual del pedido y de cuál venía.
@@ -47,6 +48,7 @@ func NuevoEventoEstadoCambiado(id string, pedido Pedido, anterior Estado, ahora 
 			Items:          itemsDelEvento(pedido.Items),
 			Fecha:          pedido.Fecha,
 			Motivo:         pedido.MotivoCancelacion,
+			TotalCentavos:  pedido.TotalCentavos,
 		},
 	}
 }

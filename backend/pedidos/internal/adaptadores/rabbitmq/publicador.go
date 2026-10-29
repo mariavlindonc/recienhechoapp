@@ -56,6 +56,7 @@ type cuerpoDatos struct {
 	Items          []cuerpoItem `json:"items"`
 	Fecha          string       `json:"fecha"`
 	Motivo         string       `json:"motivo,omitempty"`
+	TotalCentavos  int64        `json:"totalCentavos,omitempty"`
 }
 
 type cuerpoItem struct {
@@ -86,6 +87,7 @@ func (publicador *Publicador) Publicar(contexto context.Context, guardado puerto
 			Items:          items,
 			Fecha:          datos.Fecha,
 			Motivo:         datos.Motivo,
+			TotalCentavos:  datos.TotalCentavos,
 		},
 	})
 	if err != nil {

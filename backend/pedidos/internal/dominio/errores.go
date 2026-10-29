@@ -15,4 +15,5 @@ var (
 	ErrPedidoRepetido              = errors.New("ya existe un pedido con esa clave de idempotencia")
 	ErrModificadoAlMismoTiempo     = errors.New("el pedido cambió mientras se lo modificaba")
 	ErrCapacidadMenorQueReservados = errors.New("la capacidad no puede ser menor a lo ya reservado")
+	ErrCotizacionVencida           = errors.New("la cotización venció")
 )
