@@ -26,35 +26,35 @@ function responder(estado: number, cuerpo: unknown) {
 }
 
 const productoDeApi = {
-  id: 'p1', nombre: 'Torta', descripcion: 'De limón', categoriaId: 'c1', categoria: 'Tortas',
+  id: 'p1', nombre: 'Budín de limón', descripcion: 'Con semillas de amapola y limones caramelizados', categoriaId: 'c1', categoria: 'Cítricos',
   precioCentavos: 850000, anticipacionMinimaDias: 2, aptoCeliacos: false, disponible: true, imagenUrl: '/imagenes/p1.png',
 }
 
 test('traduce el producto de productos a la forma de las pantallas', () => {
   const producto = aProducto(productoDeApi)
   expect(producto.anticipacionDias).toBe(2)
-  expect(producto.categoria).toBe('Tortas')
+  expect(producto.categoria).toBe('Cítricos')
   expect(producto.imagenUrl).toBe('/api/imagenes/p1.png')
 })
 
 test('un pedido con varios productos suma las cantidades y junta los nombres', () => {
   const pedido = aPedido({
     id: 'pd1', fecha: '2026-11-02', precioCentavos: 100, tipo: 'programado', estado: 'confirmado',
-    items: [{ productoId: 'p1', nombreProducto: 'Torta', cantidad: 1 }, { productoId: 'p2', nombreProducto: 'Budín', cantidad: 2 }],
+    items: [{ productoId: 'p1', nombreProducto: 'Budín de limón', cantidad: 1 }, { productoId: 'p2', nombreProducto: 'Budín de zanahoria', cantidad: 2 }],
   })
   expect(pedido.cantidad).toBe(3)
-  expect(pedido.nombreProducto).toBe('Torta, Budín')
+  expect(pedido.nombreProducto).toBe('Budín de limón, Budín de zanahoria')
 })
 
 test('la búsqueda manda los filtros como los espera productos (ADR-008)', async () => {
   const pedidos = responder(200, { productos: [productoDeApi], pagina: 1, porPagina: 20, total: 1 })
 
-  const pagina = await buscarProductos({ texto: 'torta', categoria: 'Tortas', precioMaximo: 900000, aptoCeliacos: true, orden: 'precio-asc' })
+  const pagina = await buscarProductos({ texto: 'limón', categoria: 'Cítricos', precioMaximo: 900000, aptoCeliacos: true, orden: 'precio-asc' })
 
   const url = new URL(pedidos[0]!.url, 'http://local')
   expect(url.pathname).toBe('/api/productos/busqueda')
-  expect(Object.fromEntries(url.searchParams)).toEqual({ q: 'torta', pagina: '1', disponible: 'true', categoria: 'Tortas', precioMax: '900000', aptoCeliacos: 'true', orden: 'precio_asc' })
-  expect(pagina.items[0]!.nombre).toBe('Torta')
+  expect(Object.fromEntries(url.searchParams)).toEqual({ q: 'limón', pagina: '1', disponible: 'true', categoria: 'Cítricos', precioMax: '900000', aptoCeliacos: 'true', orden: 'precio_asc' })
+  expect(pagina.items[0]!.nombre).toBe('Budín de limón')
 })
 
 test('con sesión manda el token y el pedido lleva Idempotency-Key', async () => {
@@ -81,7 +81,7 @@ test('un error del servicio llega con el mensaje del contrato', async () => {
 })
 
 test('los especiales sin aceptar van aparte; aceptados son un pedido más (ADR-017)', async () => {
-  const item = { productoId: '', nombreProducto: 'Torta temática', cantidad: 1 }
+  const item = { productoId: '', nombreProducto: 'Budín de zanahoria sin gluten con etiqueta para regalar', cantidad: 1 }
   responder(200, [
     { id: 'e1', items: [item], fecha: '2026-12-01', precioCentavos: 2500000, tipo: 'especial', estado: 'cotizado' },
     { id: 'e2', items: [item], fecha: '2026-12-02', precioCentavos: 2500000, tipo: 'especial', estado: 'confirmado' },
@@ -90,7 +90,7 @@ test('los especiales sin aceptar van aparte; aceptados son un pedido más (ADR-0
   const especiales = await listarEspeciales()
   const pedidos = await listarMisPedidos()
 
-  expect(especiales.map(especial => [especial.id, especial.descripcion, especial.precioCentavos])).toEqual([['e1', 'Torta temática', 2500000]])
+  expect(especiales.map(especial => [especial.id, especial.descripcion, especial.precioCentavos])).toEqual([['e1', 'Budín de zanahoria sin gluten con etiqueta para regalar', 2500000]])
   expect(pedidos.map(pedido => pedido.id)).toEqual(['e2'])
 })
 
