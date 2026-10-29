@@ -14,7 +14,13 @@ type configuracion struct {
 	instanciasNotificaciones []*url.URL
 	instanciasPedidos        []*url.URL
 	instanciasProductos      []*url.URL
+	instanciasUsuarios       []*url.URL
+	// secretoJWT es el mismo con el que usuarios firma los tokens (ADR-016).
+	secretoJWT []byte
 }
+
+// largoMinimoSecreto es el mínimo de JWT_SECRETO, igual que en usuarios (ADR-016).
+const largoMinimoSecreto = 32
 
 // leerConfiguracion recibe la función que busca cada variable (os.Getenv en el
 // servicio, un mapa en los tests). Junta todos los problemas en un solo error para
@@ -59,6 +65,19 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 			problemas = append(problemas, fmt.Errorf("PRODUCTOS_URLS: %w", err))
 		}
 		leida.instanciasProductos = instancias
+	}
+	if texto := obligatoria("USUARIOS_URLS"); texto != "" {
+		instancias, err := parsearInstancias(texto)
+		if err != nil {
+			problemas = append(problemas, fmt.Errorf("USUARIOS_URLS: %w", err))
+		}
+		leida.instanciasUsuarios = instancias
+	}
+	if secreto := obligatoria("JWT_SECRETO"); secreto != "" {
+		if len(secreto) < largoMinimoSecreto {
+			problemas = append(problemas, fmt.Errorf("JWT_SECRETO tiene que tener al menos %d bytes", largoMinimoSecreto))
+		}
+		leida.secretoJWT = []byte(secreto)
 	}
 
 	if len(problemas) > 0 {

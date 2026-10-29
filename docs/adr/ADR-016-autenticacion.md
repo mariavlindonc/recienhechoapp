@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto el 26/10/2026 con las opciones. Aceptado por Agustín el 28/10/2026: opción A, bcrypt y vendedor creado desde el `.env`. `usuarios` ya emite los tokens; falta que el api-gateway los verifique. Dónde guarda la sesión el frontend sigue pendiente.
+Propuesto el 26/10/2026 con las opciones. Aceptado por Agustín el 28/10/2026: opción A, bcrypt y vendedor creado desde el `.env`. El mismo día eligió el header `Authorization` para la sesión del frontend.
 
 ## Contexto
 
@@ -32,7 +32,16 @@ El token lleva `sub` (id del usuario), `email`, `rol`, `iat` y `exp`. Dependenci
 
 Ninguna respuesta incluye la contraseña ni su hash. Un email inexistente y una contraseña incorrecta responden igual y tardan lo mismo (se compara contra un hash de relleno), para no delatar qué emails tienen cuenta. El email se guarda en minúsculas y es único en MySQL.
 
-**Pendiente:** dónde guarda la sesión el frontend. Puede ser una cookie `HttpOnly` (JavaScript no la puede leer, pero hay que protegerse de CSRF) o la memoria del navegador con un header `Authorization` (más simple, pero un script inyectado en la página la puede leer). También falta definir qué ve el usuario cuando se vence la sesión. Se decide al implementar la verificación en el gateway.
+**Sesión en el frontend: header `Authorization: Bearer <token>`.** El frontend guarda el token en el navegador y lo manda en cada solicitud. El gateway lo verifica (firma HS256, `exp` obligatorio) y:
+
+| Caso | Respuesta del gateway |
+|---|---|
+| Sin `Authorization` | Pasa sin headers de identidad; el servicio decide si la ruta necesita sesión (`401 sin_sesion`) |
+| Token válido | Pasa con `X-Id-Usuario`, `X-Email-Usuario` y `X-Rol-Usuario` del token |
+| Token vencido | `401 sesion_vencida`; el frontend manda a ingresar |
+| Token inválido (firma, algoritmo, formato) | `401 sin_sesion` |
+
+La otra opción era una cookie `HttpOnly`: JavaScript no la puede leer, pero hay que protegerse de CSRF y cambia la respuesta del inicio de sesión. Con el header no hay CSRF, a cambio de que un script inyectado en la página pueda leer el token.
 
 ## Alternativas consideradas
 

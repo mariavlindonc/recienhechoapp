@@ -6,7 +6,10 @@ import (
 )
 
 func variablesValidas() map[string]string {
-	return map[string]string{"NOTIFICACIONES_URLS": "http://notificaciones:8084", "PEDIDOS_URLS": "http://pedidos:8083", "PRODUCTOS_URLS": "http://productos:8082"}
+	return map[string]string{
+		"NOTIFICACIONES_URLS": "http://notificaciones:8084", "PEDIDOS_URLS": "http://pedidos:8083", "PRODUCTOS_URLS": "http://productos:8082",
+		"USUARIOS_URLS": "http://usuarios:8081", "JWT_SECRETO": secretoDePrueba,
+	}
 }
 
 func TestLeerConfiguracionUsaValoresPorDefecto(prueba *testing.T) {
@@ -61,8 +64,8 @@ func TestParsearInstancias(prueba *testing.T) {
 	}
 }
 
-func TestLeerConfiguracionExigePedidosYProductos(prueba *testing.T) {
-	for _, variable := range []string{"PEDIDOS_URLS", "PRODUCTOS_URLS"} {
+func TestLeerConfiguracionExigeLasDemasVariables(prueba *testing.T) {
+	for _, variable := range []string{"PEDIDOS_URLS", "PRODUCTOS_URLS", "USUARIOS_URLS", "JWT_SECRETO"} {
 		variables := variablesValidas()
 		variables[variable] = "sin-esquema"
 
