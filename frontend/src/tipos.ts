@@ -9,7 +9,7 @@ export type EstadoPedido =
   | 'entregado'
   | 'cancelado'
 
-export type EstadoEspecial = 'solicitado' | 'cotizado' | 'aceptado' | 'rechazado' | 'vencido'
+export type EstadoEspecial = 'solicitado' | 'cotizado' | 'rechazado' | 'vencido'
 
 export type Producto = {
   id: string
@@ -43,17 +43,17 @@ export type Pedido = {
   fecha: string
   franja?: string
   precioCentavos: number
-  tipo: 'programado' | 'inmediato'
+  tipo: 'programado' | 'inmediato' | 'especial'
   estado: EstadoPedido
 }
 
+// Un especial aceptado pasa a ser un Pedido más (pendiente_confirmacion en adelante, ADR-017).
 export type PedidoEspecial = {
   id: string
   descripcion: string
   fecha: string
   estado: EstadoEspecial
   precioCentavos: number | null
-  cotizadoEn: string | null
 }
 
 export type FiltrosCatalogo = {

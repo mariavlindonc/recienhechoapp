@@ -45,5 +45,4 @@ No hay una librería oficial de Google con Material 3 Expressive para web. `mate
 
 ## Limitaciones conocidas
 
-- Los pedidos especiales (C6, VE5) siguen en memoria del navegador hasta que `pedidos` tenga sus rutas.
 - Sin WebSocket (B2) ni tests e2e (B1).

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { aPedido, aProducto, buscarProductos, cotizarEspecial, crearPedido, ErrorDeApi, ingresar, responderCotizacion, solicitarPedidoEspecial } from './api.ts'
+import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, ingresar, listarEspeciales, listarMisPedidos, responderCotizacion } from './api.ts'
 
 // sessionStorage no existe en bun test: alcanza con un mapa.
 const guardado = new Map<string, string>()
@@ -80,9 +80,25 @@ test('un error del servicio llega con el mensaje del contrato', async () => {
   expect(error.codigo).toBe('sin_cupo')
 })
 
-test('R8: rechaza una cotización vencida después de 48 h', async () => {
-  const especial = await solicitarPedidoEspecial({ descripcion: 'Torta temática', fecha: '2026-12-01' })
-  await cotizarEspecial(especial.id, 2500000)
-  const en49Horas = new Date(Date.now() + 49 * 36e5)
-  expect(() => responderCotizacion(especial.id, true, en49Horas)).toThrow('venció')
+test('los especiales sin aceptar van aparte; aceptados son un pedido más (ADR-017)', async () => {
+  const item = { productoId: '', nombreProducto: 'Torta temática', cantidad: 1 }
+  responder(200, [
+    { id: 'e1', items: [item], fecha: '2026-12-01', precioCentavos: 2500000, tipo: 'especial', estado: 'cotizado' },
+    { id: 'e2', items: [item], fecha: '2026-12-02', precioCentavos: 2500000, tipo: 'especial', estado: 'confirmado' },
+  ])
+
+  const especiales = await listarEspeciales()
+  const pedidos = await listarMisPedidos()
+
+  expect(especiales.map(especial => [especial.id, especial.descripcion, especial.precioCentavos])).toEqual([['e1', 'Torta temática', 2500000]])
+  expect(pedidos.map(pedido => pedido.id)).toEqual(['e2'])
+})
+
+test('R8: la cotización vencida llega como error de pedidos', async () => {
+  const pedidos = responder(409, { codigo: 'cotizacion_vencida', mensaje: 'La cotización venció: pasaron más de 48 horas.' })
+
+  const error = await responderCotizacion('e1', true).catch(motivo => motivo)
+
+  expect(pedidos[0]!.url).toBe('/api/pedidos/especiales/e1/aceptacion')
+  expect(error.codigo).toBe('cotizacion_vencida')
 })

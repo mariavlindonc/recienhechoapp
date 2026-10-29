@@ -2,26 +2,30 @@ import { useEffect, useState } from 'react'
 import { cotizarEspecial, listarEspeciales } from '../../api.ts'
 import { formatearPrecio } from '../../formato.ts'
 import type { PedidoEspecial } from '../../tipos.ts'
-import { valorDe } from '../../ayudas.ts'
+import { mensajeDe, valorDe } from '../../ayudas.ts'
 
 // VE5: cotizar pedidos especiales. La aceptación la hace el comprador (C6).
 export default function Especiales() {
   const [especiales, setEspeciales] = useState<PedidoEspecial[]>([])
   const [precios, setPrecios] = useState<Record<string, string>>({})
+  const [error, setError] = useState('')
 
-  const cargar = () => listarEspeciales().then(setEspeciales)
+  const cargar = () => listarEspeciales().then(setEspeciales).catch(errorListar => setError(mensajeDe(errorListar)))
   useEffect(() => {
     cargar()
   }, [])
 
   const cotizar = (especial: PedidoEspecial) => {
     // Pesos a centavos enteros (R5).
-    cotizarEspecial(especial.id, Math.round(Number(precios[especial.id]) * 100)).then(cargar)
+    cotizarEspecial(especial.id, Math.round(Number(precios[especial.id]) * 100))
+      .then(cargar)
+      .catch(errorCotizar => setError(mensajeDe(errorCotizar)))
   }
 
   return (
     <section>
       <h1>Pedidos especiales</h1>
+      {error && <p className="aviso-error">{error}</p>}
       {especiales.length === 0 && <p>No hay solicitudes.</p>}
       <div className="rejilla">
         {especiales.map(especial => (

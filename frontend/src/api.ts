@@ -17,8 +17,6 @@ import type {
   Usuario,
 } from './tipos.ts'
 
-const HORAS_VENCIMIENTO_COTIZACION = 48
-
 // Días que miran las pantallas del vendedor: una semana atrás (lo atrasado) y un mes adelante.
 const DIAS_ATRAS = 7
 const DIAS_ADELANTE = 30
@@ -193,7 +191,7 @@ type PedidoDeApi = {
   fecha: string
   franja?: string
   precioCentavos: number
-  tipo: 'programado' | 'inmediato'
+  tipo: 'programado' | 'inmediato' | 'especial'
   estado: EstadoPedido
 }
 
@@ -221,7 +219,7 @@ export async function crearPedido({ productoId, cantidad, fecha, franja }: { pro
 }
 
 export async function listarMisPedidos() {
-  return (await pedir<PedidoDeApi[]>('/pedidos')).map(aPedido)
+  return (await pedir<PedidoDeApi[]>('/pedidos')).filter(pedido => !esEspecialAbierto(pedido)).map(aPedido)
 }
 
 export async function cancelarPedido(id: string) {
@@ -251,38 +249,39 @@ export function guardarCapacidad(fecha: string, nuevaCapacidad: number) {
   return pedir<DiaCapacidad>(`/capacidad/${fecha}`, { metodo: 'PUT', cuerpo: { capacidad: nuevaCapacidad } })
 }
 
-// Pedidos especiales (C6, VE5, R8)
-// shortcut: en memoria del navegador porque pedidos todavía no tiene rutas de pedidos especiales;
-// pasan a fetch cuando existan.
-const especiales: PedidoEspecial[] = []
-const esperar = <Tipo>(valor: Tipo) => Promise.resolve(structuredClone(valor))
+// Pedidos especiales (C6, VE5, R8; ADR-017). pedidos controla el vencimiento a las 48 h.
+const ESTADOS_ESPECIALES = ['solicitado', 'cotizado', 'rechazado', 'vencido']
 
-export function solicitarPedidoEspecial({ descripcion, fecha }: { descripcion: string; fecha: string }) {
-  const especial: PedidoEspecial = { id: crypto.randomUUID(), descripcion, fecha, estado: 'solicitado', precioCentavos: null, cotizadoEn: null }
-  especiales.push(especial)
-  return esperar(especial)
-}
+// Mientras espera la cotización o la respuesta, un especial se muestra aparte; aceptado, es un pedido más.
+const esEspecialAbierto = (pedido: PedidoDeApi) => pedido.tipo === 'especial' && ESTADOS_ESPECIALES.includes(pedido.estado)
 
-export function listarEspeciales() {
-  return esperar(especiales)
-}
-
-export function cotizarEspecial(id: string, precioCentavos: number) {
-  const especial = especiales.find(item => item.id === id)
-  if (!especial) throw new Error('el pedido especial no existe')
-  Object.assign(especial, { estado: 'cotizado', precioCentavos, cotizadoEn: new Date().toISOString() })
-  return esperar(especial)
-}
-
-// R8: una cotización vence a las 48 h si el comprador no la acepta.
-export function responderCotizacion(id: string, acepta: boolean, ahora = new Date()) {
-  const especial = especiales.find(item => item.id === id)
-  if (!especial) throw new Error('el pedido especial no existe')
-  const horasDesdeCotizacion = (ahora.getTime() - new Date(especial.cotizadoEn!).getTime()) / 36e5
-  if (horasDesdeCotizacion > HORAS_VENCIMIENTO_COTIZACION) {
-    especial.estado = 'vencido'
-    throw new Error('la cotización venció')
+export function aEspecial(pedido: PedidoDeApi): PedidoEspecial {
+  return {
+    id: pedido.id,
+    descripcion: pedido.items[0]?.nombreProducto ?? '',
+    fecha: pedido.fecha,
+    estado: pedido.estado as unknown as PedidoEspecial['estado'],
+    precioCentavos: pedido.precioCentavos || null,
   }
-  especial.estado = acepta ? 'aceptado' : 'rechazado'
-  return esperar(especial)
+}
+
+export async function solicitarPedidoEspecial({ descripcion, fecha }: { descripcion: string; fecha: string }) {
+  const pedido = await pedir<PedidoDeApi>('/pedidos/especiales', { metodo: 'POST', cuerpo: { descripcion, fecha }, headers: { 'Idempotency-Key': crypto.randomUUID() } })
+  return aEspecial(pedido)
+}
+
+// El vendedor ve los que tiene que cotizar o esperan respuesta; el comprador, los suyos.
+export async function listarEspeciales() {
+  if (leerSesion()?.usuario.rol === 'vendedor') return (await pedir<PedidoDeApi[]>('/pedidos/especiales')).map(aEspecial)
+  return (await pedir<PedidoDeApi[]>('/pedidos')).filter(esEspecialAbierto).map(aEspecial)
+}
+
+export async function cotizarEspecial(id: string, precioCentavos: number) {
+  return aEspecial(await pedir<PedidoDeApi>(`/pedidos/especiales/${encodeURIComponent(id)}/cotizacion`, { metodo: 'PUT', cuerpo: { precioCentavos } }))
+}
+
+// Al aceptar reserva el cupo del día; vencidas las 48 h, pedidos responde 409 cotizacion_vencida (R8).
+export async function responderCotizacion(id: string, acepta: boolean) {
+  const accion = acepta ? 'aceptacion' : 'rechazo'
+  return aPedido(await pedir<PedidoDeApi>(`/pedidos/especiales/${encodeURIComponent(id)}/${accion}`, { metodo: 'POST' }))
 }

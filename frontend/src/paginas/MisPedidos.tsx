@@ -22,14 +22,9 @@ export default function MisPedidos() {
 
   // C6 y R8: el comprador acepta o rechaza la cotización; si pasaron 48 h, se le avisa que venció.
   const responder = (id: string, acepta: boolean) => {
-    try {
-      responderCotizacion(id, acepta)
-        .then(cargar)
-        .catch(errorResponder => setError(mensajeDe(errorResponder)))
-    } catch (errorResponder) {
-      setError(mensajeDe(errorResponder))
-      cargar()
-    }
+    responderCotizacion(id, acepta)
+      .catch(errorResponder => setError(mensajeDe(errorResponder)))
+      .finally(cargar)
   }
 
   const cancelar = (id: string) => {
