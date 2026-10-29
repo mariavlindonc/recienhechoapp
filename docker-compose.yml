@@ -24,6 +24,19 @@ services:
     depends_on: [notificaciones, pedidos, productos, usuarios]
     networks: [interna]
 
+  # Interfaz web (Entrega 3). Es el punto de entrada de las personas, por eso publica puerto;
+  # las llamadas a la API pasan por el api-gateway (ADR-014).
+  frontend:
+    build: ./frontend
+    container_name: recienhecho-frontend
+    environment:
+      PORT: ${FRONTEND_PORT}
+      API_GATEWAY_URL: http://api-gateway:${API_GATEWAY_PORT}
+    ports:
+      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
+    depends_on: [api-gateway]
+    networks: [interna]
+
   usuarios:
     build: ./backend/usuarios
     container_name: recienhecho-usuarios

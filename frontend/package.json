@@ -1,0 +1,29 @@
+{
+  "name": "recienhecho-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "bun test",
+    "start": "bun servidor.ts"
+  },
+  "dependencies": {
+    "@lit/localize": "0.12.2",
+    "lit": "3.3.3",
+    "material": "github:material-esm/material#v3.3.11",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "8.4.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  }
+}
