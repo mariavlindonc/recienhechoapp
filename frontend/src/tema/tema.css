@@ -1,0 +1,218 @@
+@import url('./claro.css');
+@import url('./oscuro.css') (prefers-color-scheme: dark);
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* Títulos en Cormorant Garamond, del mismo género clásico que el logo; el resto en sans (ADR-014). */
+  --md-ref-typeface-brand: 'Cormorant Garamond', serif;
+  --md-ref-typeface-plain: 'Google Sans Flex', sans-serif;
+  /* Un solo sistema de esquinas: casi rectas, como sus etiquetas de papel. Nada de cápsulas. */
+  --md-sys-shape-corner-extra-small: 2px;
+  --md-sys-shape-corner-small: 2px;
+  --md-sys-shape-corner-medium: 4px;
+  --md-sys-shape-corner-large: 4px;
+  --md-sys-shape-corner-extra-large: 6px;
+  --md-sys-shape-corner-full: 4px;
+  /* Movimiento (plan de animaciones de ADR-014): corto y con frenada suave. */
+  --duracion-corta: 150ms;
+  --duracion-media: 260ms;
+  --curva-salida: cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--md-sys-color-background);
+  color: var(--md-sys-color-on-background);
+  font-family: var(--md-ref-typeface-plain);
+  font-size: 14px;
+}
+
+body {
+  margin: 0;
+  background: var(--md-sys-color-background);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--md-ref-typeface-brand);
+  font-weight: 600;
+  line-height: 1.1;
+  margin: 0;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 16px;
+}
+
+h2 {
+  font-size: 26px;
+  margin: 24px 0 12px;
+}
+
+h3 {
+  font-size: 24px;
+}
+
+a {
+  color: var(--md-sys-color-primary);
+}
+
+.marco {
+  display: flex;
+  min-height: 100dvh;
+}
+
+.contenido {
+  flex: 1;
+  padding: 16px;
+  min-width: 0;
+  max-width: 1100px;
+}
+
+.rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin-block: 24px;
+}
+
+.fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.aviso-error {
+  color: var(--md-sys-color-error);
+  animation: entrar var(--duracion-media) var(--curva-salida) both;
+}
+
+/* Etiqueta de papel madera con la punta cortada, como las que atan a cada budín. */
+.etiqueta {
+  align-self: flex-start;
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px 4px 16px;
+  clip-path: polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%);
+}
+
+.descripcion {
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Entrada escalonada: la lista cambió por un filtro o terminó de cargar. */
+.rejilla > * {
+  animation: entrar var(--duracion-media) var(--curva-salida) both;
+  animation-delay: calc(min(var(--orden, 0), 12) * 40ms);
+}
+
+/* El botón se hunde apenas al tocarlo: se registró el clic. */
+md-button {
+  transition: transform var(--duracion-corta) var(--curva-salida);
+}
+
+md-button:active {
+  transform: scale(0.98);
+}
+
+/* El pedido recién hecho se resalta un momento arriba de "Mis pedidos". */
+.recien-creado {
+  animation: resaltar 1600ms var(--curva-salida) both;
+}
+
+/* El estado del pedido cambió: la etiqueta nueva aparece por fundido. */
+.estado-pedido {
+  align-self: flex-start;
+  animation: fundir var(--duracion-media) var(--curva-salida) both;
+}
+
+/* Esqueletos con la forma de la tarjeta mientras carga el catálogo. */
+.esqueleto {
+  height: 168px;
+  background: var(--md-sys-color-surface-container);
+  border-radius: var(--md-sys-shape-corner-medium);
+  animation: latir 1200ms ease-in-out infinite alternate;
+}
+
+/* Cupo del día: la barra se llena al guardar la capacidad. */
+.cupo {
+  height: 6px;
+  width: 160px;
+  background: var(--md-sys-color-surface-container-high);
+  overflow: hidden;
+}
+
+.cupo-lleno {
+  display: block;
+  height: 100%;
+  background: var(--md-sys-color-tertiary);
+  transform-origin: left;
+  transition: transform var(--duracion-media) var(--curva-salida);
+}
+
+@keyframes entrar {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes fundir {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes resaltar {
+  from {
+    background: var(--md-sys-color-secondary-container);
+  }
+}
+
+@keyframes latir {
+  to {
+    opacity: 0.55;
+  }
+}
+
+/* Catálogo → detalle: la tarjeta crece hasta la página del producto (View Transitions). */
+::view-transition-group(*) {
+  animation-duration: var(--duracion-media);
+  animation-timing-function: var(--curva-salida);
+}
+
+/* Con "reducir movimiento" todo es instantáneo. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (width < 600px) {
+  .marco {
+    flex-direction: column;
+  }
+}
