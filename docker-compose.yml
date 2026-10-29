@@ -162,7 +162,9 @@ services:
 
   # Base propia de pedidos (ADR-002). Corre como replica set de un solo nodo porque
   # pedidos usa transacciones (D4). La clave interna del replica set se genera al
-  # arrancar: con un solo nodo no se comparte con nadie.
+  # arrancar: con un solo nodo no se comparte con nadie. Se borra antes porque, al
+  # reiniciar el contenedor, la de la vez anterior es de otro usuario en /tmp y el
+  # kernel no deja sobrescribirla (fs.protected_regular).
   mongo-pedidos:
     image: mongo:8
     container_name: recienhecho-mongo-pedidos
@@ -170,6 +172,7 @@ services:
       - bash
       - -c
       - >-
+        rm -f /tmp/clave-replica &&
         head -c 756 /dev/urandom | base64 > /tmp/clave-replica &&
         chmod 400 /tmp/clave-replica && chown 999:999 /tmp/clave-replica &&
         exec docker-entrypoint.sh mongod --replSet rs0 --keyFile /tmp/clave-replica --bind_ip_all
