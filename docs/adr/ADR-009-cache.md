@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado por Agustín el 26/10/2026. Implementado con `productos` el mismo día; lo marcado con *(propuesto)* se confirma en el PR.
+Aceptado por Agustín el 26/10/2026. Implementado con `productos` el mismo día.
 
 ## Contexto
 
@@ -59,7 +59,7 @@ Cliente `github.com/redis/go-redis/v9` v9.23.0; servidor `redis:7.4.11`.
 
 - El puerto `CacheDelCatalogo` dice qué se quiere (el producto, una página, invalidar el catálogo) y el adaptador de Redis decide las claves, la vigencia y el formato (JSON). La aplicación no sabe que existe la versión del catálogo ([ADR-007](ADR-007-arquitectura-interna.md)).
 - Se cachean el detalle público (sin la receta), las páginas del catálogo del comprador y la lista de categorías. El listado del vendedor, que incluye los productos no disponibles, va siempre a MySQL.
-- *(propuesto)* Sin reintentos (`MaxRetries: -1`): un reintento haría esperar más que los 50 ms. Medido en un test, con Redis apagado el error llega enseguida. En la prueba de punta a punta, el detalle respondió en 70 ms leyendo de MySQL.
+- Sin reintentos (`MaxRetries: -1`): un reintento haría esperar más que los 50 ms. Medido en un test, con Redis apagado el error llega enseguida. En la prueba de punta a punta, el detalle respondió en 70 ms leyendo de MySQL.
 - Métricas en `/metrics`:
   - `cache_aciertos_total` y `cache_fallos_total` por tipo (`producto`, `catalogo`, `categorias`);
   - `cache_errores_total` por operación, cuando Redis falla.

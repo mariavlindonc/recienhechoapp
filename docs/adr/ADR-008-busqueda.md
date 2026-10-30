@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado por Agustín el 26/10/2026. Implementado con `productos` el mismo día; lo marcado con *(propuesto)* se confirma en el PR.
+Aceptado por Agustín el 26/10/2026. Implementado con `productos` el mismo día.
 
 ## Contexto
 
@@ -94,9 +94,9 @@ Responde `{productos, pagina, porPagina, total}`.
   - un producto nuevo aparece en la búsqueda a los 3 s;
   - con Meilisearch detenido, la búsqueda responde `503 busqueda_no_disponible` y el catálogo sigue respondiendo;
   - un cambio de precio hecho en ese momento aparece solo 2 s después de que Meilisearch vuelve.
-- La métrica `indice_pendiente_antiguedad_segundos` mide el retraso. *(propuesto)* La alerta `BusquedaAtrasada` se dispara si pasa los 10 s durante 1 minuto.
+- La métrica `indice_pendiente_antiguedad_segundos` mide el retraso. La alerta `BusquedaAtrasada` se dispara si pasa los 10 s durante 1 minuto.
 
-**Decisiones de implementación** *(propuesto)*:
+**Decisiones de implementación:**
 - `creadoEn` se guarda como milisegundos desde 1970, para ordenar por novedad.
 - Guardar y borrar esperan a que Meilisearch termine la tarea, revisando cada 50 ms y hasta 30 s. Recién ahí se borran las filas de la bandeja. Cada búsqueda se corta a los 2 s.
 - Si Meilisearch no responde al arrancar, `productos` arranca igual y reintenta configurar el índice cada 5 s. Mientras tanto, los cambios esperan en la bandeja.
