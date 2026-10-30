@@ -23,7 +23,7 @@ Trabajo Práctico Integrador de Arquitectura de Software 2026, Facultad de Ingen
 | `usuarios` | Registro, inicio de sesión con token JWT y perfil, en MySQL ([ADR-016](docs/adr/ADR-016-autenticacion.md)) |
 | Frontend | React, TypeScript y material-esm ([ADR-014](docs/adr/ADR-014-frontend.md)), en `localhost:5173`: catálogo con búsqueda, encargar, pedidos especiales, ingreso y registro, y las pantallas del vendedor, todo contra los servicios por el gateway. Tema "Etiqueta kraft" de la marca |
 | Logs JSON con `trace_id`, trazas (Jaeger), métricas y alertas (Prometheus y Grafana) | Implementados en el api-gateway, `notificaciones`, `pedidos` y `productos` |
-| Balanceo de carga | El gateway ya reparte entre las instancias de `NOTIFICACIONES_URLS` ([ADR-012](docs/adr/ADR-012-balanceo-de-carga.md)); el compose levanta una sola, la segunda se suma para la presentación |
+| Balanceo de carga | El compose levanta `notificaciones-1` y `notificaciones-2`, y el gateway reparte en round-robin entre las sanas: las chequea con `/vivo` cada 5 s y saca las que fallan ([ADR-012](docs/adr/ADR-012-balanceo-de-carga.md)) |
 
 ## Objetivo
 
@@ -123,7 +123,7 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 | D7 Caché | [ADR-009](docs/adr/ADR-009-cache.md) | Propuesto |
 | D9 Consumo del proveedor | [ADR-010](docs/adr/ADR-010-consumo-de-inventario.md) | Propuesto |
 | D10 Resiliencia | [ADR-011](docs/adr/ADR-011-resiliencia.md) | Aceptado para gateway y notificaciones; propuesto para el resto |
-| D12 Balanceo de carga | [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md) | Aceptado (se implementa para la presentación) |
+| D12 Balanceo de carga | [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md) | Aceptado e implementado |
 | D13 Capacidad y costos | [ADR-013](docs/adr/ADR-013-capacidad-y-costos.md) | Propuesto |
 | Frontend | [ADR-014](docs/adr/ADR-014-frontend.md) | Propuesto (stack, tema y animaciones elegidos por Agustín) |
 | D4 Consistencia y concurrencia | [ADR-015](docs/adr/ADR-015-consistencia-y-concurrencia.md) | Aceptado para las transacciones de MongoDB; propuesto para el resto |

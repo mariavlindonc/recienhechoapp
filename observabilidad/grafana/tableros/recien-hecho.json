@@ -639,6 +639,84 @@
           "sort": "desc"
         }
       }
+    },
+    {
+      "id": 9,
+      "type": "state-timeline",
+      "title": "Instancias de notificaciones en el balanceo",
+      "description": "Qué instancias reciben tráfico del gateway (ADR-012). Una instancia sale con dos chequeos de /vivo fallidos seguidos o con un reenvío fallido, y vuelve con un chequeo OK.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "gateway_instancia_sana{servicio=\"notificaciones\"}",
+          "legendFormat": "{{instancia}}",
+          "refId": "A",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Fuera del balanceo",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "En el balanceo",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     }
   ]
 }

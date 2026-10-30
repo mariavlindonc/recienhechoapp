@@ -85,6 +85,10 @@ Como mientras el circuito está abierto no se gastan reintentos, una notificaci�
 
      En el ensayo anterior, sin el disyuntor, la alerta tardaba 15 a 20 minutos y la cola, varios minutos más.
 2. **Una instancia de notificaciones caída** (`docker compose stop notificaciones-1`): el gateway la saca del balanceo y todo el tráfico va a la otra; con las dos caídas, `503 no_disponible`.
+   - **Medido el 29/10/2026**, con un `POST /notificaciones` cada 0,25 s:
+     - con `notificaciones-1` detenida, 19 de 20 respondieron `202`; el único `503` fue el reenvío que detectó la caída y la sacó del balanceo;
+     - con `docker compose start notificaciones-1`, volvió en el chequeo siguiente (menos de 8 s) y otra vez recibió tráfico;
+     - con las dos detenidas, las 4 solicitudes respondieron `503 no_disponible`.
 
 Para la presentación se suma la caída del inventario del proveedor (circuit breaker y `pendiente_confirmacion`).
 

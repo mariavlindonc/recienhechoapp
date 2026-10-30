@@ -9,7 +9,7 @@ services:
       # Sin los mensajes de depuración de Gin: los logs quedan solo en JSON (ADR-006).
       GIN_MODE: release
       # Instancias de notificaciones entre las que reparte el gateway (ADR-012).
-      NOTIFICACIONES_URLS: http://notificaciones:${NOTIFICACIONES_PORT}
+      NOTIFICACIONES_URLS: http://notificaciones-1:${NOTIFICACIONES_PORT},http://notificaciones-2:${NOTIFICACIONES_PORT}
       PEDIDOS_URLS: http://pedidos:${PEDIDOS_PORT}
       PRODUCTOS_URLS: http://productos:${PRODUCTOS_PORT}
       USUARIOS_URLS: http://usuarios:${USUARIOS_PORT}
@@ -21,7 +21,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
-    depends_on: [notificaciones, pedidos, productos, usuarios]
+    depends_on: [notificaciones-1, notificaciones-2, pedidos, productos, usuarios]
     networks: [interna]
 
   # Interfaz web (Entrega 3). Es el punto de entrada de las personas, por eso publica puerto;
@@ -233,9 +233,11 @@ services:
       retries: 10
     networks: [interna]
 
-  notificaciones:
+  # Dos instancias iguales, con la misma base, entre las que reparte el gateway
+  # (ADR-012). notificaciones-2 copia todo de notificaciones-1 menos el nombre.
+  notificaciones-1: &notificaciones
     build: ./backend/notificaciones
-    container_name: recienhecho-notificaciones
+    container_name: recienhecho-notificaciones-1
     environment:
       PORT: ${NOTIFICACIONES_PORT}
       GIN_MODE: release
@@ -255,6 +257,10 @@ services:
       mongo-notificaciones:
         condition: service_healthy
     networks: [interna]
+
+  notificaciones-2:
+    <<: *notificaciones
+    container_name: recienhecho-notificaciones-2
 
   # Base propia de notificaciones (ADR-002): ningún otro servicio se conecta acá.
   mongo-notificaciones:

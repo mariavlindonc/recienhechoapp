@@ -26,6 +26,10 @@ const esperaSinCorreo = 30 * time.Second
 // vuelve a tomar.
 const tiempoApartado = 2 * time.Minute
 
+// tiempoParaGuardar es cuánto se espera para guardar el resultado de un envío
+// cuando llega el apagado del servicio a mitad del envío.
+const tiempoParaGuardar = 5 * time.Second
+
 // Servicio reúne los casos de uso.
 type Servicio struct {
 	repositorio puertos.Repositorio
@@ -146,6 +150,11 @@ func (servicio *Servicio) enviar(contexto context.Context, notificacion *dominio
 		Asunto:       notificacion.Asunto,
 		Cuerpo:       notificacion.Cuerpo,
 	})
+
+	// Si el apagado cancela el contexto durante el envío, el resultado se guarda
+	// igual: si no, el mail que ya salió se vuelve a mandar cuando vence el apartado.
+	contexto, cancelar := context.WithTimeout(context.WithoutCancel(contexto), tiempoParaGuardar)
+	defer cancelar()
 
 	ahora := servicio.ahora()
 	if errors.Is(errEnvio, puertos.ErrCorreoNoDisponible) {
