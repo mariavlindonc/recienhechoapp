@@ -98,7 +98,7 @@ docker compose up -d productos
 
 ### Despliegue
 
-Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar en una URL pública antes de la presentación, y el link va a estar acá. Las opciones están en [ADR-013](docs/adr/ADR-013-capacidad-y-costos.md); todavía no se eligió ninguna.
+Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar en una URL pública antes de la presentación, y el link va a estar acá. Va a estar en un servidor propio con Cloudflare Tunnel ([ADR-013](docs/adr/ADR-013-capacidad-y-costos.md)).
 
 ## Documentación
 
