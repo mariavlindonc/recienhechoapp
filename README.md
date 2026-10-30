@@ -26,7 +26,7 @@ Que un comprador pueda encargar sin llamar a la pastelería, y que la pastelerí
 
 Cuatro microservicios en Go (Gin) detrás de un API Gateway: **usuarios**, **productos**, **pedidos** y **notificaciones**, más un frontend en React. Publicamos la capacidad de **notificaciones** para que la use otro grupo, y consumimos la de **inventario** que publica otro grupo. Diagramas y detalle en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-Última versión publicada: 0.2.0 (Entrega 2). `develop` ya tiene todos los servicios, el frontend, observabilidad, balanceo de carga, tests de carga y caídas controladas. Todavía no hay nada desplegado; las opciones están en [ADR-013](docs/adr/ADR-013-capacidad-y-costos.md).
+Última versión publicada: 0.2.0 (Entrega 2). `develop` ya tiene todos los servicios, el frontend, observabilidad, balanceo de carga, tests de carga y caídas controladas. Todavía no hay nada desplegado; la demo va a ir en un servidor propio con Cloudflare Tunnel ([ADR-013](docs/adr/ADR-013-capacidad-y-costos.md)).
 
 ## Cómo levantarlo
 

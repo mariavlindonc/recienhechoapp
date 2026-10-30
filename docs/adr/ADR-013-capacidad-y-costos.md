@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto (Entrega 2: plan de medición y límites esperados). Los tests de carga se corrieron el 29/10/2026 con la Decisión tal como está escrita; los resultados están en [Resultados](#resultados). Falta elegir dónde desplegar la demo.
+Propuesto (Entrega 2: plan de medición y límites esperados). Los tests de carga se corrieron el 29/10/2026 con la Decisión tal como está escrita; los resultados están en [Resultados](#resultados). La demo se despliega en un servidor propio con Cloudflare Tunnel: Agustín lo consultó con la cátedra, que lo aprobó, el 29/10/2026.
 
 ## Contexto
 
@@ -29,7 +29,7 @@ El enunciado pide tests de carga con resultados documentados y analizados, el pr
 
 En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de errores, CPU y memoria por contenedor, y en notificaciones cuántas quedan `pendiente` y cuánto tardan en enviarse.
 
-**Límites esperados (a confirmar con los resultados):**
+**Límites esperados:**
 
 1. **Servidor de correo.** Gmail permite unos 500 mails por día ([ADR-005](ADR-005-envio-de-email.md)). La API puede aceptar muchas más notificaciones de las que se pueden enviar: el límite real del servicio está en el envío. Con Mailpit no aparece, por eso se mide aparte el ritmo de envío. Además, cada instancia envía de a una notificación por vez (revisa las pendientes cada 5 s y las manda en serie): con 200 ms por envío serían unas 5 por segundo por instancia, y el ritmo se multiplica con más instancias.
 2. **MongoDB de una sola instancia.** Todas las instancias de `notificaciones` escriben en la misma base; con el volumen de un grupo consumidor no debería ser el límite, pero es el siguiente punto único de falla.
@@ -41,7 +41,7 @@ En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de error
 - MongoDB: réplica de 3 nodos para disponibilidad; sharding no hace falta con este volumen.
 - `productos`: la caché absorbe las lecturas; si no alcanza, más instancias.
 
-**Estimación de costos en la nube** (orden de magnitud, en dólares por mes). **Estimación a confirmar:** los números no salen de precios publicados de ningún proveedor; se confirman cuando el grupo elija dónde desplegar `notificaciones`.
+**Estimación de costos en la nube** (orden de magnitud, en dólares por mes). Los números no salen de precios publicados de ningún proveedor. La demo va en un servidor propio y no tiene costo de nube; la tabla sirve para comparar con una VM.
 
 | Escenario | Qué incluye | Costo estimado |
 |---|---|---|
@@ -50,11 +50,10 @@ En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de error
 
 El costo crece por el envío de mails y por la base administrada; el cómputo de los servicios en Go es lo más barato.
 
-**Dónde desplegar la demo (sin decidir):**
+**Dónde desplegar la demo:** en un servidor propio con Cloudflare Tunnel, gratis. La cátedra aceptó que cuente como nube. Las otras opciones eran:
 
 - VM en la nube con el compose tal como está.
 - Cloudflare Containers: unos 5 USD por el mes de la demo. MongoDB tendría que ser externo.
-- Servidor propio con Cloudflare Tunnel: gratis. Falta confirmar con la cátedra que cuente como nube.
 
 Sea cual sea el lugar, Grafana se publica por HTTPS, sin acceso anónimo y con una cuenta por persona: el equipo como Admin o Editor, la cátedra y el cliente como Viewer ([ADR-006](ADR-006-observabilidad.md)).
 
