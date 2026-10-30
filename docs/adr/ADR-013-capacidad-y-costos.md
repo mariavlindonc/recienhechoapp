@@ -68,7 +68,7 @@ Sea cual sea el lugar, Grafana se publica por HTTPS, sin acceso anónimo y con u
 
 ## Resultados
 
-Corridos el 29/10/2026 con `tests/carga/` ([README](../../tests/carga/README.md)), en la computadora de desarrollo: todo el compose y k6 en Docker sobre WSL, en la misma máquina. Con k6 y los servicios compartiendo CPU, los números sirven para comparar y encontrar límites, no como capacidad de producción.
+Corridos el 29/10/2026 con `tests/carga/` ([README](../../tests/carga/README.md); resultados crudos en [`tests/carga/resultados/2026-10-29`](../../tests/carga/resultados/2026-10-29/README.md)), en la computadora de desarrollo: todo el compose y k6 en Docker sobre WSL, en la misma máquina. Con k6 y los servicios compartiendo CPU, los números sirven para comparar y encontrar límites, no como capacidad de producción.
 
 | Escenario | Carga | Solicitudes | p95 | p99 | Errores | Objetivo |
 |---|---|---|---|---|---|---|
@@ -80,7 +80,7 @@ Corridos el 29/10/2026 con `tests/carga/` ([README](../../tests/carga/README.md)
 
 **Notificaciones:** se crearon 91.066 y se enviaron todas a Mailpit. Al terminar el test quedaban 132 pendientes, que salieron en los segundos siguientes. Entre que se crea y se envía, una notificación tardó 1,8 s en promedio (p95 de 3,6 s, máximo de 4,9 s), entre las dos instancias a unas 150 por segundo. CPU máximo: MongoDB 94 %, cada instancia de `notificaciones` 65 %, el gateway 34 %.
 
-**Pedidos:** en las dos corridas se crearon exactamente 500 pedidos, el cupo del día. No hubo sobreventa con 50 usuarios a la vez: la reserva atómica de [ADR-015](ADR-015-consistencia-y-concurrencia.md) se cumple. El cupo se agota en los primeros segundos; después, casi todas las respuestas son `409 sin_cupo`, en unos 40 ms. Con el inventario lento, crear un pedido tarda más (p95 de 1,6 s en las `201`) porque espera la primera confirmación hasta el timeout del inventario. Después responde con el pedido en `pendiente_confirmacion`, y sigue tomando pedidos (RNF4). Al volver el inventario a `confirma`, el proceso en segundo plano confirmó los 500 sin intervención.
+**Pedidos:** en las dos corridas se crearon exactamente 500 pedidos, el cupo del día. No hubo sobreventa con 50 usuarios a la vez: la reserva atómica de [ADR-015](ADR-015-consistencia-y-concurrencia.md) se cumple. El cupo se agota al principio del test; después, casi todas las respuestas son `409 sin_cupo`, en unos 40 ms. Con el inventario lento, crear un pedido tarda más (p95 de 1,6 s en las `201`) porque espera la primera confirmación hasta el timeout del inventario. Después responde con el pedido en `pendiente_confirmacion`, y sigue tomando pedidos (RNF4). Al volver el inventario a `confirma`, el proceso en segundo plano confirmó los 500 sin intervención.
 
 **Límites esperados, contra lo medido:**
 

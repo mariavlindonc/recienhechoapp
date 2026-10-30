@@ -1,0 +1,1 @@
+{"porEstado":[{"_id":"enviada","cantidad":90934},{"_id":"pendiente","cantidad":132}],"demora":[{"_id":null,"promedio":1.8400190577781688,"maximo":4.879,"p95":[3.5772417027417025]}]}

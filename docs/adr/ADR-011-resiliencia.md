@@ -90,7 +90,13 @@ Como mientras el circuito está abierto no se gastan reintentos, una notificaci�
      - con `docker compose start notificaciones-1`, volvió en el chequeo siguiente (menos de 8 s) y otra vez recibió tráfico;
      - con las dos detenidas, las 4 solicitudes respondieron `503 no_disponible`.
 
-Para la presentación se suma la caída del inventario del proveedor (circuit breaker y `pendiente_confirmacion`).
+3. **Inventario del proveedor lento** (`INVENTARIO_MODO=lento`, durante el test de carga de pedidos de [ADR-013](ADR-013-capacidad-y-costos.md#resultados)):
+   - **Medido el 29/10/2026**, con 50 usuarios virtuales creando pedidos para un mismo día:
+     - `pedidos` siguió tomando pedidos (RNF4): se crearon los 500 del cupo, en `pendiente_confirmacion`, con un p95 de 1,6 s;
+     - al volver el inventario a `confirma`, el proceso en segundo plano confirmó los 500.
+   - Falta un ensayo dedicado que mida el disyuntor del inventario y cuánto tarda la reconfirmación.
+
+Los informes de los tres ensayos están en [POSTMORTEM](../POSTMORTEM.md). La caída del inventario real se ensaya cuando llegue el contrato del grupo proveedor (D9).
 
 ## Alternativas consideradas
 

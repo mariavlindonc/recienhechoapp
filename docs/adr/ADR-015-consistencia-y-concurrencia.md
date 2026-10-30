@@ -47,3 +47,4 @@ Para eso, el MongoDB de `pedidos` corre como replica set de un nodo (`--replSet 
 - Los tests de integración necesitan un MongoDB en replica set (`backend/pedidos/internal/adaptadores/mongodb/repositorio_test.go` dice cómo levantarlo).
 - Los avisos pueden llegar repetidos si el servicio se cae justo después de publicar; el consumidor los filtra.
 - La colección `eventos_pendientes` crece mientras RabbitMQ está caído. Con el volumen esperado no es un problema.
+- **Validado bajo carga el 29/10/2026** ([ADR-013](ADR-013-capacidad-y-costos.md#resultados)): 50 usuarios virtuales crearon pedidos para un mismo día con cupo de 500, a unas 860 solicitudes por segundo. En dos corridas se crearon exactamente 500 pedidos, y el día quedó con 500 reservados sobre 500 de capacidad, sin sobreventa. El resto de las solicitudes recibió `409 sin_cupo`.

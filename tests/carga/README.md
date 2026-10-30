@@ -24,4 +24,6 @@ docker compose --profile carga run --rm k6 run --tag testid=notificaciones /carg
 
 Para probar que un script anda, sin carga: `docker compose --profile carga run --rm k6 run --vus 1 --iterations 1 /carga/catalogo.js`.
 
-Los resultados medidos y su análisis están en [ADR-013](../../docs/adr/ADR-013-capacidad-y-costos.md#resultados).
+Los resultados medidos y su análisis están en [ADR-013](../../docs/adr/ADR-013-capacidad-y-costos.md#resultados). Los resultados crudos de cada corrida se guardan en `resultados/<fecha>/` ([29/10/2026](resultados/2026-10-29/README.md)).
+
+En `pedidos.js`, k6 cuenta los `409 sin_cupo` como fallas en `http_req_failed`, aunque son la respuesta correcta: lo que vale es el check `creado o sin cupo`.
