@@ -14,6 +14,6 @@ Escenarios, en orden: `notificaciones`, `catalogo-con-cache`, `catalogo-sin-cach
 
 Para leerlos:
 
-- Las horas dentro de los archivos están en UTC, como las imprime Docker: hay que restarles 3 horas.
+- Las horas dentro de los archivos son de Buenos Aires.
 - En los escenarios de pedidos, `http_req_failed` da 99 % porque k6 cuenta como falla toda respuesta 4xx, y casi todas son `409 sin_cupo`, que es la respuesta correcta cuando se agota el cupo. Lo que vale es el check `creado o sin cupo`: lo que no pasa son los `503` del gateway.
 - En `pedidos-lento`, la fila `{ expected_response:true }` son solo los pedidos creados (`201`): su p95 de 1,6 s es la espera de la primera confirmación hasta el timeout del inventario.

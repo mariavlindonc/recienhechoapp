@@ -1,4 +1,4 @@
-== 00:45:12
+== 21:45:12
 recienhecho-productos 0.05% 9.445MiB / 11.54GiB
 recienhecho-api-gateway 1.35% 22.65MiB / 11.54GiB
 recienhecho-frontend 0.00% 3.395MiB / 11.54GiB
@@ -19,7 +19,7 @@ recienhecho-meilisearch 0.18% 49.67MiB / 11.54GiB
 recienhecho-mailpit 0.00% 38.88MiB / 11.54GiB
 recienhecho-notificaciones-mock 0.00% 66.38MiB / 11.54GiB
 recienhechoapp-k6-run-6bd98fd03fc2 1.26% 19.78MiB / 11.54GiB
-== 00:45:30
+== 21:45:30
 recienhechoapp-k6-run-6bd98fd03fc2 78.66% 57.93MiB / 11.54GiB
 recienhecho-productos 290.51% 26.77MiB / 11.54GiB
 recienhecho-api-gateway 174.05% 29.59MiB / 11.54GiB
@@ -40,7 +40,7 @@ recienhecho-prometheus 0.61% 34.35MiB / 11.54GiB
 recienhecho-meilisearch 0.41% 49.67MiB / 11.54GiB
 recienhecho-mailpit 0.00% 51.57MiB / 11.54GiB
 recienhecho-notificaciones-mock 0.00% 66.38MiB / 11.54GiB
-== 00:45:48
+== 21:45:48
 recienhechoapp-k6-run-6bd98fd03fc2 39.16% 55.87MiB / 11.54GiB
 recienhecho-productos 408.35% 30.05MiB / 11.54GiB
 recienhecho-api-gateway 347.03% 33.86MiB / 11.54GiB
@@ -61,7 +61,7 @@ recienhecho-prometheus 0.44% 34.36MiB / 11.54GiB
 recienhecho-meilisearch 0.82% 49.67MiB / 11.54GiB
 recienhecho-mailpit 3.02% 53.63MiB / 11.54GiB
 recienhecho-notificaciones-mock 0.00% 66.38MiB / 11.54GiB
-== 00:46:06
+== 21:46:06
 recienhechoapp-k6-run-6bd98fd03fc2 26.71% 56.88MiB / 11.54GiB
 recienhecho-productos 47.05% 26.55MiB / 11.54GiB
 recienhecho-api-gateway 894.51% 35.94MiB / 11.54GiB
@@ -82,7 +82,7 @@ recienhecho-prometheus 0.53% 34.37MiB / 11.54GiB
 recienhecho-meilisearch 0.34% 49.67MiB / 11.54GiB
 recienhecho-mailpit 2.90% 53.88MiB / 11.54GiB
 recienhecho-notificaciones-mock 0.00% 66.38MiB / 11.54GiB
-== 00:46:24
+== 21:46:24
 recienhechoapp-k6-run-6bd98fd03fc2 62.05% 63.88MiB / 11.54GiB
 recienhecho-productos 228.20% 33.25MiB / 11.54GiB
 recienhecho-api-gateway 134.84% 37.47MiB / 11.54GiB
@@ -103,7 +103,7 @@ recienhecho-prometheus 0.54% 34.37MiB / 11.54GiB
 recienhecho-meilisearch 0.31% 49.67MiB / 11.54GiB
 recienhecho-mailpit 0.00% 53.69MiB / 11.54GiB
 recienhecho-notificaciones-mock 0.00% 66.38MiB / 11.54GiB
-== 00:46:42
+== 21:46:42
 recienhechoapp-k6-run-6bd98fd03fc2 55.21% 72.92MiB / 11.54GiB
 recienhecho-productos 375.50% 30.87MiB / 11.54GiB
 recienhecho-api-gateway 306.07% 35.71MiB / 11.54GiB
@@ -124,7 +124,7 @@ recienhecho-prometheus 0.29% 34.38MiB / 11.54GiB
 recienhecho-meilisearch 0.36% 49.67MiB / 11.54GiB
 recienhecho-mailpit 0.00% 53.69MiB / 11.54GiB
 recienhecho-notificaciones-mock 0.00% 66.38MiB / 11.54GiB
-== 00:47:00
+== 21:47:00
 recienhechoapp-k6-run-6bd98fd03fc2 32.36% 74.88MiB / 11.54GiB
 recienhecho-productos 156.58% 28.1MiB / 11.54GiB
 recienhecho-api-gateway 115.83% 35.09MiB / 11.54GiB
@@ -145,7 +145,7 @@ recienhecho-prometheus 0.35% 34.4MiB / 11.54GiB
 recienhecho-meilisearch 0.96% 49.67MiB / 11.54GiB
 recienhecho-mailpit 0.00% 53.69MiB / 11.54GiB
 recienhecho-notificaciones-mock 0.00% 66.38MiB / 11.54GiB
-== 00:47:18
+== 21:47:18
 recienhecho-productos 0.01% 24.53MiB / 11.54GiB
 recienhecho-api-gateway 0.05% 35.7MiB / 11.54GiB
 recienhecho-frontend 0.00% 3.379MiB / 11.54GiB
