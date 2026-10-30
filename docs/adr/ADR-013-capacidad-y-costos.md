@@ -9,7 +9,7 @@ El agente de código aplicó estos detalles, que la Decisión no define, y el eq
 - **Versión de k6:** `grafana/k6:2.2.0`, la más nueva con al menos dos semanas publicada (AGENTS.md). Corre en el compose con el perfil `carga`, así que no arranca con el resto.
 - **Límite de 60 por minuto:** de las dos opciones de la tabla, se usa `NOTIFICACIONES_LIMITE_POR_MINUTO` alto en el entorno de carga. Con varias claves harían falta unos 150 grupos para no chocar con el límite. Se sumó la variable a `.env.example` (60) y al compose.
 - **Pausa de 1 s** entre iteraciones en notificaciones y catálogo, como un usuario que lee la pantalla. En pedidos no hay pausa: el escenario es agotar el cupo.
-- **"El mismo día" de pedidos** es pasado mañana, porque los budines de ejemplo piden un día de anticipación (R2). Cupo de 500 y 2 minutos por corrida, con otro día en cada una.
+- **"El mismo día" de pedidos** es pasado mañana, porque los budines de ejemplo piden un día de anticipación (R2). Cupo de 500 y 2 minutos por corrida, con otro día en cada una. El umbral de RNF3 ("crear un pedido") mide solo los pedidos creados: los `409 sin_cupo` son casi todas las respuestas y taparían una creación lenta. En la corrida del 29/10, el umbral todavía medía todas las respuestas; el p95 de los creados de la tabla salió del resumen de k6.
 - **Resultados en Prometheus:** Prometheus arranca con el receptor de escritura remota, k6 manda percentiles p50, p95 y p99 sin la URL como etiqueta (con el id, cada solicitud sería una serie), y el tablero suma dos paneles de "Test de carga".
 
 ## Contexto

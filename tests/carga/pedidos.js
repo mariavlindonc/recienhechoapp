@@ -5,11 +5,17 @@
 // día (DIAS) para empezar con el cupo libre.
 import http from 'k6/http';
 import { check } from 'k6';
+import { Trend } from 'k6/metrics';
 import { etiquetas, fechaEn, gateway, iniciarSesion, json } from './comun.js';
 
 const usuarios = 50;
 const cupo = Number(__ENV.CUPO || 500);
-const fecha = fechaEn(Number(__ENV.DIAS || 2));
+const dias = Number(__ENV.DIAS || 2);
+const fecha = fechaEn(dias);
+
+// Duración solo de los pedidos creados (201): los 409 sin_cupo, que son casi
+// todas las respuestas y tardan unos 40 ms, taparían una creación lenta.
+const creacion = new Trend('pedido_creado_duracion', true);
 
 export const options = {
   scenarios: {
@@ -17,20 +23,26 @@ export const options = {
   },
   systemTags: etiquetas,
   thresholds: {
-    // RNF3: p95 menor a 2 s, incluida la llamada a inventario.
-    'http_req_duration{name:POST /pedidos}': ['p(95)<2000'],
+    // RNF3: crear un pedido, p95 menor a 2 s, incluida la llamada a inventario.
+    pedido_creado_duracion: ['p(95)<2000'],
   },
 };
 
 export function setup() {
+  // Los controles van antes de fijar el cupo, para no tocar los datos si el test no puede correr.
   const vendedor = iniciarSesion(__ENV.VENDEDOR_EMAIL, __ENV.VENDEDOR_CLAVE);
+  const dia = http.get(`${gateway}/capacidad?desde=${fecha}&hasta=${fecha}`, { headers: vendedor }).json(fecha);
+  // Con reservas de antes, todo daría 409 y el test pasaría sin crear nada.
+  if (dia && dia.reservados > 0) {
+    throw new Error(`${fecha} ya tiene ${dia.reservados} reservas: usar otro día con -e DIAS=<número>`);
+  }
+  const producto = http.get(`${gateway}/productos`).json('productos').find((candidato) => candidato.anticipacionMinimaDias <= dias);
+  if (!producto) {
+    throw new Error(`no hay productos que se puedan encargar con ${dias} días de anticipación: correr antes app.sh cargar o subir DIAS`);
+  }
   const ajuste = http.put(`${gateway}/capacidad/${fecha}`, JSON.stringify({ capacidad: cupo }), { headers: vendedor });
   if (ajuste.status !== 200) {
     throw new Error(`no se pudo fijar el cupo de ${fecha}: ${ajuste.status} ${ajuste.body}`);
-  }
-  const producto = http.get(`${gateway}/productos`).json('productos')[0];
-  if (!producto) {
-    throw new Error('el catálogo está vacío: correr antes app.sh cargar');
   }
 
   // Un comprador por usuario virtual; el email cambia en cada corrida.
@@ -52,6 +64,9 @@ export default function (datos) {
   const headers = { ...datos.compradores[(__VU - 1) % usuarios], 'Idempotency-Key': `carga-${__VU}-${__ITER}-${Date.now()}` };
   const cuerpo = JSON.stringify({ tipo: 'programado', items: [{ productoId: datos.productoId, cantidad: 1 }], fecha, franja: 'mañana' });
   const respuesta = http.post(`${gateway}/pedidos`, cuerpo, { headers, tags: { name: 'POST /pedidos' } });
+  if (respuesta.status === 201) {
+    creacion.add(respuesta.timings.duration);
+  }
   // 201 mientras hay cupo; después, 409 sin_cupo. Las dos son respuestas correctas.
   check(respuesta, {
     'creado o sin cupo': (resultado) => resultado.status === 201 || (resultado.status === 409 && resultado.json('codigo') === 'sin_cupo'),
