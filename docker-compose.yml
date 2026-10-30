@@ -17,6 +17,7 @@ services:
       JWT_SECRETO: ${JWT_SECRETO}
       # Las mismas claves que notificaciones, para contar el límite por grupo (ADR-004).
       NOTIFICACIONES_CLAVES_API: ${NOTIFICACIONES_CLAVES_API}
+      NOTIFICACIONES_LIMITE_POR_MINUTO: ${NOTIFICACIONES_LIMITE_POR_MINUTO}
       # Destino de las trazas (ADR-006). Si Jaeger no está, el gateway funciona igual.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
@@ -306,6 +307,12 @@ services:
   prometheus:
     image: prom/prometheus:v3.15.0
     container_name: recienhecho-prometheus
+    # Los del contenedor más el receptor de escritura remota, por donde k6 manda
+    # los resultados de los tests de carga (ADR-013).
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-remote-write-receiver
     volumes:
       - ./observabilidad/prometheus:/etc/prometheus:ro
     ports:
@@ -332,6 +339,23 @@ services:
       # Solo desde esta compu (127.0.0.1): el acceso anónimo no llega a la red local.
       - "127.0.0.1:${GRAFANA_WEB_PORT}:3000"
     depends_on: [prometheus]
+    networks: [interna]
+
+  # Tests de carga (ADR-013). Con el perfil "carga" no arranca con el resto: se corre
+  # con docker compose --profile carga run --rm k6 run /carga/<escenario>.js
+  # (ver tests/carga/README.md). Manda los resultados a Prometheus.
+  k6:
+    image: grafana/k6:2.2.0
+    profiles: [carga]
+    environment:
+      K6_OUT: experimental-prometheus-rw
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_TREND_STATS: p(50),p(95),p(99)
+      CLAVE_API: ${CLAVE_API_CARGA}
+      VENDEDOR_EMAIL: ${VENDEDOR_EMAIL}
+      VENDEDOR_CLAVE: ${VENDEDOR_CLAVE}
+    volumes:
+      - ./tests/carga:/carga:ro
     networks: [interna]
 
   # Mock del contrato publicado (docs/contracts/notificaciones.yaml), ver ADR-004.

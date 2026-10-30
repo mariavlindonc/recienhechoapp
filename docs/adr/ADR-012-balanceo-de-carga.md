@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado (Entrega 2). Implementado el 29/10/2026 en `feature/balanceo-notificaciones`: el compose levanta `notificaciones-1` y `notificaciones-2`, y el gateway las chequea con `/vivo` y reparte solo entre las sanas, como dice la Decisión.
+Aceptado (Entrega 2). Implementado el 29/10/2026 (PR #67, en `develop`): el compose levanta `notificaciones-1` y `notificaciones-2`, y el gateway las chequea con `/vivo` y reparte solo entre las sanas, como dice la Decisión.
 
 El agente de código aplicó tres detalles que la Decisión no define, y el equipo tiene que confirmarlos:
 

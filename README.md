@@ -12,7 +12,7 @@ Trabajo Práctico Integrador de Arquitectura de Software 2026, Facultad de Ingen
 
 ## Estado
 
-Última versión publicada: 0.2.0 (Entrega 2), con `notificaciones` funcionando de punta a punta detrás del api-gateway, con MongoDB, logs, trazas y métricas. La tabla de abajo es el estado de `develop` y de las ramas en revisión, que ya incluyen el resto de los servicios y el frontend.
+Última versión publicada: 0.2.0 (Entrega 2), con `notificaciones` funcionando de punta a punta detrás del api-gateway, con MongoDB, logs, trazas y métricas. La tabla de abajo es el estado de `develop`, que ya incluye el resto de los servicios y el frontend.
 
 | Componente | Estado |
 |---|---|
@@ -24,6 +24,8 @@ Trabajo Práctico Integrador de Arquitectura de Software 2026, Facultad de Ingen
 | Frontend | React, TypeScript y material-esm ([ADR-014](docs/adr/ADR-014-frontend.md)), en `localhost:5173`: catálogo con búsqueda, encargar, pedidos especiales, ingreso y registro, y las pantallas del vendedor, todo contra los servicios por el gateway. Tema "Etiqueta kraft" de la marca |
 | Logs JSON con `trace_id`, trazas (Jaeger), métricas y alertas (Prometheus y Grafana) | Implementados en el api-gateway, `notificaciones`, `pedidos` y `productos` |
 | Balanceo de carga | El compose levanta `notificaciones-1` y `notificaciones-2`, y el gateway reparte en round-robin entre las sanas: las chequea con `/vivo` cada 5 s y saca las que fallan ([ADR-012](docs/adr/ADR-012-balanceo-de-carga.md)) |
+| Tests de carga | Escenarios de k6 en [tests/carga](tests/carga/README.md) para notificaciones, catálogo (con caché y sin caché) y pedidos. Corridos el 29/10/2026: todos los objetivos se cumplen, y el límite principal son las conexiones del gateway hacia `pedidos` ([ADR-013](docs/adr/ADR-013-capacidad-y-costos.md#resultados)) |
+| Caídas controladas | Tres ensayos con su informe en [POSTMORTEM](docs/POSTMORTEM.md): una instancia de notificaciones, el servidor de correo y el inventario lento |
 
 ## Objetivo
 
@@ -82,6 +84,8 @@ for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet 
 
 Los tests de integración corren solo si existe la variable de su base: `MONGO_URI_TEST`, `MYSQL_DSN_TEST`, `REDIS_URL_TEST` y `MEILI_URL_TEST` (cada test dice cómo levantar la base en Docker). Ver [AGENTS.md](AGENTS.md) y `.claude/skills/run-recienhechoapp/`.
 
+Los tests de carga (k6) y cómo correrlos están en [tests/carga](tests/carga/README.md).
+
 Operación de `productos`:
 
 ```bash
@@ -104,7 +108,8 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Servicios, datos, comunicación y diagramas |
 | [docs/adr/](docs/adr/) | Decisiones de arquitectura |
 | [docs/contracts/](docs/contracts/README.md) | Contrato publicado (notificaciones) y consumido (inventario) |
-| [docs/POSTMORTEM.md](docs/POSTMORTEM.md) | Informe de la caída controlada (pendiente) |
+| [docs/POSTMORTEM.md](docs/POSTMORTEM.md) | Informes de las caídas controladas |
+| [tests/carga/](tests/carga/README.md) | Tests de carga con k6 y sus resultados crudos |
 | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Flujo de ramas, commits y pull requests |
 | [AGENTS.md](AGENTS.md) | Convenciones y reglas para quien trabaje en el código, personas o agentes |
 
@@ -119,12 +124,12 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 | Canal y servidor de envío | [ADR-005](docs/adr/ADR-005-envio-de-email.md) | Aceptado |
 | D11 Observabilidad | [ADR-006](docs/adr/ADR-006-observabilidad.md) | Aceptado (versión inicial) |
 | D2 Arquitectura interna | [ADR-007](docs/adr/ADR-007-arquitectura-interna.md) | Aceptado para notificaciones y gateway; propuesto para el resto |
-| D6 Búsqueda | [ADR-008](docs/adr/ADR-008-busqueda.md) | Propuesto |
-| D7 Caché | [ADR-009](docs/adr/ADR-009-cache.md) | Propuesto |
+| D6 Búsqueda | [ADR-008](docs/adr/ADR-008-busqueda.md) | Aceptado |
+| D7 Caché | [ADR-009](docs/adr/ADR-009-cache.md) | Aceptado; medida con y sin caché |
 | D9 Consumo del proveedor | [ADR-010](docs/adr/ADR-010-consumo-de-inventario.md) | Propuesto |
 | D10 Resiliencia | [ADR-011](docs/adr/ADR-011-resiliencia.md) | Aceptado para gateway y notificaciones; propuesto para el resto |
 | D12 Balanceo de carga | [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md) | Aceptado e implementado |
-| D13 Capacidad y costos | [ADR-013](docs/adr/ADR-013-capacidad-y-costos.md) | Propuesto |
+| D13 Capacidad y costos | [ADR-013](docs/adr/ADR-013-capacidad-y-costos.md) | Propuesto; tests de carga corridos, falta elegir dónde desplegar |
 | Frontend | [ADR-014](docs/adr/ADR-014-frontend.md) | Propuesto (stack, tema y animaciones elegidos por Agustín) |
 | D4 Consistencia y concurrencia | [ADR-015](docs/adr/ADR-015-consistencia-y-concurrencia.md) | Aceptado para las transacciones de MongoDB; propuesto para el resto |
 | Autenticación | [ADR-016](docs/adr/ADR-016-autenticacion.md) | Aceptado |

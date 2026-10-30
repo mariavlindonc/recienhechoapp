@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto el 28/10/2026. Agustín pidió seguir lo que dicen los docs; el agente de código implementó la lectura más literal (abajo) en `feature/pedidos-especiales`. Falta que el equipo la confirme o elija otra opción.
+Propuesto el 28/10/2026. Agustín pidió seguir lo que dicen los docs; el agente de código implementó la lectura más literal (abajo), que está en `develop` (PR #64). Falta que el equipo la confirme o elija otra opción.
 
 ## Contexto
 

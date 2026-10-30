@@ -1,0 +1,35 @@
+  █ THRESHOLDS 
+
+    http_req_duration{name:POST /pedidos}
+    ✓ 'p(95)<2000' p(95)=146.01ms
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 107968 862.632155/s
+    checks_succeeded...: 95.45% 103066 out of 107968
+    checks_failed......: 4.54%  4902 out of 107968
+
+    ✗ creado o sin cupo
+      ↳  95% — ✓ 103066 / ✗ 4902
+
+    HTTP
+    http_req_duration..............: avg=55.34ms min=5.04ms med=40.44ms max=1.51s p(90)=102.4ms  p(95)=145.97ms
+      { expected_response:true }...: avg=73.45ms min=5.24ms med=38.32ms max=1.04s p(90)=171.99ms p(95)=300.28ms
+      { name:POST /pedidos }.......: avg=55.34ms min=5.04ms med=40.4ms  max=1.51s p(90)=102.45ms p(95)=146.01ms
+    http_req_failed................: 99.44% 107470 out of 108071
+    http_reqs......................: 108071 863.455094/s
+
+    EXECUTION
+    iteration_duration.............: avg=55.58ms min=5.18ms med=40.64ms max=1.51s p(90)=102.65ms p(95)=146.22ms
+    iterations.....................: 107968 862.632155/s
+    vus............................: 36     min=0                max=50
+    vus_max........................: 50     min=50               max=50
+
+    NETWORK
+    data_received..................: 21 MB  164 kB/s
+    data_sent......................: 67 MB  534 kB/s
+
+
+
+

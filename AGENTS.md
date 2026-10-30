@@ -56,6 +56,7 @@ Las herramientas de desarrollo (MongoDB, MySQL, Redis, Meilisearch, RabbitMQ, Ma
 | Prometheus (`prom/prometheus:v3.15.0`) | Lee `/metrics` de los servicios (puerto interno 9464) y evalúa las alertas ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `PROMETHEUS_WEB_PORT` (9090) | http://localhost:9090 |
 | Grafana (`grafana/grafana:13.2.3`) | Tablero de métricas y acceso a las trazas ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `GRAFANA_WEB_PORT` (3000) | http://localhost:3000 (sin usuario, solo lectura; admin con `GRAFANA_ADMIN_CLAVE`) |
 | Jaeger (`jaegertracing/jaeger:2.22.0`) | Trazas de api-gateway y notificaciones por OTLP ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `JAEGER_WEB_PORT` (16686) | http://localhost:16686 |
+| k6 (`grafana/k6:2.2.0`) | Tests de carga contra el api-gateway, con el perfil `carga` del compose; manda los resultados a Prometheus ([ADR-013](docs/adr/ADR-013-capacidad-y-costos.md), [tests/carga](tests/carga/README.md)) | Sin puerto | — |
 | Prism (`stoplight/prism:5`) | Mock del contrato de notificaciones ([ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md)) | `NOTIFICACIONES_MOCK_PORT` (4010) | http://localhost:4010/notificaciones |
 
 ## Reglas
