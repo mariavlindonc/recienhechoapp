@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto el 28/10/2026. Agustín pidió seguir lo que dicen los docs; el agente de código implementó la lectura más literal (abajo), que está en `develop` (PR #64). Falta que el equipo la confirme o elija otra opción.
+Propuesto el 28/10/2026. Implementado como dice la Decisión, en `develop` (PR #64).
 
 ## Contexto
 
@@ -22,7 +22,7 @@ Lo que los docs no definen:
 
 ## Decisión
 
-**Implementado, a confirmar:** un especial aceptado "sigue como `pendiente_confirmacion`" al pie de la letra, es decir, por el mismo camino que cualquier pedido:
+**Implementado:** un especial aceptado "sigue como `pendiente_confirmacion`" al pie de la letra, es decir, por el mismo camino que cualquier pedido:
 
 - Se guarda como un pedido de tipo `especial` con un solo ítem (la descripción, cantidad 1) y sin insumos.
 - Al aceptar, reserva 1 unidad del cupo del día en la misma transacción (B1) y pasa a `pendiente_confirmacion`. Sin cupo, `409 sin_cupo` y sigue `cotizado`.
@@ -30,7 +30,7 @@ Lo que los docs no definen:
 - Cada cambio publica `pedido.estado_cambiado` con el total (C1). `notificaciones` arma un mail propio para `solicitado`, `cotizado` (con el precio y las 48 h), `rechazado` y `vencido`.
 - Los especiales sin aceptar no aparecen en el calendario del día (`GET /pedidos?fecha=`).
 
-Si el equipo prefiere A1 (confirmar sin inventario) o A2 (confirma el vendedor), se cambia solo `ResponderEspecial` en la aplicación.
+Pasar a A1 (confirmar sin inventario) o a A2 (confirma el vendedor) cambia solo `ResponderEspecial` en la aplicación.
 
 Rutas:
 

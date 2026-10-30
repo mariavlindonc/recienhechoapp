@@ -4,14 +4,6 @@
 
 Propuesto (Entrega 2: plan de medición y límites esperados). Los tests de carga se corrieron el 29/10/2026 con la Decisión tal como está escrita; los resultados están en [Resultados](#resultados). Falta elegir dónde desplegar la demo.
 
-El agente de código aplicó estos detalles, que la Decisión no define, y el equipo tiene que confirmarlos:
-
-- **Versión de k6:** `grafana/k6:2.2.0`, la más nueva con al menos dos semanas publicada (AGENTS.md). Corre en el compose con el perfil `carga`, así que no arranca con el resto.
-- **Límite de 60 por minuto:** de las dos opciones de la tabla, se usa `NOTIFICACIONES_LIMITE_POR_MINUTO` alto en el entorno de carga. Con varias claves harían falta unos 150 grupos para no chocar con el límite. Se sumó la variable a `.env.example` (60) y al compose.
-- **Pausa de 1 s** entre iteraciones en notificaciones y catálogo, como un usuario que lee la pantalla. En pedidos no hay pausa: el escenario es agotar el cupo.
-- **"El mismo día" de pedidos** es pasado mañana, porque los budines de ejemplo piden un día de anticipación (R2). Cupo de 500 y 2 minutos por corrida, con otro día en cada una. El umbral de RNF3 ("crear un pedido") mide solo los pedidos creados: los `409 sin_cupo` son casi todas las respuestas y taparían una creación lenta. En la corrida del 29/10, el umbral todavía medía todas las respuestas; el p95 de los creados de la tabla salió del resumen de k6.
-- **Resultados en Prometheus:** Prometheus arranca con el receptor de escritura remota, k6 manda percentiles p50, p95 y p99 sin la URL como etiqueta (con el id, cada solicitud sería una serie), y el tablero suma dos paneles de "Test de carga".
-
 ## Contexto
 
 El enunciado pide tests de carga con resultados documentados y analizados, el principal límite identificado, una alternativa de escalado y una estimación de costos. Los objetivos a verificar son:
@@ -80,7 +72,7 @@ Corridos el 29/10/2026 con `tests/carga/` ([README](../../tests/carga/README.md)
 
 **Notificaciones:** se crearon 91.066 y se enviaron todas a Mailpit. Al terminar el test quedaban 132 pendientes, que salieron en los segundos siguientes. Entre que se crea y se envía, una notificación tardó 1,8 s en promedio (p95 de 3,6 s, máximo de 4,9 s), entre las dos instancias a unas 150 por segundo. CPU máximo: MongoDB 94 %, cada instancia de `notificaciones` 65 %, el gateway 34 %.
 
-**Pedidos:** en las dos corridas se crearon exactamente 500 pedidos, el cupo del día. No hubo sobreventa con 50 usuarios a la vez: la reserva atómica de [ADR-015](ADR-015-consistencia-y-concurrencia.md) se cumple. El cupo se agota al principio del test; después, casi todas las respuestas son `409 sin_cupo`, en unos 40 ms. Con el inventario lento, crear un pedido tarda más (p95 de 1,6 s en las `201`) porque espera la primera confirmación hasta el timeout del inventario. Después responde con el pedido en `pendiente_confirmacion`, y sigue tomando pedidos (RNF4). Al volver el inventario a `confirma`, el proceso en segundo plano confirmó los 500 sin intervención.
+**Pedidos:** en las dos corridas se crearon exactamente 500 pedidos, el cupo del día. No hubo sobreventa con 50 usuarios a la vez: la reserva atómica de [ADR-015](ADR-015-consistencia-y-concurrencia.md) se cumple. El cupo se agota al principio del test; después, casi todas las respuestas son `409 sin_cupo`, en unos 40 ms. Con el inventario lento, crear un pedido tarda más (p95 de 1,6 s en las `201`) porque espera la primera confirmación hasta el timeout del inventario. Después responde con el pedido en `pendiente_confirmacion`, y sigue tomando pedidos (RNF4). Al volver el inventario a `confirma`, el proceso en segundo plano confirmó los 500 sin intervención. En esta corrida, el umbral de k6 todavía medía todas las respuestas, incluidos los `409`; el p95 de los pedidos creados de la tabla salió del resumen de k6. Ahora el umbral mide solo los creados.
 
 **Límites esperados, contra lo medido:**
 
@@ -88,7 +80,7 @@ Corridos el 29/10/2026 con `tests/carga/` ([README](../../tests/carga/README.md)
 2. **MongoDB de notificaciones.** Llegó al 94 % de CPU con 300 solicitudes por segundo. Es el siguiente límite de notificaciones si crece la carga.
 3. **Cupo de `pedidos`.** Correcto bajo contención (500 de 500, sin sobreventa) y sin demoras visibles: el p95 de las `201` fue de 300 ms.
 
-**Principal límite encontrado: las conexiones del api-gateway hacia los servicios.** Con 860 solicitudes por segundo a `pedidos`, el gateway respondió `503` a 6.908 solicitudes (4,5 % y 1,9 %). Todas fallaron con `dial tcp ...: connect: cannot assign requested address`: el contenedor del gateway se quedó sin puertos locales para abrir conexiones nuevas. El gateway usa el transporte HTTP por defecto de Go, que guarda solo 2 conexiones libres por servicio para reusarlas. Con 50 solicitudes a la vez, cada solicitud de más abre una conexión nueva y la cierra al terminar, y los puertos cerrados quedan unos segundos sin poder usarse (estado `TIME_WAIT`). Con notificaciones y catálogo, a 300 por segundo, no pasó. Se resolvería subiendo las conexiones libres que el gateway guarda por servicio (`MaxIdleConnsPerHost`). Esto no lo define ningún ADR: está pendiente de que el equipo decida.
+**Principal límite encontrado: las conexiones del api-gateway hacia los servicios.** Con 860 solicitudes por segundo a `pedidos`, el gateway respondió `503` a 6.908 solicitudes (4,5 % y 1,9 %). Todas fallaron con `dial tcp ...: connect: cannot assign requested address`: el contenedor del gateway se quedó sin puertos locales para abrir conexiones nuevas. El gateway usa el transporte HTTP por defecto de Go, que guarda solo 2 conexiones libres por servicio para reusarlas. Con 50 solicitudes a la vez, cada solicitud de más abre una conexión nueva y la cierra al terminar, y los puertos cerrados quedan unos segundos sin poder usarse (estado `TIME_WAIT`). Con notificaciones y catálogo, a 300 por segundo, no pasó. Se resolvería subiendo las conexiones libres que el gateway guarda por servicio (`MaxIdleConnsPerHost`).
 
 **Otras observaciones:**
 

@@ -5,7 +5,7 @@
 - **Aceptado** para `notificaciones` (MongoDB), Entrega 2.
 - **Aceptado** para `pedidos` (MongoDB, replica set por las transacciones de [ADR-015](ADR-015-consistencia-y-concurrencia.md)), implementado el 26/10/2026.
 - **Aceptado** para `usuarios` y `productos` (MySQL y Redis) por Agustín el 26/10/2026. `productos` está implementado; `usuarios`, desde el 28/10/2026.
-- **Aceptado** para `productos` por Agustín el 26/10/2026: acceso a MySQL con GORM, imágenes subidas a `productos`, baja lógica de productos y categorías en una tabla con ABM del vendedor. Lo marcado con *(propuesto)* se confirma en el PR.
+- **Aceptado** para `productos` por Agustín el 26/10/2026: acceso a MySQL con GORM, imágenes subidas a `productos`, baja lógica de productos y categorías en una tabla con ABM del vendedor.
 
 ## Contexto
 
@@ -37,11 +37,11 @@ Precios y montos se guardan como enteros en centavos (`int64`), nunca como decim
 
 **Acceso a MySQL: GORM** (`gorm.io/gorm` y `gorm.io/driver/mysql`). El grupo lo usó en la materia anterior, el mismo argumento que eligió MySQL. Los structs con tags de GORM viven solo en el adaptador `mysql`: el dominio no sabe que existe ([ADR-007](ADR-007-arquitectura-interna.md)). Las tablas las crea `AutoMigrate` al arrancar. El producto, su receta y la fila de la bandeja del índice ([ADR-008](ADR-008-busqueda.md)) se guardan en una sola transacción (`db.Transaction`).
 
-**Imágenes.** El vendedor sube la foto a `productos` (`POST /productos/{id}/imagen`, multipart). Se acepta JPG, PNG o WebP de hasta 2 MB *(propuesto)*, y el tipo se decide mirando el contenido del archivo, no su nombre. El archivo va al volumen `productos-imagenes` con un nombre al azar, y la base guarda solo la URL (`/imagenes/{archivo}`), que el api-gateway sirve. *(propuesto)* Cambiar la foto no borra la anterior: la búsqueda tarda unos segundos en tener la URL nueva y la caché hasta 60 s, y mientras tanto mostrarían una imagen rota. Los archivos viejos quedan en el volumen, igual que las fotos de los productos dados de baja; si crece, se limpian los que ningún producto usa.
+**Imágenes.** El vendedor sube la foto a `productos` (`POST /productos/{id}/imagen`, multipart). Se acepta JPG, PNG o WebP de hasta 2 MB, y el tipo se decide mirando el contenido del archivo, no su nombre. El archivo va al volumen `productos-imagenes` con un nombre al azar, y la base guarda solo la URL (`/imagenes/{archivo}`), que el api-gateway sirve. Cambiar la foto no borra la anterior: la búsqueda tarda unos segundos en tener la URL nueva y la caché hasta 60 s, y mientras tanto mostrarían una imagen rota. Los archivos viejos quedan en el volumen, igual que las fotos de los productos dados de baja; si crece, se limpian los que ningún producto usa.
 
 **Productos con baja lógica.** Dar de baja un producto llena `eliminado_en` (`gorm.DeletedAt`): GORM lo saca de todas las consultas, pero la fila queda y se puede recuperar. Los pedidos ya hechos no dependen de esa fila, porque guardan su propia copia del nombre, el precio y los insumos ([ADR-001](ADR-001-limites-de-los-servicios.md)).
 
-**Categorías en una tabla** con su ABM para el vendedor. El nombre es `UNIQUE` y, por la collation de MySQL 8 (`utf8mb4_0900_ai_ci`), "Tortas", "tortas" y "Tórtas" cuentan como el mismo. *(propuesto)* Las categorías se borran de verdad, y solo si no tienen productos activos (si no, `409 categoria_en_uso`): con baja lógica, el nombre de una categoría borrada seguiría ocupando el índice único. Los productos dados de baja que la usaban quedan con `categoria_id` en `NULL`.
+**Categorías en una tabla** con su ABM para el vendedor. El nombre es `UNIQUE` y, por la collation de MySQL 8 (`utf8mb4_0900_ai_ci`), "Tortas", "tortas" y "Tórtas" cuentan como el mismo. Las categorías se borran de verdad, y solo si no tienen productos activos (si no, `409 categoria_en_uso`): con baja lógica, el nombre de una categoría borrada seguiría ocupando el índice único. Los productos dados de baja que la usaban quedan con `categoria_id` en `NULL`.
 
 ## Alternativas consideradas
 
@@ -86,7 +86,7 @@ MySQL 8.4 con GORM para `productos`, en el compose como `mysql-productos`:
   - si el producto no se guarda (por ejemplo, con una categoría inexistente), tampoco queda su fila en la bandeja;
   - el nombre de la categoría es único sin importar mayúsculas ni tildes;
   - la baja lógica saca el producto de las consultas pero deja la fila.
-- *(propuesto)* La fila de la categoría se bloquea (`SELECT ... FOR UPDATE`) antes de contar sus productos y borrarla. Así, un producto que se crea en ella al mismo tiempo espera y después falla por la clave foránea, en vez de quedar activo sin categoría.
-- *(propuesto)* La conexión activa `ClientFoundRows`. Sin eso, un `UPDATE` que no cambia ningún valor devuelve "0 filas" y el producto parecía no existir. Lo encontró el test de integración de la receta.
+- La fila de la categoría se bloquea (`SELECT ... FOR UPDATE`) antes de contar sus productos y borrarla. Así, un producto que se crea en ella al mismo tiempo espera y después falla por la clave foránea, en vez de quedar activo sin categoría.
+- La conexión activa `ClientFoundRows`. Sin eso, un `UPDATE` que no cambia ningún valor devuelve "0 filas" y el producto parecía no existir. Lo encontró el test de integración de la receta.
 - El índice compuesto es (`categoria_id`, `nombre`), porque el catálogo filtra por categoría y ordena por nombre. Los filtros por precio los resuelve Meilisearch ([ADR-008](ADR-008-busqueda.md)).
 - Cada operación con MySQL se corta a los 2 s (`timeout`, `readTimeout` y `writeTimeout` en el DSN, [ADR-011](ADR-011-resiliencia.md)).

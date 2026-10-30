@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto. React 19.3, material-esm y Bun fueron elegidos por Agustín Di Mario el 23/10/2026, TypeScript el 26/10/2026, y el tema "Etiqueta kraft" con su plan de animaciones el 28/10/2026. Falta que el equipo confirme la decisión y los puntos de abajo marcados como propuestos.
+Propuesto. React 19.3, material-esm y Bun fueron elegidos por Agustín Di Mario el 23/10/2026, TypeScript el 26/10/2026, y el tema "Etiqueta kraft" con su plan de animaciones el 28/10/2026.
 
 ## Contexto
 
@@ -26,7 +26,7 @@ No hay una librería oficial de Google con Material 3 Expressive para web. `mate
 - **Lenguaje:** TypeScript 7.0.2 en modo `strict`. Los tipos del dominio están en `src/tipos.ts`. `bun run build` corre `tsc` antes de `vite build`. Dependencias de desarrollo nuevas: `typescript`, `@types/react`, `@types/react-dom` y `@types/bun`.
 - **Tema "Etiqueta kraft"**, sacado de la marca real (Instagram `@recienhecho_budines`): tinta marrón como color principal, papel madera de sus etiquetas como secundario y el verde oliva de sus flyers como terciario, en `src/tema/claro.css` y `oscuro.css`. Títulos en Cormorant Garamond, del mismo género clásico que el logo; el resto en Google Sans Flex. Esquinas casi rectas en todo (2 a 6 px, sin cápsulas). La categoría de cada budín va en una etiqueta de papel madera con la punta cortada. Se descartaron "Banda oliva" (todo sans, verde como único color) y una primera tanda con Fraunces y etiquetas en cápsula, por verse genéricas.
 - **Animaciones con CSS y la API View Transitions del navegador, sin dependencias:** entrada escalonada del catálogo, la tarjeta que crece hasta el detalle, el botón que se hunde al tocarlo, el pedido recién creado resaltado en "Mis pedidos", fundido al cambiar el estado, el precio de la cotización que sube desde 0, los errores que entran desde abajo, esqueletos mientras carga y la barra de cupo del vendedor. Cada una avisa algo (qué cambió, que se registró el clic, qué está cargando). Duran entre 150 y 300 ms, animan solo `transform` y `opacity`, y con "reducir movimiento" del sistema son instantáneas.
-- **Propuesto, sin confirmar por el equipo:** navegación con un `md-nav-rail` en todos los anchos.
+- **Navegación** con un `md-nav-rail` en todos los anchos.
 
 ## Alternativas consideradas
 

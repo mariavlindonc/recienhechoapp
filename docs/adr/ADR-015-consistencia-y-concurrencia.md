@@ -3,7 +3,6 @@
 ## Estado
 
 - **Aceptado** el uso de transacciones de MongoDB en `pedidos` (Agustín, 26/10/2026).
-- **Propuesto**, para que el equipo lo confirme en el PR: el control de versión de cada pedido, la bandeja de salida (outbox) y los valores de tiempo. Están marcados con *(propuesto)*.
 
 ## Contexto
 
@@ -28,13 +27,13 @@ Para eso, el MongoDB de `pedidos` corre como replica set de un nodo (`--replSet 
 
 - **Cupo:** la reserva es un update condicional sobre el documento del día. Si no alcanza, no coincide y la transacción entera se deshace. Medido en el test de integración: 20 compradores a la vez contra un cupo de 5 dan exactamente 5 pedidos, 5 eventos y 15 `sin_cupo`.
 - **Reintentos del comprador:** índice único en (comprador, `Idempotency-Key`). El segundo intento choca con el índice, no reserva y devuelve el pedido ya creado. La misma clave con otro contenido da `409 conflicto_idempotencia`.
-- **Dos cambios a la vez sobre un pedido** (por ejemplo, el comprador cancela mientras el vendedor lo pasa a producción) *(propuesto)*: cada pedido tiene un número de versión que sube en cada cambio. Un cambio sobre una versión vieja no se guarda (`409 modificado_al_mismo_tiempo`), y tampoco su evento ni la devolución del cupo.
+- **Dos cambios a la vez sobre un pedido** (por ejemplo, el comprador cancela mientras el vendedor lo pasa a producción): cada pedido tiene un número de versión que sube en cada cambio. Un cambio sobre una versión vieja no se guarda (`409 modificado_al_mismo_tiempo`), y tampoco su evento ni la devolución del cupo.
 
-**Bandeja de salida (outbox)** *(propuesto)*: el evento se guarda en la colección `eventos_pendientes`, dentro de la misma transacción que el cambio. Un proceso en segundo plano lo publica en RabbitMQ con confirmación del broker y recién ahí lo borra. Con RabbitMQ caído, el pedido se toma igual y el evento espera. Entre que el broker confirma y se borra el evento puede caerse el servicio: en ese caso el evento sale dos veces, y el consumidor lo descarta por `idEvento` (entrega "al menos una vez").
+**Bandeja de salida (outbox):** el evento se guarda en la colección `eventos_pendientes`, dentro de la misma transacción que el cambio. Un proceso en segundo plano lo publica en RabbitMQ con confirmación del broker y recién ahí lo borra. Con RabbitMQ caído, el pedido se toma igual y el evento espera. Entre que el broker confirma y se borra el evento puede caerse el servicio: en ese caso el evento sale dos veces, y el consumidor lo descarta por `idEvento` (entrega "al menos una vez").
 
 **Fallas parciales con el inventario:** la reserva de insumos va después de la transacción, porque es una llamada a otro sistema que no participa de ella. Si no responde, el pedido queda `pendiente_confirmacion` con su cupo y se reconfirma en segundo plano ([ADR-010](ADR-010-consumo-de-inventario.md)). Liberar insumos al cancelar (R7) se marca en el pedido y se reintenta hasta que el proveedor lo confirme.
 
-**Valores** *(propuesto)*: 5 s por transacción, incluidos los reintentos del driver; un pedido o evento tomado por un proceso en segundo plano queda apartado 2 min (pedido) o 15 s (evento) antes de que otro lo pueda volver a tomar.
+**Valores:** 5 s por transacción, incluidos los reintentos del driver; un pedido o evento tomado por un proceso en segundo plano queda apartado 2 min (pedido) o 15 s (evento) antes de que otro lo pueda volver a tomar.
 
 ## Alternativas consideradas
 
