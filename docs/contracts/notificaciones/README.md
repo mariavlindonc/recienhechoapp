@@ -1,6 +1,4 @@
-# Contratos
-
-## Capacidad publicada: Notificaciones
+# Contrato de notificaciones (capacidad publicada)
 
 Recién hecho le ofrece a otros grupos el envío de notificaciones por email a sus usuarios. El consumidor pide el envío y se desentiende: nosotros lo hacemos en segundo plano, reintentamos si el servidor de correo falla y dejamos el resultado disponible para consultar.
 
@@ -10,7 +8,7 @@ Recién hecho le ofrece a otros grupos el envío de notificaciones por email a s
 | Versión vigente | **1.0.0** |
 | URL pública | Pendiente (se publica antes de la presentación) |
 | Estado | Implementación real disponible en `http://localhost:8080` (por el api-gateway); mock en `http://localhost:4010` |
-| Decisión | [ADR-004](../adr/ADR-004-contrato-de-notificaciones.md) |
+| Decisión | [ADR-004](../../adr/ADR-004-contrato-de-notificaciones.md) |
 
 ### Operaciones
 
@@ -103,15 +101,3 @@ El mock devuelve siempre los mismos ejemplos: no guarda estado, así que no se p
 | Versión | Fecha | Cambio |
 |---|---|---|
 | 1.0.0 | 2026-10-09 | Versión inicial: envío por email y consulta de estado |
-
-## Capacidad consumida: Inventario
-
-La publica otro grupo. Cuando tengamos su contrato, va a quedar documentado acá cómo lo usamos (decisión D9, Entrega 2).
-
-## APIs HTTP internas
-
-Pendiente: se documentan a medida que se implementan los servicios.
-
-## Eventos de mensajería
-
-Pendiente (ver [ADR-003](../adr/ADR-003-comunicacion-entre-servicios.md)). Eventos previstos: `pedido.confirmado` y `pedido.estado_cambiado`.
