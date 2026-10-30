@@ -106,7 +106,7 @@ Los nombres cambian porque en el gateway son funciones del paquete `main`, que n
 - Se suman tres contenedores al `docker-compose`: Jaeger, Prometheus y Grafana.
 - Cada servicio suma dependencias de OpenTelemetry y del cliente de Prometheus.
 - Mientras los logs no estén centralizados, para seguir una solicitud hay que buscar el `trace_id` en los logs de cada contenedor.
-- Jaeger guarda las trazas en memoria: se pierden al reiniciarlo. Alcanza para desarrollo y la demo.
+- Jaeger guarda las trazas en memoria: se pierden al reiniciarlo. Alcanza para desarrollo y la demo. Guarda hasta 20.000 y borra las más viejas, para no pasar de unos 250 MB de RAM.
 - El SLO y el umbral de la alerta son iniciales: se ajustan con los tests de carga (D13).
 - En desarrollo, el tablero no se puede ver desde otra computadora: para mostrarlo hay que compartir pantalla.
 - En el despliegue hay que administrar las cuentas de Grafana (alta, rol y baja de cada persona) y configurar HTTPS ([ADR-013](ADR-013-capacidad-y-costos.md)).

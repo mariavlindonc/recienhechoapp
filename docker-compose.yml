@@ -297,6 +297,9 @@ services:
   jaeger:
     image: jaegertracing/jaeger:2.22.0
     container_name: recienhecho-jaeger
+    # Guarda hasta 20.000 trazas en memoria (unos 250 MB) y borra las más viejas;
+    # por defecto son 100.000, que en el test de carga llegaron a 1,1 GB (ADR-013).
+    command: ["--set=extensions.jaeger_storage.backends.some_store.memory.max_traces=20000"]
     ports:
       # Solo desde esta compu (127.0.0.1), como Prometheus y Grafana (ADR-006).
       - "127.0.0.1:${JAEGER_WEB_PORT}:16686"
