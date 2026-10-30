@@ -107,7 +107,7 @@ Valores preliminares; se ajustan con los tests de carga.
 | RNF4 | Si inventario o notificaciones fallan, el resto del sistema sigue tomando pedidos (degradación controlada). |
 | RNF5 | Al menos un servicio corre con dos o más instancias balanceadas. |
 | RNF6 | Logs estructurados, métricas y un tablero permiten seguir un pedido de punta a punta. |
-| RNF7 | Todo el sistema se levanta con un solo comando (`docker compose up`), sin configuración manual. |
+| RNF7 | Todo el sistema se levanta con un solo comando (`cp .env.example .env && docker compose up`), sin otra configuración manual. |
 | RNF8 | Las contraseñas se guardan hasheadas y nunca se devuelven en una respuesta. Los secretos van en variables de entorno, fuera del repositorio. |
 
 ## Desafíos adicionales (bonus)
