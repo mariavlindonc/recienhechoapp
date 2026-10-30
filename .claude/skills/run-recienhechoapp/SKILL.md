@@ -86,6 +86,16 @@ MSYS_NO_PATHCONV=1 wsl -e docker rm -f mysql-prueba-productos redis-prueba-produ
 
 Con `smoke.sh arrancar` corriendo, la integración de notificaciones: `(cd backend/notificaciones && MONGO_URI_TEST=mongodb://localhost:27018 go test -count=1 ./internal/adaptadores/mongodb/...)`.
 
+## Tests de carga (k6)
+
+Escenarios en `tests/carga/` ([README](../../../tests/carga/README.md)). Con la app levantada y `app.sh cargar` hecho, k6 corre en el compose con el perfil `carga`. Antes hay que subir `NOTIFICACIONES_LIMITE_POR_MINUTO` en el env que usa el compose y recrear el gateway; si no, notificaciones da `429`. Un escenario completo tarda 10 minutos; para probar que el script anda, `--vus 1 --iterations 1`:
+
+```bash
+MSYS_NO_PATHCONV=1 wsl -e bash -c "cd '<raíz en /mnt/c/...>' && docker compose --env-file .claude/skills/run-recienhechoapp/.tmp/env -p recienhechoapp --profile carga run --rm k6 run --vus 1 --iterations 1 /carga/catalogo.js"
+```
+
+Los resultados también van a Prometheus (`k6_http_req_duration_p95`, `k6_http_reqs_total`), etiquetados con `testid` si se pasa `--tag testid=<nombre>`.
+
 ## Correr a mano (personas)
 
 `cp .env.example .env` una vez y `docker compose up --build -d`; después http://localhost:5173. Para el frontend con recarga automática, `cd frontend && bun run dev` (Vite en el 5173 reenvía `/api` a `localhost:8080`): no dejarlo corriendo junto con el compose (ver trampas).

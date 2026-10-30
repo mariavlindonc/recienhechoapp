@@ -82,6 +82,8 @@ for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet 
 
 Los tests de integración corren solo si existe la variable de su base: `MONGO_URI_TEST`, `MYSQL_DSN_TEST`, `REDIS_URL_TEST` y `MEILI_URL_TEST` (cada test dice cómo levantar la base en Docker). Ver [AGENTS.md](AGENTS.md) y `.claude/skills/run-recienhechoapp/`.
 
+Los tests de carga (k6) y cómo correrlos están en [tests/carga](tests/carga/README.md).
+
 Operación de `productos`:
 
 ```bash
