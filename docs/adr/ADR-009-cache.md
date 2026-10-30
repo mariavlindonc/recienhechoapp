@@ -63,7 +63,19 @@ Cliente `github.com/redis/go-redis/v9` v9.23.0; servidor `redis:7.4.11`.
 - Métricas en `/metrics`:
   - `cache_aciertos_total` y `cache_fallos_total` por tipo (`producto`, `catalogo`, `categorias`);
   - `cache_errores_total` por operación, cuando Redis falla.
-- Con `CACHE_HABILITADA=false` se usa una caché apagada que nunca encuentra nada. La medición formal antes y después va con los tests de carga ([ADR-013](ADR-013-capacidad-y-costos.md)).
+- Con `CACHE_HABILITADA=false` se usa una caché apagada que nunca encuentra nada.
+- **Medido el 29/10/2026** con el test de carga del catálogo ([ADR-013](ADR-013-capacidad-y-costos.md#resultados), `tests/carga/catalogo.js`): rampa a 200 usuarios virtuales, unas 300 solicitudes por segundo y unas 182.000 solicitudes por corrida, sin errores.
+
+  | | Con caché | Sin caché |
+  |---|---|---|
+  | p95 del listado por categoría | 2,88 ms | 4,63 ms |
+  | p95 del detalle | 2,33 ms | 4,38 ms |
+  | Latencia promedio | 1,42 ms | 2,53 ms |
+  | CPU máximo de `productos` | 24 % | 70 % |
+  | CPU máximo de MySQL | menos de 3 % | 44 % |
+  | Aciertos de la caché | 99,9 % (180.159 aciertos, 168 fallos) | — |
+
+  Con caché, el p95 baja a la mitad (de 4,6 a 2,9 ms en el listado) y MySQL deja de trabajar. Las dos corridas cumplen RNF2 con mucho margen: con este catálogo de tres budines, MySQL responde rápido aunque no haya caché. La caché importa más por la carga que le saca a MySQL que por la latencia.
 - Ventanas conocidas, acotadas por la vigencia de 60 s:
   - si se invalida entre que se lee MySQL y se guarda una página, puede guardarse una página vieja con la versión nueva;
   - renombrar una categoría no invalida el detalle de cada producto, que muestra el nombre viejo hasta que vence.
