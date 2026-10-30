@@ -133,4 +133,4 @@ Todavía no hay nada desplegado. La capacidad de notificaciones se va a publicar
 | Frontend | [ADR-014](docs/adr/ADR-014-frontend.md) | Propuesto (stack, tema y animaciones elegidos por Agustín) |
 | D4 Consistencia y concurrencia | [ADR-015](docs/adr/ADR-015-consistencia-y-concurrencia.md) | Aceptado para las transacciones de MongoDB; propuesto para el resto |
 | Autenticación | [ADR-016](docs/adr/ADR-016-autenticacion.md) | Aceptado |
-| Pedidos especiales (C6, VE5, R8) | [ADR-017](docs/adr/ADR-017-pedidos-especiales.md) | Propuesto; implementado, a confirmar por el equipo |
+| Pedidos especiales (C6, VE5, R8) | [ADR-017](docs/adr/ADR-017-pedidos-especiales.md) | Propuesto; implementado |

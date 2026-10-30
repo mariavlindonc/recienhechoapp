@@ -4,12 +4,6 @@
 
 Aceptado (Entrega 2). Implementado el 29/10/2026 (PR #67, en `develop`): el compose levanta `notificaciones-1` y `notificaciones-2`, y el gateway las chequea con `/vivo` y reparte solo entre las sanas, como dice la Decisión.
 
-El agente de código aplicó tres detalles que la Decisión no define, y el equipo tiene que confirmarlos:
-
-- El chequeo pasivo saca una instancia solo si el servicio tiene dos o más. Con una sola no hay otra a la cual mandar el tráfico, y como `pedidos`, `productos` y `usuarios` no tienen chequeo activo, una instancia que saliera no volvería.
-- El chequeo activo corre solo para `notificaciones`, que es el servicio balanceado.
-- El intervalo (5 s) y el timeout (1 s) del chequeo son constantes en `main.go`, no variables de entorno.
-
 ## Contexto
 
 El enunciado pide balanceo de carga sobre al menos un servicio con dos o más instancias, que el mecanismo detecte cuándo una instancia no está disponible, y que la distribución y el estado de las instancias se vean en la observabilidad (RNF5 y RNF6).

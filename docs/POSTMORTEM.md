@@ -56,8 +56,6 @@ No hizo falta intervenir. El chequeo pasivo (un reenvío fallido) sacó a la ins
 | Clave `destino` en los logs del gateway | Hecha (PR #67) |
 | Un cliente que corta no saca a la instancia del balanceo | Hecha, con test (PR #67) |
 | Publicar la métrica inicial de salud sin pisar una falla del arranque | Hecha, con test (PR #67) |
-| Confirmar los tres detalles del balanceo que aplicó el agente (ADR-012) | Pendiente: lo decide el equipo |
-
 ## 2. Servidor de correo caído
 
 ### Resumen
@@ -139,4 +137,3 @@ Automática: la reconfirmación en segundo plano confirmó los pendientes cuando
 |---|---|
 | Ensayo dedicado de la caída del inventario, midiendo el disyuntor y la reconfirmación | Pendiente |
 | Repetir el ensayo con el inventario real cuando llegue el contrato (D9) | Pendiente: depende del grupo proveedor |
-| Decidir si se suben las conexiones que el gateway reusa por servicio (`MaxIdleConnsPerHost`) | Pendiente: lo decide el equipo ([ARCHITECTURE](ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)) |
