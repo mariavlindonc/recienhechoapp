@@ -8,6 +8,8 @@ Las tres decisiones sobre los pedidos que el inventario no llega a confirmar las
 
 **Operaciones del proveedor** (decidido por el equipo el 30/10/2026, [#77](https://github.com/mariavlindonc/recienhechoapp/issues/77)): consumimos dos operaciones, **reducir stock** y **aumentar stock**. La versión 2.0.0 de su contrato ([copia](../contracts/inventario/README.md)) es solo de lectura, así que esperamos la versión nueva que las agregue. Lo que depende de esa versión queda en [Pendientes hasta el contrato nuevo](#pendientes-hasta-el-contrato-nuevo).
 
+> **En revisión ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)):** traducir reservar a reducir y liberar a aumentar mezcla la reserva de insumos con su consumo efectivo. Se está repensando el flujo para separarlos (reservar y liberar al confirmar y cancelar, reducir cuando el pedido entra en producción), y depende de cómo quede el contrato nuevo. Cuando se decida, este ADR se reemplaza.
+
 ## Contexto
 
 Consumimos la capacidad de inventario de otro grupo. Un pedido se confirma cuando el proveedor reserva los insumos de la receta (R3), y cancelarlo los libera (R7). El proveedor no ofrece reservas: reservar es reducir el stock de cada insumo, y liberar es volver a aumentarlo. Si el proveedor no responde, el pedido no se rechaza: queda `pendiente_confirmacion` (R3, RNF4).
