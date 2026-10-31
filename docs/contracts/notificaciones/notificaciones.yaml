@@ -7,7 +7,7 @@ info:
     por email a sus usuarios. El envío es asíncrono: el POST acepta la notificación
     (202) y el resultado se consulta con el GET.
 
-    Documentación de uso, errores y versionado en docs/contracts/README.md.
+    Documentación de uso, errores y versionado en docs/contracts/notificaciones/README.md.
     La versión vigente es la de `info.version` (versionado semántico).
 servers:
   - url: http://localhost:4010

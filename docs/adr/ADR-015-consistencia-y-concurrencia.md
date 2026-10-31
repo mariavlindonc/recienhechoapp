@@ -31,7 +31,7 @@ Para eso, el MongoDB de `pedidos` corre como replica set de un nodo (`--replSet 
 
 **Bandeja de salida (outbox):** el evento se guarda en la colección `eventos_pendientes`, dentro de la misma transacción que el cambio. Un proceso en segundo plano lo publica en RabbitMQ con confirmación del broker y recién ahí lo borra. Con RabbitMQ caído, el pedido se toma igual y el evento espera. Entre que el broker confirma y se borra el evento puede caerse el servicio: en ese caso el evento sale dos veces, y el consumidor lo descarta por `idEvento` (entrega "al menos una vez").
 
-**Fallas parciales con el inventario:** la reserva de insumos va después de la transacción, porque es una llamada a otro sistema que no participa de ella. Si no responde, el pedido queda `pendiente_confirmacion` con su cupo y se reconfirma en segundo plano ([ADR-010](ADR-010-consumo-de-inventario.md)). Liberar insumos al cancelar (R7) se marca en el pedido y se reintenta hasta que el proveedor lo confirme.
+**Fallas parciales con el inventario:** la reserva de insumos va después de la transacción, porque es una llamada a otro sistema que no participa de ella. Si no responde, el pedido queda `pendiente_confirmacion` con su cupo y se reconfirma en segundo plano ([ADR-010](ADR-010-consumo-de-inventario.md)). Liberar insumos al cancelar (R7), que en el proveedor es aumentar el stock que se redujo, se marca en el pedido y se reintenta hasta que el proveedor lo confirme.
 
 **Valores:** 5 s por transacción, incluidos los reintentos del driver; un pedido o evento tomado por un proceso en segundo plano queda apartado 2 min (pedido) o 15 s (evento) antes de que otro lo pueda volver a tomar.
 

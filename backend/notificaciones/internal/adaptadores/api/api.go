@@ -1,5 +1,5 @@
 // Package api expone la capacidad de notificaciones por HTTP, tal como la describe
-// el contrato docs/contracts/notificaciones.yaml.
+// el contrato docs/contracts/notificaciones/notificaciones.yaml.
 package api
 
 import (
