@@ -155,4 +155,7 @@ type Eventos interface {
 	InventarioConsultado(contexto context.Context, idPedido string, resultado ResultadoInventario, err error)
 	CircuitoDelInventarioCambio(contexto context.Context, anterior, nuevo EstadoCircuito)
 	EventoPublicado(contexto context.Context, idEvento string, err error)
+	// ConfirmacionNoGuardada avisa que no se pudo guardar el resultado de la
+	// confirmación de un pedido recién creado; la retoma el proceso en segundo plano.
+	ConfirmacionNoGuardada(contexto context.Context, idPedido string, err error)
 }

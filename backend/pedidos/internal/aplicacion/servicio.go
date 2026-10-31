@@ -119,12 +119,20 @@ func (servicio *Servicio) Crear(contexto context.Context, comprador dominio.Comp
 	// comprador corte la conexión; si no termina, la retoma el proceso en segundo plano.
 	contextoConfirmacion, cancelar := context.WithTimeout(context.WithoutCancel(contexto), esperaConfirmacionInicial)
 	defer cancelar()
-	if err := servicio.confirmar(contextoConfirmacion, &pedido); errors.Is(err, dominio.ErrModificadoAlMismoTiempo) {
+	// confirmar cambia el pedido en memoria antes de guardarlo: si el guardado
+	// falla, lo que está en la base es lo que se registró.
+	registrado := pedido
+	err = servicio.confirmar(contextoConfirmacion, &pedido)
+	if errors.Is(err, dominio.ErrModificadoAlMismoTiempo) {
 		// Alguien lo cambió en el medio (por ejemplo, el comprador lo canceló).
 		return servicio.repositorio.Buscar(contexto, pedido.ID)
 	}
-	// Si la confirmación falló por otra cosa, el pedido igual existe y queda
-	// pendiente_confirmacion hasta que lo retome el proceso en segundo plano.
+	if err != nil {
+		// El pedido igual existe y queda pendiente_confirmacion hasta que lo retome
+		// el proceso en segundo plano.
+		servicio.eventos.ConfirmacionNoGuardada(contexto, pedido.ID, err)
+		return registrado, nil
+	}
 	return pedido, nil
 }
 

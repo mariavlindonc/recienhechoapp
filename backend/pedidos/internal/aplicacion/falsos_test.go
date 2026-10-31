@@ -20,6 +20,9 @@ type repositorioFalso struct {
 	dias    map[string]dominio.Dia
 	eventos []puertos.EventoGuardado
 	fallar  error // si no es nil, todas las escrituras fallan con este error
+	// fallarGuardar, si no es nil, hace fallar solo GuardarCambio: el pedido se
+	// registra, pero no se guarda lo que pasa después.
+	fallarGuardar error
 }
 
 func nuevoRepositorioFalso() *repositorioFalso {
@@ -52,6 +55,9 @@ func (repositorio *repositorioFalso) GuardarCambio(_ context.Context, cambio pue
 	defer repositorio.mutex.Unlock()
 	if repositorio.fallar != nil {
 		return repositorio.fallar
+	}
+	if repositorio.fallarGuardar != nil {
+		return repositorio.fallarGuardar
 	}
 	if repositorio.pedidos[cambio.Pedido.ID].Version != cambio.VersionAnterior {
 		return dominio.ErrModificadoAlMismoTiempo
@@ -284,8 +290,9 @@ func (publicador *publicadorFalso) Publicar(_ context.Context, guardado puertos.
 
 // eventosFalsos registra los hechos avisados.
 type eventosFalsos struct {
-	mutex      sync.Mutex
-	inventario []puertos.ResultadoInventario
+	mutex       sync.Mutex
+	inventario  []puertos.ResultadoInventario
+	noGuardadas []error
 }
 
 func (eventos *eventosFalsos) PedidoRegistrado(context.Context, string) {}
@@ -297,5 +304,10 @@ func (eventos *eventosFalsos) InventarioConsultado(_ context.Context, _ string, 
 func (eventos *eventosFalsos) CircuitoDelInventarioCambio(context.Context, puertos.EstadoCircuito, puertos.EstadoCircuito) {
 }
 func (eventos *eventosFalsos) EventoPublicado(context.Context, string, error) {}
+func (eventos *eventosFalsos) ConfirmacionNoGuardada(_ context.Context, _ string, err error) {
+	eventos.mutex.Lock()
+	defer eventos.mutex.Unlock()
+	eventos.noGuardadas = append(eventos.noGuardadas, err)
+}
 
 var errCaido = errors.New("caído")

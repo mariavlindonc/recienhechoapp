@@ -19,7 +19,8 @@ type eventosFalsos struct {
 func (eventos *eventosFalsos) PedidoRegistrado(context.Context, string) {}
 func (eventos *eventosFalsos) InventarioConsultado(context.Context, string, puertos.ResultadoInventario, error) {
 }
-func (eventos *eventosFalsos) EventoPublicado(context.Context, string, error) {}
+func (eventos *eventosFalsos) EventoPublicado(context.Context, string, error)        {}
+func (eventos *eventosFalsos) ConfirmacionNoGuardada(context.Context, string, error) {}
 func (eventos *eventosFalsos) CircuitoDelInventarioCambio(_ context.Context, _, nuevo puertos.EstadoCircuito) {
 	eventos.mutex.Lock()
 	defer eventos.mutex.Unlock()
