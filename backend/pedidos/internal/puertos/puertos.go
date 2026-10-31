@@ -131,12 +131,12 @@ type ReservadorDeInsumos interface {
 type ResultadoInventario string
 
 const (
-	InventarioConfirmada   ResultadoInventario = "confirmada"
-	InventarioSinStock     ResultadoInventario = "sin_stock"
-	InventarioLiberada     ResultadoInventario = "liberada"
-	InventarioRechazada    ResultadoInventario = "rechazada"
-	InventarioFallaTransit ResultadoInventario = "falla_transitoria"
-	InventarioNoDisponible ResultadoInventario = "no_disponible"
+	InventarioConfirmada       ResultadoInventario = "confirmada"
+	InventarioSinStock         ResultadoInventario = "sin_stock"
+	InventarioLiberada         ResultadoInventario = "liberada"
+	InventarioRechazada        ResultadoInventario = "rechazada"
+	InventarioFallaTransitoria ResultadoInventario = "falla_transitoria"
+	InventarioNoDisponible     ResultadoInventario = "no_disponible"
 )
 
 // EstadoCircuito es el estado del disyuntor que protege al inventario.

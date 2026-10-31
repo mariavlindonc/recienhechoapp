@@ -205,7 +205,7 @@ func (servicio *Servicio) confirmar(contexto context.Context, pedido *dominio.Pe
 		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioNoDisponible, errReserva)
 		pedido.RegistrarFalloDeConfirmacion(ahora)
 	default:
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioFallaTransit, errReserva)
+		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioFallaTransitoria, errReserva)
 		pedido.RegistrarFalloDeConfirmacion(ahora)
 	}
 	return servicio.guardar(contexto, pedido, puertos.Cambio{Pedido: *pedido, VersionAnterior: versionLeida})
@@ -377,7 +377,7 @@ func (servicio *Servicio) liberar(contexto context.Context, pedido *dominio.Pedi
 	ahora := servicio.ahora()
 	versionLeida := pedido.Version
 	if errLiberar != nil {
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioFallaTransit, errLiberar)
+		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioFallaTransitoria, errLiberar)
 		pedido.ProximaLiberacion = ahora.Add(esperaReintentoLiberar)
 	} else {
 		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioLiberada, nil)
