@@ -7,7 +7,7 @@ Un contrato por carpeta: el formal (OpenAPI) y su documentación de uso.
 | Notificaciones | **Publicamos**: otros grupos nos piden enviar emails a sus usuarios | [notificaciones/](notificaciones/README.md) | 1.0.0 | [ADR-004](../adr/ADR-004-contrato-de-notificaciones.md) |
 | Inventario (Stock Volcamelli) | **Consumimos**: lo publica el grupo proveedor; acá guardamos una copia de su contrato | [inventario/](inventario/README.md) | 2.0.0 | [ADR-010](../adr/ADR-010-consumo-de-inventario.md) |
 
-El contrato de inventario es del otro grupo: si publican una versión nueva, se reemplaza la copia y se revisa el test de contrato de `pedidos` (#77). La copia queda tal como la publicaron, así que sus links internos apuntan a documentos de su repositorio: por ejemplo, su `ADR-017-contrato-propio` no es nuestro ADR-017.
+La versión 2.0.0 de inventario es solo de lectura. Esperamos una versión nueva con reducir y aumentar stock, que es lo que vamos a consumir ([ADR-010](../adr/ADR-010-consumo-de-inventario.md)). El contrato de inventario es del otro grupo: si publican una versión nueva, se reemplaza la copia y se revisa el test de contrato de `pedidos` (#77). La copia queda tal como la publicaron, así que sus links internos apuntan a documentos de su repositorio: por ejemplo, su `ADR-017-contrato-propio` no es nuestro ADR-017.
 
 ## APIs HTTP internas
 
