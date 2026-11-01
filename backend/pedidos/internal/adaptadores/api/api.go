@@ -353,7 +353,8 @@ func responderError(contexto *gin.Context, estado int, codigo, mensaje string) {
 	contexto.AbortWithStatusJSON(estado, respuestaError{Codigo: codigo, Mensaje: mensaje})
 }
 
-// identificar lee la identidad del usuario de los headers provisorios.
+// identificar lee la identidad del usuario de los headers que pone el api-gateway
+// a partir del token (ADR-016).
 func identificar(contexto *gin.Context) {
 	actual := usuario{
 		id:    contexto.GetHeader(headerIDUsuario),
