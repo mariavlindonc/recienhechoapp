@@ -265,7 +265,8 @@ func (manejador *manejador) definirCapacidad(contexto *gin.Context) {
 	contexto.JSON(http.StatusOK, respuestaDia{Capacidad: dia.Capacidad, Reservados: dia.Reservados})
 }
 
-// leerCuerpo decodifica el JSON sin campos desconocidos. Si falla, ya respondió.
+// leerCuerpo decodifica un solo objeto JSON, sin campos desconocidos ni datos
+// después. Si falla, ya respondió.
 func leerCuerpo(contexto *gin.Context, destino any) bool {
 	tipo, _, err := mime.ParseMediaType(contexto.GetHeader("Content-Type"))
 	if err != nil || tipo != "application/json" {
@@ -281,6 +282,10 @@ func leerCuerpo(contexto *gin.Context, destino any) bool {
 	decodificador.DisallowUnknownFields()
 	if err := decodificador.Decode(destino); err != nil {
 		responderError(contexto, http.StatusBadRequest, "solicitud_invalida", fmt.Sprintf("JSON inválido: %v.", err))
+		return false
+	}
+	if err := decodificador.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		responderError(contexto, http.StatusBadRequest, "solicitud_invalida", "JSON inválido: hay datos después del objeto.")
 		return false
 	}
 	return true
