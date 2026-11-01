@@ -83,6 +83,9 @@ type BandejaDeSalida interface {
 	TomarEvento(contexto context.Context, ahora, hasta time.Time) (evento EventoGuardado, encontrado bool, err error)
 	// MarcarPublicado lo saca de la bandeja.
 	MarcarPublicado(contexto context.Context, idEvento string) error
+	// DevolverEvento le quita el apartado a un evento que no se pudo publicar, para
+	// que sea el próximo en tomarse y no se le adelanten los más nuevos.
+	DevolverEvento(contexto context.Context, idEvento string, ahora time.Time) error
 }
 
 // Publicador manda un evento al broker. Devuelve nil solo cuando el broker

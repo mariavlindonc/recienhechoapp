@@ -398,7 +398,9 @@ func (servicio *Servicio) liberar(contexto context.Context, pedido *dominio.Pedi
 
 // PublicarEventos manda al broker los eventos de la bandeja de salida, del más
 // viejo al más nuevo, y devuelve cuántos publicó. Si el broker no responde, corta:
-// los eventos esperan guardados hasta que vuelva (ADR-011).
+// los eventos esperan guardados hasta que vuelva (ADR-011). El que falló se
+// devuelve a la bandeja para que siga primero; con una sola instancia, los
+// eventos salen en orden (ADR-015).
 func (servicio *Servicio) PublicarEventos(contexto context.Context) (int, error) {
 	publicados := 0
 	for {
@@ -415,6 +417,10 @@ func (servicio *Servicio) PublicarEventos(contexto context.Context) (int, error)
 		}
 		if err := servicio.publicador.Publicar(contexto, guardado); err != nil {
 			servicio.eventos.EventoPublicado(contexto, guardado.Evento.ID, err)
+			// Si devolverlo falla, el evento sale igual cuando vence el apartado.
+			if err := servicio.bandeja.DevolverEvento(contexto, guardado.Evento.ID, ahora); err != nil {
+				return publicados, fmt.Errorf("devolver evento %s a la bandeja de salida: %w", guardado.Evento.ID, err)
+			}
 			return publicados, nil
 		}
 		// Si esto falla, el evento se vuelve a publicar cuando vence el apartado: el

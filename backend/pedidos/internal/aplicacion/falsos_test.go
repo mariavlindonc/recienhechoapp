@@ -19,14 +19,16 @@ type repositorioFalso struct {
 	pedidos map[string]dominio.Pedido
 	dias    map[string]dominio.Dia
 	eventos []puertos.EventoGuardado
-	fallar  error // si no es nil, todas las escrituras fallan con este error
+	// apartados guarda, por idEvento, hasta cuándo está apartado un evento.
+	apartados map[string]time.Time
+	fallar    error // si no es nil, todas las escrituras fallan con este error
 	// fallarGuardar, si no es nil, hace fallar solo GuardarCambio: el pedido se
 	// registra, pero no se guarda lo que pasa después.
 	fallarGuardar error
 }
 
 func nuevoRepositorioFalso() *repositorioFalso {
-	return &repositorioFalso{pedidos: map[string]dominio.Pedido{}, dias: map[string]dominio.Dia{}}
+	return &repositorioFalso{pedidos: map[string]dominio.Pedido{}, dias: map[string]dominio.Dia{}, apartados: map[string]time.Time{}}
 }
 
 func (repositorio *repositorioFalso) Registrar(_ context.Context, pedido dominio.Pedido, evento dominio.Evento) error {
@@ -193,10 +195,21 @@ func (repositorio *repositorioFalso) ListarCapacidad(_ context.Context, desde, h
 func (repositorio *repositorioFalso) TomarEvento(_ context.Context, ahora, hasta time.Time) (puertos.EventoGuardado, bool, error) {
 	repositorio.mutex.Lock()
 	defer repositorio.mutex.Unlock()
-	if len(repositorio.eventos) == 0 {
-		return puertos.EventoGuardado{}, false, nil
+	for _, guardado := range repositorio.eventos {
+		if repositorio.apartados[guardado.Evento.ID].After(ahora) {
+			continue
+		}
+		repositorio.apartados[guardado.Evento.ID] = hasta
+		return guardado, true, nil
 	}
-	return repositorio.eventos[0], true, nil
+	return puertos.EventoGuardado{}, false, nil
+}
+
+func (repositorio *repositorioFalso) DevolverEvento(_ context.Context, idEvento string, ahora time.Time) error {
+	repositorio.mutex.Lock()
+	defer repositorio.mutex.Unlock()
+	repositorio.apartados[idEvento] = ahora
+	return nil
 }
 
 func (repositorio *repositorioFalso) MarcarPublicado(_ context.Context, idEvento string) error {

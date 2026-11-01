@@ -366,6 +366,29 @@ func TestPublicarEventosEnOrdenYEsperarAlBroker(prueba *testing.T) {
 	}
 }
 
+// Si el broker vuelve antes de que venza el apartado del evento que falló, el
+// siguiente no se le adelanta: el comprador recibe los avisos en orden.
+func TestBrokerQueVuelveRespetaElOrdenDeLosEventos(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, hoy, 10)
+	actual.servicio.Crear(context.Background(), comprador, "clave-1", medialunas(1, hoy))
+	enOrden := []string{actual.repositorio.eventos[0].Evento.ID, actual.repositorio.eventos[1].Evento.ID}
+
+	actual.publicador.fallar = errCaido
+	actual.servicio.PublicarEventos(context.Background())
+
+	actual.publicador.fallar = nil
+	*actual.reloj = momento.Add(3 * time.Second)
+	publicados, err := actual.servicio.PublicarEventos(context.Background())
+
+	if publicados != 2 || err != nil {
+		prueba.Fatalf("publicados %d (%v): al volver el broker salen los dos", publicados, err)
+	}
+	if actual.publicador.publicados[0] != enOrden[0] || actual.publicador.publicados[1] != enOrden[1] {
+		prueba.Errorf("se publicaron %v, el orden es %v", actual.publicador.publicados, enOrden)
+	}
+}
+
 func TestBaseCaidaNoCreaPedido(prueba *testing.T) {
 	actual := nuevoEntorno()
 	actual.capacidad(prueba, hoy, 10)

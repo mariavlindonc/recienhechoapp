@@ -396,6 +396,20 @@ func (repositorio *Repositorio) TomarEvento(contexto context.Context, ahora, has
 	return puertos.EventoGuardado{Evento: documento.Evento.aDominio(), Traza: documento.Traza}, true, nil
 }
 
+// DevolverEvento deja el evento listo para tomarse de nuevo desde ahora.
+func (repositorio *Repositorio) DevolverEvento(contexto context.Context, idEvento string, ahora time.Time) error {
+	contexto, cancelar := conLimite(contexto, esperaPorOperacion)
+	defer cancelar()
+	_, err := repositorio.eventos.UpdateOne(contexto,
+		bson.D{{Key: "_id", Value: idEvento}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "proximoIntento", Value: ahora}}}},
+	)
+	if err != nil {
+		return fmt.Errorf("devolver evento: %w", err)
+	}
+	return nil
+}
+
 // MarcarPublicado borra el evento de la bandeja: ya está en el broker.
 func (repositorio *Repositorio) MarcarPublicado(contexto context.Context, idEvento string) error {
 	contexto, cancelar := conLimite(contexto, esperaPorOperacion)
