@@ -22,6 +22,8 @@ type configuracion struct {
 	// para contar el límite por grupo (ADR-004).
 	clavesAPI       map[string]string
 	limitePorMinuto int
+	// intentosPorMinuto es el límite por IP del registro y el inicio de sesión (ADR-016).
+	intentosPorMinuto int
 }
 
 // largoMinimoSecreto es el mínimo de JWT_SECRETO, igual que en usuarios (ADR-016).
@@ -55,6 +57,11 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 		problemas = append(problemas, errors.New("NOTIFICACIONES_LIMITE_POR_MINUTO tiene que ser un entero positivo"))
 	}
 	leida.limitePorMinuto = limite
+	intentos, err := strconv.Atoi(conValorPorDefecto("USUARIOS_INTENTOS_POR_MINUTO", "10"))
+	if err != nil || intentos <= 0 {
+		problemas = append(problemas, errors.New("USUARIOS_INTENTOS_POR_MINUTO tiene que ser un entero positivo"))
+	}
+	leida.intentosPorMinuto = intentos
 	if texto := obligatoria("NOTIFICACIONES_CLAVES_API"); texto != "" {
 		claves, err := parsearClavesAPI(texto)
 		if err != nil {

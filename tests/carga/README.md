@@ -12,7 +12,7 @@ Escenarios de [ADR-013](../../docs/adr/ADR-013-capacidad-y-costos.md), escritos 
 
 Con la app levantada y los budines de ejemplo cargados:
 
-1. En el `.env`, subir `NOTIFICACIONES_LIMITE_POR_MINUTO` (por ejemplo, a `1000000`): con el límite de 60 por minuto, casi todos los `POST` de notificaciones darían `429`. Volver a `60` al terminar.
+1. En el `.env`, subir `NOTIFICACIONES_LIMITE_POR_MINUTO` (por ejemplo, a `1000000`): con el límite de 60 por minuto, casi todos los `POST` de notificaciones darían `429`. Volver a `60` al terminar. Para `pedidos.js`, subir también `USUARIOS_INTENTOS_POR_MINUTO` (por ejemplo, a `1000`): el `setup` registra 50 compradores e inicia sesión con cada uno desde la misma IP, y con el límite de 10 intentos por minuto fallaría con `429 demasiados_intentos`. Volver a `10` al terminar.
 2. Aplicar el cambio: `docker compose up -d api-gateway`.
 3. Correr un escenario:
 

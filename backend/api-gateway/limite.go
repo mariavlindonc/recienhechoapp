@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"math"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -17,6 +19,8 @@ type limitador struct {
 	ventana time.Duration
 	ahora   func() time.Time
 	cuentas map[string]cuenta
+	// ultimaLimpieza es cuándo se borraron las cuentas vencidas por última vez.
+	ultimaLimpieza time.Time
 }
 
 type cuenta struct {
@@ -35,6 +39,16 @@ func (limite *limitador) permitir(grupo string) (bool, time.Duration) {
 	defer limite.mutex.Unlock()
 
 	ahora := limite.ahora()
+	// Una vez por ventana se borran las cuentas vencidas: con el límite por IP
+	// cada dirección nueva ocupa lugar, y el mapa no puede crecer sin fin.
+	if ahora.Sub(limite.ultimaLimpieza) >= limite.ventana {
+		for clave, vieja := range limite.cuentas {
+			if ahora.Sub(vieja.inicio) >= limite.ventana {
+				delete(limite.cuentas, clave)
+			}
+		}
+		limite.ultimaLimpieza = ahora
+	}
 	actual := limite.cuentas[grupo]
 	if ahora.Sub(actual.inicio) >= limite.ventana {
 		actual = cuenta{inicio: ahora}
@@ -58,6 +72,31 @@ func limitarPorGrupo(limite *limitador, clavesAPI map[string]string, siguiente h
 			if permitido, espera := limite.permitir(grupo); !permitido {
 				escritor.Header().Set("Retry-After", strconv.Itoa(max(int(math.Ceil(espera.Seconds())), 1)))
 				responderError(escritor, http.StatusTooManyRequests, "limite_superado", fmt.Sprintf("Límite de %d solicitudes por minuto superado.", limite.maximo))
+				return
+			}
+		}
+		siguiente.ServeHTTP(escritor, pedido)
+	})
+}
+
+// limitarIntentos aplica un límite por IP al registro y al inicio de sesión: frena
+// a quien prueba contraseñas y protege la CPU, porque cada intento usa bcrypt
+// (ADR-016). La IP es la de la conexión (RemoteAddr): X-Forwarded-For lo puede
+// inventar cualquiera. Detrás de un proxy (por ejemplo, el de Vite en desarrollo)
+// todos comparten la IP del proxy.
+func limitarIntentos(limite *limitador, siguiente http.Handler) http.Handler {
+	return http.HandlerFunc(func(escritor http.ResponseWriter, pedido *http.Request) {
+		// Sin la barra final, para que "/usuarios/sesion/" no saltee el límite.
+		ruta := strings.TrimRight(pedido.URL.Path, "/")
+		esIntento := pedido.Method == http.MethodPost && (ruta == "/usuarios" || ruta == "/usuarios/sesion")
+		if esIntento {
+			ip, _, err := net.SplitHostPort(pedido.RemoteAddr)
+			if err != nil {
+				ip = pedido.RemoteAddr
+			}
+			if permitido, espera := limite.permitir(ip); !permitido {
+				escritor.Header().Set("Retry-After", strconv.Itoa(max(int(math.Ceil(espera.Seconds())), 1)))
+				responderError(escritor, http.StatusTooManyRequests, "demasiados_intentos", "Demasiados intentos. Esperá un minuto y volvé a probar.")
 				return
 			}
 		}

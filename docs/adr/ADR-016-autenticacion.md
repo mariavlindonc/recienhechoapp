@@ -4,6 +4,8 @@
 
 Propuesto el 26/10/2026 con las opciones. Aceptado por Agustín el 28/10/2026: opción A, bcrypt y vendedor creado desde el `.env`. El mismo día eligió el header `Authorization` para la sesión del frontend.
 
+Revisión del 02/11/2026 (revisión del #61 y el #62, decidido por María): el gateway limita los intentos de registro e inicio de sesión por IP (opción A, frente a un freno por email en `usuarios` o dejarlo como deuda). Para el test de carga de pedidos el límite se sube en el `.env`.
+
 ## Contexto
 
 El enunciado pide para la presentación un "punto de entrada único con autenticación, direccionamiento y control de tráfico" y un frontend "desde el ingreso del usuario hasta la funcionalidad compartida". El SPEC pide registrarse e iniciar sesión (C1) y guardar las contraseñas hasheadas, sin devolverlas nunca (RNF8). Además, hay dos roles con permisos distintos: comprador y vendedor.
@@ -31,6 +33,8 @@ El token lleva `sub` (id del usuario), `email`, `rol`, `iat` y `exp`. Dependenci
 | `GET /usuarios/yo` | Perfil del usuario de `X-Id-Usuario` | `200`, `401 sin_sesion`, `404` |
 
 Ninguna respuesta incluye la contraseña ni su hash. Un email inexistente y una contraseña incorrecta responden igual y tardan lo mismo (se compara contra un hash de relleno), para no delatar qué emails tienen cuenta. El email se guarda en minúsculas y es único en MySQL.
+
+**Límite de intentos.** El api-gateway deja pasar hasta `USUARIOS_INTENTOS_POR_MINUTO` (10 por defecto) `POST /usuarios` y `POST /usuarios/sesion` por minuto desde cada IP, y después responde `429 demasiados_intentos` con `Retry-After`. Frena a quien prueba contraseñas y protege la CPU, porque cada intento usa bcrypt. La IP es la de la conexión, no la de `X-Forwarded-For`, que cualquiera puede inventar; detrás de un proxy todos comparten su IP (ver la deuda técnica en [ARCHITECTURE](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
 
 **Sesión en el frontend: header `Authorization: Bearer <token>`.** El frontend guarda el token en el navegador y lo manda en cada solicitud. El gateway lo verifica (firma HS256, `exp` obligatorio) y:
 

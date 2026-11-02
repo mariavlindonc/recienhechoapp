@@ -70,7 +70,8 @@ func ejecutar() error {
 	proxyNotificaciones := limitarPorGrupo(limite, configuracion.clavesAPI, balanceadorNotificaciones)
 	proxyPedidos := nuevoProxyBalanceado("pedidos", configuracion.instanciasPedidos, tiempoMaximoServicios, medidor.contarReenvio("pedidos"))
 	proxyProductos := nuevoProxyBalanceado("productos", configuracion.instanciasProductos, tiempoMaximoServicios, medidor.contarReenvio("productos"))
-	proxyUsuarios := nuevoProxyBalanceado("usuarios", configuracion.instanciasUsuarios, tiempoMaximoServicios, medidor.contarReenvio("usuarios"))
+	limiteIntentos := nuevoLimitador(configuracion.intentosPorMinuto, time.Minute, time.Now)
+	proxyUsuarios := limitarIntentos(limiteIntentos, nuevoProxyBalanceado("usuarios", configuracion.instanciasUsuarios, tiempoMaximoServicios, medidor.contarReenvio("usuarios")))
 	servidor := &http.Server{
 		Addr:              ":" + configuracion.puerto,
 		Handler:           nuevoRouter(configuracion.secretoJWT, proxyNotificaciones, proxyPedidos, proxyProductos, proxyUsuarios, medidor.medirSolicitudes()),

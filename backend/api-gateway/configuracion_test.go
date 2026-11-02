@@ -29,6 +29,22 @@ func TestLeerConfiguracionLeeElLimiteYLasClaves(prueba *testing.T) {
 	}
 }
 
+func TestLeerConfiguracionLeeElLimiteDeIntentos(prueba *testing.T) {
+	variables := variablesValidas()
+
+	leida, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
+
+	if err != nil || leida.intentosPorMinuto != 10 {
+		prueba.Fatalf("intentos %d, err %v", leida.intentosPorMinuto, err)
+	}
+	for _, invalida := range []string{"0", "-1", "muchos"} {
+		variables["USUARIOS_INTENTOS_POR_MINUTO"] = invalida
+		if _, err := leerConfiguracion(func(nombre string) string { return variables[nombre] }); err == nil || !strings.Contains(err.Error(), "USUARIOS_INTENTOS_POR_MINUTO") {
+			prueba.Errorf("USUARIOS_INTENTOS_POR_MINUTO=%q tenía que dar error: %v", invalida, err)
+		}
+	}
+}
+
 func TestLeerConfiguracionUsaValoresPorDefecto(prueba *testing.T) {
 	variables := variablesValidas()
 
