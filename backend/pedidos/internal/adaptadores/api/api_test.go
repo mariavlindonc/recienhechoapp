@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,6 +22,7 @@ type casosFalsos struct {
 	comprador    dominio.Comprador
 	solicitud    dominio.Solicitud
 	errCapacidad error
+	errResponder error
 }
 
 func (casos *casosFalsos) Crear(_ context.Context, comprador dominio.Comprador, _ string, solicitud dominio.Solicitud) (dominio.Pedido, error) {
@@ -60,7 +62,13 @@ func (casos *casosFalsos) ListarEspecialesAbiertos(context.Context) ([]dominio.P
 func (casos *casosFalsos) CotizarEspecial(context.Context, string, int64) (dominio.Pedido, error) {
 	return dominio.Pedido{}, nil
 }
+func (casos *casosFalsos) RechazarEspecial(_ context.Context, id, mensaje string) (dominio.Pedido, error) {
+	return dominio.Pedido{ID: id, Tipo: dominio.TipoEspecial, Estado: dominio.EstadoCancelado, MensajeVendedor: mensaje}, nil
+}
 func (casos *casosFalsos) ResponderEspecial(context.Context, string, string, bool) (dominio.Pedido, error) {
+	if casos.errResponder != nil {
+		return dominio.Pedido{}, casos.errResponder
+	}
 	return dominio.Pedido{}, dominio.ErrCotizacionVencida
 }
 
@@ -212,11 +220,41 @@ func TestRutasDeEspeciales(prueba *testing.T) {
 	}
 }
 
+func TestVendedorDeclinaUnaSolicitud(prueba *testing.T) {
+	cuerpo := `{"mensaje":"No llegamos para esa fecha."}`
+	if respuesta, _ := pedir(&casosFalsos{}, http.MethodPost, "/pedidos/especiales/e1/declinacion", cuerpo, comprador); respuesta.Code != http.StatusForbidden {
+		prueba.Errorf("el comprador no declina: estado %d", respuesta.Code)
+	}
+	respuesta, datos := pedir(&casosFalsos{}, http.MethodPost, "/pedidos/especiales/e1/declinacion", cuerpo, vendedor)
+	if respuesta.Code != http.StatusOK || datos["estado"] != "cancelado" || datos["mensajeVendedor"] != "No llegamos para esa fecha." {
+		prueba.Errorf("estado %d, datos %v", respuesta.Code, datos)
+	}
+}
+
 func TestVendedorListaPorFecha(prueba *testing.T) {
 	if respuesta, _ := pedir(&casosFalsos{}, http.MethodGet, "/pedidos", "", vendedor); respuesta.Code != http.StatusBadRequest {
 		prueba.Errorf("sin fecha se esperaba 400, dio %d", respuesta.Code)
 	}
 	if respuesta, _ := pedir(&casosFalsos{}, http.MethodGet, "/pedidos?fecha=2026-10-30", "", vendedor); respuesta.Code != http.StatusOK {
 		prueba.Errorf("con fecha se esperaba 200, dio %d", respuesta.Code)
+	}
+}
+
+// El comprador sabe por qué venció la cotización.
+func TestCotizacionVencidaDiceElMotivo(prueba *testing.T) {
+	casos := map[string]struct {
+		err     error
+		mensaje string
+	}{
+		"por la fecha": {fmt.Errorf("%w: la fecha del pedido ya pasó", dominio.ErrCotizacionVencida), "La cotización venció: la fecha del pedido ya pasó."},
+		"sin detalle":  {dominio.ErrCotizacionVencida, "La cotización venció: pasaron más de 48 horas o ya pasó la fecha del pedido."},
+	}
+	for nombre, caso := range casos {
+		prueba.Run(nombre, func(prueba *testing.T) {
+			respuesta, datos := pedir(&casosFalsos{errResponder: caso.err}, http.MethodPost, "/pedidos/especiales/e1/aceptacion", "", comprador)
+			if respuesta.Code != http.StatusConflict || datos["mensaje"] != caso.mensaje {
+				prueba.Errorf("estado %d, mensaje %q; se esperaba %q", respuesta.Code, datos["mensaje"], caso.mensaje)
+			}
+		})
 	}
 }

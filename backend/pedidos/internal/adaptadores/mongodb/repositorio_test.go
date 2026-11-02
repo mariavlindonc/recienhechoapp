@@ -211,6 +211,23 @@ func TestCancelarDevuelveElCupo(prueba *testing.T) {
 	}
 }
 
+func TestElMensajeDelVendedorSeGuarda(prueba *testing.T) {
+	repositorio := nuevoRepositorio(prueba)
+	especial, _ := dominio.NuevoEspecial("especial-1", dominio.Comprador{ID: "comprador-1", Email: "comprador-1@ejemplo.com"}, "clave", "Torta de seis pisos", "2026-10-30", momento)
+	repositorio.Registrar(context.Background(), especial, evento("evento-1", especial))
+
+	anterior, _ := especial.RechazarSolicitud("No llegamos para esa fecha.", momento)
+	rechazo := dominio.NuevoEventoEstadoCambiado("evento-2", especial, anterior, momento)
+	if err := repositorio.GuardarCambio(context.Background(), puertos.Cambio{Pedido: especial, VersionAnterior: 0, Evento: &rechazo}); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+
+	guardado, _ := repositorio.Buscar(context.Background(), "especial-1")
+	if guardado.Estado != dominio.EstadoCancelado || guardado.MensajeVendedor != "No llegamos para esa fecha." {
+		prueba.Errorf("pedido guardado: %+v", guardado)
+	}
+}
+
 // Dos cambios hechos sobre la misma versión: el segundo no pisa al primero, y su
 // cupo y su evento tampoco se guardan.
 func TestCambioSobreVersionViejaNoSeGuarda(prueba *testing.T) {

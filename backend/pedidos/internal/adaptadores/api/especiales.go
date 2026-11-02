@@ -73,3 +73,22 @@ func (manejador *manejador) responderEspecial(acepta bool) gin.HandlerFunc {
 		contexto.JSON(http.StatusOK, aRespuesta(pedido))
 	}
 }
+
+type cuerpoDeclinacion struct {
+	Mensaje string `json:"mensaje"`
+}
+
+// declinarEspecial es cuando el vendedor no cotiza una solicitud: el mensaje le
+// llega al comprador por mail.
+func (manejador *manejador) declinarEspecial(contexto *gin.Context) {
+	var cuerpo cuerpoDeclinacion
+	if !leerCuerpo(contexto, &cuerpo) {
+		return
+	}
+	pedido, err := manejador.casos.RechazarEspecial(contexto.Request.Context(), contexto.Param("id"), cuerpo.Mensaje)
+	if err != nil {
+		responderErrorDeDominio(contexto, err)
+		return
+	}
+	contexto.JSON(http.StatusOK, aRespuesta(pedido))
+}

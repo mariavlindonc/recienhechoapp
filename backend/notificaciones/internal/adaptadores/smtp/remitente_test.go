@@ -100,7 +100,9 @@ func (servidor *servidorFalso) conversar(conexion net.Conn) {
 				if renglon == ".\r\n" {
 					break
 				}
-				contenido.WriteString(renglon)
+				// Como un servidor real (RFC 5321, 4.5.2): el cliente le agrega un punto
+				// a cada renglón que empieza con punto, y acá se le saca.
+				contenido.WriteString(strings.TrimPrefix(renglon, "."))
 			}
 			servidor.mensajes <- contenido.String()
 			responder("250 recibido")
@@ -258,5 +260,43 @@ func TestConfiguracionInvalida(prueba *testing.T) {
 
 	if _, err := smtp.NuevoRemitente(valida); err != nil {
 		prueba.Errorf("la configuración válida dio error: %v", err)
+	}
+}
+
+// El cuerpo viene de otras personas (por ejemplo, el mensaje del vendedor). Aunque
+// imite encabezados, comandos SMTP o HTML, tiene que llegar como texto del cuerpo.
+func TestUnCuerpoMaliciosoLlegaComoTexto(prueba *testing.T) {
+	servidor := iniciarServidorFalso(prueba, "250 ok")
+	remitente := nuevoRemitente(prueba, servidor.puerto(), 5*time.Second)
+	malicioso := puertos.Mensaje{
+		Destinatario: "cliente@ejemplo.com",
+		Asunto:       "No podemos hacer tu pedido especial",
+		Cuerpo: "Hola\r\n\r\nBcc: espia@malo.test\r\n" + // intenta agregar un encabezado
+			".\r\nMAIL FROM:<falso@malo.test>\r\nRCPT TO:<otra@malo.test>\r\n" + // intenta cerrar el mail y mandar otro
+			"<script>alert(1)</script> <a href=\"https://malo.test\">pagá acá</a>",
+	}
+
+	if err := remitente.Enviar(context.Background(), malicioso); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+
+	if sobre := <-servidor.sobres; sobre != "<avisos@recienhecho.test> -> <cliente@ejemplo.com>" {
+		prueba.Errorf("sobre = %q", sobre)
+	}
+	select {
+	case otro := <-servidor.sobres:
+		prueba.Errorf("se coló otro mail: %q", otro)
+	case <-time.After(200 * time.Millisecond):
+	}
+	recibido, err := mail.ReadMessage(strings.NewReader(<-servidor.mensajes))
+	if err != nil {
+		prueba.Fatalf("el mensaje no tiene formato de email: %v", err)
+	}
+	if bcc := recibido.Header.Get("Bcc"); bcc != "" || recibido.Header.Get("Content-Type") != "text/plain; charset=UTF-8" {
+		prueba.Errorf("encabezados alterados: Bcc %q, Content-Type %q", bcc, recibido.Header.Get("Content-Type"))
+	}
+	cuerpo, _ := io.ReadAll(quotedprintable.NewReader(recibido.Body))
+	if strings.TrimRight(string(cuerpo), "\r\n") != malicioso.Cuerpo {
+		prueba.Errorf("el cuerpo cambió:\n%q\nse esperaba:\n%q", cuerpo, malicioso.Cuerpo)
 	}
 }

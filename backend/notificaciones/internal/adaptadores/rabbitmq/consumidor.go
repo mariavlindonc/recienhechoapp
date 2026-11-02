@@ -58,9 +58,10 @@ type evento struct {
 			NombreProducto string `json:"nombreProducto"`
 			Cantidad       int    `json:"cantidad"`
 		} `json:"items"`
-		Fecha         string `json:"fecha"`
-		Motivo        string `json:"motivo"`
-		TotalCentavos int64  `json:"totalCentavos"`
+		Fecha           string `json:"fecha"`
+		Motivo          string `json:"motivo"`
+		TotalCentavos   int64  `json:"totalCentavos"`
+		MensajeVendedor string `json:"mensajeVendedor"`
 	} `json:"datos"`
 }
 
@@ -218,7 +219,7 @@ func mensajeDe(recibido evento) (string, string) {
 	case "rechazado":
 		return "Rechazaste la cotización", fmt.Sprintf("Registramos que no aceptaste la cotización de %s.", pedido)
 	case "vencido":
-		return "La cotización venció", fmt.Sprintf("Pasaron más de 48 horas y venció la cotización de %s.", pedido)
+		return "La cotización venció", fmt.Sprintf("Venció la cotización de %s: pasaron más de 48 horas o ya pasó la fecha del pedido.", pedido)
 	case "pendiente_confirmacion":
 		return "Recibimos tu pedido", fmt.Sprintf("Recibimos %s. Te avisamos cuando esté confirmado.", pedido)
 	case "confirmado":
@@ -230,6 +231,10 @@ func mensajeDe(recibido evento) (string, string) {
 	case "entregado":
 		return "Entregamos tu pedido", fmt.Sprintf("Entregamos %s. ¡Que lo disfrutes!", pedido)
 	case "cancelado":
+		if datos.MensajeVendedor != "" {
+			// El vendedor rechazó un pedido especial sin cotizarlo (ADR-017).
+			return "No podemos hacer tu pedido especial", fmt.Sprintf("No vamos a poder hacer %s. Mensaje de la pastelería: %s", pedido, datos.MensajeVendedor)
+		}
 		cuerpo := fmt.Sprintf("Se canceló %s.", pedido)
 		if datos.Motivo != "" {
 			cuerpo += " " + datos.Motivo

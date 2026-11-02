@@ -30,6 +30,8 @@ type DatosEstadoCambiado struct {
 	Fecha          string
 	Motivo         string // de la cancelación, si hay
 	TotalCentavos  int64  // el precio, que el mail de la cotización le muestra al comprador (C6)
+	// MensajeVendedor explica por qué el vendedor rechazó un especial sin cotizarlo.
+	MensajeVendedor string
 }
 
 // NuevoEventoEstadoCambiado describe el estado actual del pedido y de cuál venía.
@@ -40,15 +42,16 @@ func NuevoEventoEstadoCambiado(id string, pedido Pedido, anterior Estado, ahora 
 		Version:    versionEvento,
 		OcurridoEn: ahora,
 		Datos: DatosEstadoCambiado{
-			IDPedido:       pedido.ID,
-			IDComprador:    pedido.Comprador.ID,
-			EmailComprador: pedido.Comprador.Email,
-			EstadoAnterior: string(anterior),
-			EstadoNuevo:    string(pedido.Estado),
-			Items:          itemsDelEvento(pedido.Items),
-			Fecha:          pedido.Fecha,
-			Motivo:         pedido.MotivoCancelacion,
-			TotalCentavos:  pedido.TotalCentavos,
+			IDPedido:        pedido.ID,
+			IDComprador:     pedido.Comprador.ID,
+			EmailComprador:  pedido.Comprador.Email,
+			EstadoAnterior:  string(anterior),
+			EstadoNuevo:     string(pedido.Estado),
+			Items:           itemsDelEvento(pedido.Items),
+			Fecha:           pedido.Fecha,
+			Motivo:          pedido.MotivoCancelacion,
+			TotalCentavos:   pedido.TotalCentavos,
+			MensajeVendedor: pedido.MensajeVendedor,
 		},
 	}
 }

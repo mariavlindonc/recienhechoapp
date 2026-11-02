@@ -79,6 +79,9 @@ func (pedido *Pedido) Cotizar(precioCentavos int64, ahora time.Time) (Estado, er
 	if pedido.Tipo != TipoEspecial || anterior != EstadoSolicitado {
 		return anterior, fmt.Errorf("%w: solo se cotiza un pedido especial solicitado", ErrTransicionInvalida)
 	}
+	if pedido.Fecha < Hoy(ahora) {
+		return anterior, fmt.Errorf("%w: la fecha del pedido ya pasó", ErrTransicionInvalida)
+	}
 	if precioCentavos <= 0 {
 		return anterior, fmt.Errorf("%w: precioCentavos tiene que ser mayor a cero", ErrSolicitudInvalida)
 	}
@@ -93,8 +96,8 @@ func (pedido *Pedido) Cotizar(precioCentavos int64, ahora time.Time) (Estado, er
 
 // ResponderCotizacion acepta o rechaza la cotización (C6). Aceptar la deja
 // pendiente_confirmacion para que reserve el cupo y la confirme el inventario.
-// Pasadas 48 h el especial queda vencido y devuelve ErrCotizacionVencida (R8): el
-// cambio igual hay que guardarlo.
+// Pasadas 48 h (R8), o si la fecha del pedido ya pasó, el especial queda vencido
+// y devuelve ErrCotizacionVencida: el cambio igual hay que guardarlo.
 func (pedido *Pedido) ResponderCotizacion(acepta bool, ahora time.Time) (Estado, error) {
 	anterior := pedido.Estado
 	if pedido.Tipo != TipoEspecial || anterior != EstadoCotizado {
@@ -104,12 +107,48 @@ func (pedido *Pedido) ResponderCotizacion(acepta bool, ahora time.Time) (Estado,
 	switch {
 	case ahora.Sub(pedido.CotizadoEn) > VigenciaCotizacion:
 		pedido.Estado = EstadoVencido
-		return anterior, ErrCotizacionVencida
+		return anterior, fmt.Errorf("%w: pasaron más de 48 horas", ErrCotizacionVencida)
+	case pedido.Fecha < Hoy(ahora):
+		pedido.Estado = EstadoVencido
+		return anterior, fmt.Errorf("%w: la fecha del pedido ya pasó", ErrCotizacionVencida)
 	case acepta:
 		pedido.Estado = EstadoPendienteConfirmacion
 		pedido.ProximaConfirmacion = ahora
 	default:
 		pedido.Estado = EstadoRechazado
 	}
+	return anterior, nil
+}
+
+// CancelarSolicitud retira un especial que todavía no se cotizó: el comprador se
+// arrepintió o el vendedor no lo cotiza. Como no reservó cupo ni insumos, no hay
+// nada que devolver. Una cotización no se cancela: se rechaza.
+func (pedido *Pedido) CancelarSolicitud(motivo string, ahora time.Time) (Estado, error) {
+	anterior := pedido.Estado
+	if pedido.Tipo != TipoEspecial || anterior != EstadoSolicitado {
+		return anterior, fmt.Errorf("%w: solo se retira un pedido especial solicitado", ErrTransicionInvalida)
+	}
+	pedido.Estado = EstadoCancelado
+	pedido.MotivoCancelacion = motivo
+	pedido.ActualizadoEn = ahora
+	return anterior, nil
+}
+
+// RechazarSolicitud es cuando el vendedor no va a cotizar un especial (VE5): queda
+// cancelado y el mensaje le explica al comprador por qué. No hay cupo ni insumos
+// que devolver.
+func (pedido *Pedido) RechazarSolicitud(mensaje string, ahora time.Time) (Estado, error) {
+	anterior := pedido.Estado
+	if pedido.Tipo != TipoEspecial || anterior != EstadoSolicitado {
+		return anterior, fmt.Errorf("%w: solo se rechaza un pedido especial solicitado", ErrTransicionInvalida)
+	}
+	mensaje = strings.TrimSpace(mensaje)
+	if mensaje == "" || utf8.RuneCountInString(mensaje) > largoMaximoDescripcion {
+		return anterior, fmt.Errorf("%w: mensaje tiene que tener entre 1 y %d caracteres", ErrSolicitudInvalida, largoMaximoDescripcion)
+	}
+	pedido.Estado = EstadoCancelado
+	pedido.MotivoCancelacion = "Rechazado por la pastelería."
+	pedido.MensajeVendedor = mensaje
+	pedido.ActualizadoEn = ahora
 	return anterior, nil
 }

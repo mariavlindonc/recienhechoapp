@@ -79,6 +79,35 @@ func TestLaCotizacionLlevaElPrecio(prueba *testing.T) {
 	}
 }
 
+// Una cotización vence a las 48 h o cuando ya pasó la fecha del pedido: el mail
+// nombra las dos causas.
+func TestElMailDeVencimientoNombraLasDosCausas(prueba *testing.T) {
+	casos := &casosFalsos{}
+	vencido := strings.NewReplacer(`"estadoNuevo":"listo"`, `"estadoNuevo":"vencido"`).Replace(eventoListo)
+
+	if err := Procesar(context.Background(), casos, []byte(vencido)); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+
+	if cuerpo := casos.creadas["evento-1"].Cuerpo; !strings.Contains(cuerpo, "48 horas") || !strings.Contains(cuerpo, "la fecha del pedido") {
+		prueba.Errorf("cuerpo = %q", cuerpo)
+	}
+}
+
+// Cuando el vendedor rechaza una solicitud, el comprador lee su mensaje.
+func TestElRechazoDelVendedorLlevaSuMensaje(prueba *testing.T) {
+	casos := &casosFalsos{}
+	rechazado := strings.NewReplacer(`"estadoNuevo":"listo"`, `"estadoNuevo":"cancelado","mensajeVendedor":"No llegamos para esa fecha."`).Replace(eventoListo)
+
+	if err := Procesar(context.Background(), casos, []byte(rechazado)); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+
+	if solicitud := casos.creadas["evento-1"]; solicitud.Asunto != "No podemos hacer tu pedido especial" || !strings.Contains(solicitud.Cuerpo, "No llegamos para esa fecha.") {
+		prueba.Errorf("solicitud = %+v", solicitud)
+	}
+}
+
 func TestMensajesNoProcesablesVanAFallidos(prueba *testing.T) {
 	casos := []struct {
 		nombre string

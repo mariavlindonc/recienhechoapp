@@ -223,6 +223,9 @@ type Pedido struct {
 	Tipo              Tipo
 	Estado            Estado
 	MotivoCancelacion string
+	// MensajeVendedor es lo que el vendedor le escribe al comprador al rechazar un
+	// pedido especial sin cotizarlo; le llega en el mail.
+	MensajeVendedor string
 	// CotizadoEn es cuándo se cotizó un pedido especial; desde ahí corren las 48 h (R8).
 	CotizadoEn time.Time
 

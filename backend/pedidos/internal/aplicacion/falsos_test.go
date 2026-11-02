@@ -265,12 +265,18 @@ type inventarioFalso struct {
 	reservas    int
 	liberados   []string
 	fallarLiber error
+	// alReservar, si no es nil, corre en cada reserva: sirve para que algo falle
+	// justo después de hablar con el inventario.
+	alReservar func()
 }
 
 func (inventario *inventarioFalso) Reservar(_ context.Context, idPedido string, _ []dominio.Insumo) (puertos.ResultadoReserva, error) {
 	inventario.mutex.Lock()
 	defer inventario.mutex.Unlock()
 	inventario.reservas++
+	if inventario.alReservar != nil {
+		inventario.alReservar()
+	}
 	if inventario.fallar != nil {
 		return "", inventario.fallar
 	}

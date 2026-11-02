@@ -13,6 +13,7 @@ import (
 	"mime"
 	"net/http"
 	"net/mail"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -49,6 +50,7 @@ type CasosDeUso interface {
 	SolicitarEspecial(contexto context.Context, comprador dominio.Comprador, clave, descripcion, fecha string) (dominio.Pedido, error)
 	ListarEspecialesAbiertos(contexto context.Context) ([]dominio.Pedido, error)
 	CotizarEspecial(contexto context.Context, id string, precioCentavos int64) (dominio.Pedido, error)
+	RechazarEspecial(contexto context.Context, id, mensaje string) (dominio.Pedido, error)
 	ResponderEspecial(contexto context.Context, idComprador, id string, acepta bool) (dominio.Pedido, error)
 }
 
@@ -71,6 +73,7 @@ func Registrar(router gin.IRouter, casos CasosDeUso, chequearSalud func(contexto
 	pedidos.POST("/especiales", soloRol(rolComprador), manejador.solicitarEspecial)
 	pedidos.GET("/especiales", soloRol(rolVendedor), manejador.listarEspeciales)
 	pedidos.PUT("/especiales/:id/cotizacion", soloRol(rolVendedor), manejador.cotizarEspecial)
+	pedidos.POST("/especiales/:id/declinacion", soloRol(rolVendedor), manejador.declinarEspecial)
 	pedidos.POST("/especiales/:id/aceptacion", soloRol(rolComprador), manejador.responderEspecial(true))
 	pedidos.POST("/especiales/:id/rechazo", soloRol(rolComprador), manejador.responderEspecial(false))
 
@@ -118,6 +121,7 @@ type respuestaPedido struct {
 	Tipo              string          `json:"tipo"`
 	Estado            string          `json:"estado"`
 	MotivoCancelacion string          `json:"motivoCancelacion,omitempty"`
+	MensajeVendedor   string          `json:"mensajeVendedor,omitempty"`
 	RequiereRevision  bool            `json:"requiereRevision"`
 	MotivoRevision    string          `json:"motivoRevision,omitempty"`
 	CreadoEn          time.Time       `json:"creadoEn"`
@@ -305,6 +309,7 @@ func aRespuesta(pedido dominio.Pedido) respuestaPedido {
 		Tipo:              string(pedido.Tipo),
 		Estado:            string(pedido.Estado),
 		MotivoCancelacion: pedido.MotivoCancelacion,
+		MensajeVendedor:   pedido.MensajeVendedor,
 		RequiereRevision:  pedido.RequiereRevision,
 		MotivoRevision:    pedido.MotivoRevision,
 		CreadoEn:          pedido.CreadoEn,
@@ -336,7 +341,12 @@ func responderErrorDeDominio(contexto *gin.Context, err error) {
 	case errors.Is(err, dominio.ErrConflictoIdempotencia):
 		responderError(contexto, http.StatusConflict, "conflicto_idempotencia", "La clave de idempotencia ya se usó con otro pedido.")
 	case errors.Is(err, dominio.ErrCotizacionVencida):
-		responderError(contexto, http.StatusConflict, "cotizacion_vencida", "La cotización venció: pasaron más de 48 horas.")
+		// El dominio dice por qué venció: pasaron 48 h o ya pasó la fecha del pedido.
+		motivo := "pasaron más de 48 horas o ya pasó la fecha del pedido"
+		if detalle, encontrado := strings.CutPrefix(err.Error(), dominio.ErrCotizacionVencida.Error()+": "); encontrado {
+			motivo = detalle
+		}
+		responderError(contexto, http.StatusConflict, "cotizacion_vencida", "La cotización venció: "+motivo+".")
 	case errors.Is(err, dominio.ErrModificadoAlMismoTiempo):
 		responderError(contexto, http.StatusConflict, "modificado_al_mismo_tiempo", "El pedido cambió mientras se lo modificaba. Volvé a cargarlo.")
 	case errors.Is(err, puertos.ErrProductoNoDisponible):

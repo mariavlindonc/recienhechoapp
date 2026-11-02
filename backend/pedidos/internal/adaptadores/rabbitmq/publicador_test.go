@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,7 +38,7 @@ func eventoDePrueba(id string) puertos.EventoGuardado {
 			Tipo:       dominio.TipoEstadoCambiado,
 			Version:    1,
 			OcurridoEn: time.Now(),
-			Datos:      dominio.DatosEstadoCambiado{IDPedido: "pedido-1", EstadoNuevo: "pendiente_confirmacion"},
+			Datos:      dominio.DatosEstadoCambiado{IDPedido: "pedido-1", EstadoNuevo: "cancelado", MensajeVendedor: "No llegamos para esa fecha."},
 		},
 		Traza: map[string]string{"traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"},
 	}
@@ -99,6 +100,9 @@ func TestPublicaElEventoConSuTraza(prueba *testing.T) {
 	mensaje, encontrado, err := canal.Get(cola, true)
 	if err != nil || !encontrado {
 		prueba.Fatalf("el mensaje tenía que estar en la cola: %v", err)
+	}
+	if !strings.Contains(string(mensaje.Body), `"mensajeVendedor":"No llegamos para esa fecha."`) {
+		prueba.Errorf("el cuerpo no lleva el mensaje del vendedor: %s", mensaje.Body)
 	}
 	if mensaje.MessageId != "evento-1" || mensaje.Headers["traceparent"] == nil || mensaje.DeliveryMode != amqp.Persistent {
 		prueba.Errorf("mensaje %s, headers %v, modo %d", mensaje.MessageId, mensaje.Headers, mensaje.DeliveryMode)
