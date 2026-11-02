@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, ingresar, listarEspeciales, listarMisPedidos, responderCotizacion } from './api.ts'
+import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, ingresar, listarEspeciales, listarMisPedidos, rechazarEspecial, responderCotizacion } from './api.ts'
 
 // sessionStorage no existe en bun test: alcanza con un mapa.
 const guardado = new Map<string, string>()
@@ -62,7 +62,7 @@ test('con sesión manda el token y el pedido lleva Idempotency-Key', async () =>
   await ingresar('a@a.com', 'clave-segura')
   const pedidos = responder(201, { id: 'pd1', items: [], fecha: '2026-11-02', precioCentavos: 0, tipo: 'inmediato', estado: 'pendiente_confirmacion' })
 
-  await crearPedido({ productoId: 'p1', cantidad: 1 })
+  await crearPedido({ productoId: 'p1', cantidad: 1, clave: 'clave-1' })
 
   const headers = pedidos[0]!.opciones.headers as Record<string, string>
   expect(headers.Authorization).toBe('Bearer token-1')
@@ -73,7 +73,7 @@ test('con sesión manda el token y el pedido lleva Idempotency-Key', async () =>
 test('un error del servicio llega con el mensaje del contrato', async () => {
   responder(409, { codigo: 'sin_cupo', mensaje: 'No hay cupo para ese día.' })
 
-  const error = await crearPedido({ productoId: 'p1', cantidad: 1, fecha: '2026-11-02' }).catch(motivo => motivo)
+  const error = await crearPedido({ productoId: 'p1', cantidad: 1, fecha: '2026-11-02', clave: 'clave-1' }).catch(motivo => motivo)
 
   expect(error).toBeInstanceOf(ErrorDeApi)
   expect(error.message).toBe('No hay cupo para ese día.')
@@ -101,4 +101,41 @@ test('R8: la cotización vencida llega como error de pedidos', async () => {
 
   expect(pedidos[0]!.url).toBe('/api/pedidos/especiales/e1/aceptacion')
   expect(error.codigo).toBe('cotizacion_vencida')
+})
+
+test('crearPedido manda la clave del intento, así un reintento no duplica el pedido', async () => {
+  const pedidos = responder(201, { id: 'pd1', items: [], fecha: '2026-11-02', precioCentavos: 0, tipo: 'inmediato', estado: 'pendiente_confirmacion' })
+
+  await crearPedido({ productoId: 'p1', cantidad: 1, clave: 'clave-del-intento' })
+  await crearPedido({ productoId: 'p1', cantidad: 1, clave: 'clave-del-intento' })
+
+  const claves = pedidos.map(pedido => (pedido.opciones.headers as Record<string, string>)['Idempotency-Key'])
+  expect(claves).toEqual(['clave-del-intento', 'clave-del-intento'])
+})
+
+test('el vendedor rechaza una solicitud con un mensaje para el comprador (ADR-017)', async () => {
+  const pedidos = responder(200, {
+    id: 'e1', items: [{ productoId: '', nombreProducto: 'Torta de seis pisos', cantidad: 1 }], fecha: '2026-12-01', precioCentavos: 0,
+    tipo: 'especial', estado: 'cancelado', motivoCancelacion: 'Rechazado por la pastelería.', mensajeVendedor: 'No llegamos para esa fecha.',
+  })
+
+  const rechazado = await rechazarEspecial('e1', 'No llegamos para esa fecha.')
+
+  expect(pedidos[0]!.url).toBe('/api/pedidos/especiales/e1/declinacion')
+  expect(pedidos[0]!.opciones.method).toBe('POST')
+  expect(JSON.parse(pedidos[0]!.opciones.body as string)).toEqual({ mensaje: 'No llegamos para esa fecha.' })
+  expect(rechazado.estado).toBe('cancelado')
+  expect(rechazado.mensajeVendedor).toBe('No llegamos para esa fecha.')
+})
+
+test('el comprador ve el mensaje del vendedor en sus pedidos', async () => {
+  responder(200, [{
+    id: 'e1', items: [{ productoId: '', nombreProducto: 'Torta de seis pisos', cantidad: 1 }], fecha: '2026-12-01', precioCentavos: 0,
+    tipo: 'especial', estado: 'cancelado', motivoCancelacion: 'Rechazado por la pastelería.', mensajeVendedor: 'No llegamos para esa fecha.',
+  }])
+
+  const [pedido] = await listarMisPedidos()
+
+  expect(pedido!.mensajeVendedor).toBe('No llegamos para esa fecha.')
+  expect(pedido!.motivoCancelacion).toBe('Rechazado por la pastelería.')
 })
