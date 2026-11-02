@@ -79,6 +79,21 @@ func TestLaCotizacionLlevaElPrecio(prueba *testing.T) {
 	}
 }
 
+// Una cotización vence a las 48 h o cuando ya pasó la fecha del pedido: el mail
+// nombra las dos causas.
+func TestElMailDeVencimientoNombraLasDosCausas(prueba *testing.T) {
+	casos := &casosFalsos{}
+	vencido := strings.NewReplacer(`"estadoNuevo":"listo"`, `"estadoNuevo":"vencido"`).Replace(eventoListo)
+
+	if err := Procesar(context.Background(), casos, []byte(vencido)); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+
+	if cuerpo := casos.creadas["evento-1"].Cuerpo; !strings.Contains(cuerpo, "48 horas") || !strings.Contains(cuerpo, "la fecha del pedido") {
+		prueba.Errorf("cuerpo = %q", cuerpo)
+	}
+}
+
 func TestMensajesNoProcesablesVanAFallidos(prueba *testing.T) {
 	casos := []struct {
 		nombre string

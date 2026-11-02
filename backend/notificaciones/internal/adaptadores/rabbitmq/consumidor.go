@@ -218,7 +218,7 @@ func mensajeDe(recibido evento) (string, string) {
 	case "rechazado":
 		return "Rechazaste la cotización", fmt.Sprintf("Registramos que no aceptaste la cotización de %s.", pedido)
 	case "vencido":
-		return "La cotización venció", fmt.Sprintf("Pasaron más de 48 horas y venció la cotización de %s.", pedido)
+		return "La cotización venció", fmt.Sprintf("Venció la cotización de %s: pasaron más de 48 horas o ya pasó la fecha del pedido.", pedido)
 	case "pendiente_confirmacion":
 		return "Recibimos tu pedido", fmt.Sprintf("Recibimos %s. Te avisamos cuando esté confirmado.", pedido)
 	case "confirmado":

@@ -4,6 +4,8 @@
 
 Propuesto el 28/10/2026. Implementado como dice la Decisión, en `develop` (PR #64).
 
+Revisión del 02/11/2026 (revisión del #64, decidido por María): el comprador puede cancelar un especial `solicitado`; una cotización vence también si ya pasó la fecha del pedido, y no se cotiza una fecha que ya pasó.
+
 ## Contexto
 
 El SPEC pide que el comprador solicite un pedido a medida, que el vendedor lo cotice y que el comprador lo acepte o no (C6, VE5), y que la cotización venza a las 48 h (R8). Cuando el vendedor cotiza, el comprador recibe un mail con el precio.
@@ -38,10 +40,11 @@ Rutas:
 |---|---|---|
 | `POST /pedidos/especiales` | comprador | Solicita (`descripcion`, `fecha`) con `Idempotency-Key` |
 | `GET /pedidos/especiales` | vendedor | Lista los `solicitado` y `cotizado`; el comprador ve los suyos en `GET /pedidos` |
-| `PUT /pedidos/especiales/:id/cotizacion` | vendedor | Cotiza (`precioCentavos`) |
-| `POST /pedidos/especiales/:id/aceptacion` y `/rechazo` | comprador | Responde; después de 48 h, `409 cotizacion_vencida` |
+| `PUT /pedidos/especiales/:id/cotizacion` | vendedor | Cotiza (`precioCentavos`); si la fecha del pedido ya pasó, `409 transicion_invalida` |
+| `POST /pedidos/especiales/:id/aceptacion` y `/rechazo` | comprador | Responde; después de 48 h o de la fecha del pedido, `409 cotizacion_vencida` |
+| `POST /pedidos/:id/cancelacion` | comprador | Retira un especial `solicitado`: pasa a `cancelado` sin cupo ni insumos que devolver. Un `cotizado` no se cancela, se rechaza |
 
-El vencimiento se controla cuando el comprador responde, como pide el SPEC: pasadas 48 h desde la cotización, el especial queda `vencido` y la respuesta es `409 cotizacion_vencida`. No hay un proceso en segundo plano, así que hasta ese momento sigue figurando como `cotizado`.
+El vencimiento se controla cuando el comprador responde, como pide el SPEC: pasadas 48 h desde la cotización, o si la fecha del pedido ya pasó, el especial queda `vencido` y la respuesta es `409 cotizacion_vencida`, con la causa en el mensaje. No hay un proceso en segundo plano, así que hasta ese momento sigue figurando como `cotizado`.
 
 ## Alternativas consideradas
 

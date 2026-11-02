@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,6 +22,7 @@ type casosFalsos struct {
 	comprador    dominio.Comprador
 	solicitud    dominio.Solicitud
 	errCapacidad error
+	errResponder error
 }
 
 func (casos *casosFalsos) Crear(_ context.Context, comprador dominio.Comprador, _ string, solicitud dominio.Solicitud) (dominio.Pedido, error) {
@@ -61,6 +63,9 @@ func (casos *casosFalsos) CotizarEspecial(context.Context, string, int64) (domin
 	return dominio.Pedido{}, nil
 }
 func (casos *casosFalsos) ResponderEspecial(context.Context, string, string, bool) (dominio.Pedido, error) {
+	if casos.errResponder != nil {
+		return dominio.Pedido{}, casos.errResponder
+	}
 	return dominio.Pedido{}, dominio.ErrCotizacionVencida
 }
 
@@ -218,5 +223,24 @@ func TestVendedorListaPorFecha(prueba *testing.T) {
 	}
 	if respuesta, _ := pedir(&casosFalsos{}, http.MethodGet, "/pedidos?fecha=2026-10-30", "", vendedor); respuesta.Code != http.StatusOK {
 		prueba.Errorf("con fecha se esperaba 200, dio %d", respuesta.Code)
+	}
+}
+
+// El comprador sabe por qué venció la cotización.
+func TestCotizacionVencidaDiceElMotivo(prueba *testing.T) {
+	casos := map[string]struct {
+		err     error
+		mensaje string
+	}{
+		"por la fecha": {fmt.Errorf("%w: la fecha del pedido ya pasó", dominio.ErrCotizacionVencida), "La cotización venció: la fecha del pedido ya pasó."},
+		"sin detalle":  {dominio.ErrCotizacionVencida, "La cotización venció: pasaron más de 48 horas o ya pasó la fecha del pedido."},
+	}
+	for nombre, caso := range casos {
+		prueba.Run(nombre, func(prueba *testing.T) {
+			respuesta, datos := pedir(&casosFalsos{errResponder: caso.err}, http.MethodPost, "/pedidos/especiales/e1/aceptacion", "", comprador)
+			if respuesta.Code != http.StatusConflict || datos["mensaje"] != caso.mensaje {
+				prueba.Errorf("estado %d, mensaje %q; se esperaba %q", respuesta.Code, datos["mensaje"], caso.mensaje)
+			}
+		})
 	}
 }

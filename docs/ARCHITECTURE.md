@@ -127,7 +127,7 @@ stateDiagram-v2
     cancelado --> [*]
 ```
 
-Los pedidos especiales pasan antes por `solicitado` → `cotizado` y de ahí a `aceptado` (sigue como `pendiente_confirmacion`), `rechazado` o `vencido` (48 h sin respuesta del comprador).
+Los pedidos especiales pasan antes por `solicitado` → `cotizado` y de ahí a `aceptado` (sigue como `pendiente_confirmacion`), `rechazado` o `vencido` (48 h sin respuesta del comprador, o ya pasó la fecha del pedido). El comprador puede cancelar un `solicitado` antes de que se cotice ([ADR-017](adr/ADR-017-pedidos-especiales.md)).
 
 ## Datos
 

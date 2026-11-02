@@ -282,11 +282,15 @@ func (servicio *Servicio) ListarDelDia(contexto context.Context, fecha string) (
 }
 
 // Cancelar cancela un pedido del comprador antes de que entre en producción (C8,
-// R6) y libera su cupo y sus insumos (R7).
+// R6) y libera su cupo y sus insumos (R7). También retira un pedido especial que
+// todavía no se cotizó (ADR-017).
 func (servicio *Servicio) Cancelar(contexto context.Context, idComprador, id string) (dominio.Pedido, error) {
 	pedido, err := servicio.Obtener(contexto, idComprador, id)
 	if err != nil {
 		return dominio.Pedido{}, err
+	}
+	if pedido.Estado == dominio.EstadoSolicitado {
+		return servicio.cancelarSolicitud(contexto, pedido, "Cancelado por el comprador.")
 	}
 	return servicio.aplicarEstado(contexto, pedido, dominio.EstadoCancelado, "Cancelado por el comprador.")
 }

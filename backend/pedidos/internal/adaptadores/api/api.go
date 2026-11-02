@@ -13,6 +13,7 @@ import (
 	"mime"
 	"net/http"
 	"net/mail"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -336,7 +337,12 @@ func responderErrorDeDominio(contexto *gin.Context, err error) {
 	case errors.Is(err, dominio.ErrConflictoIdempotencia):
 		responderError(contexto, http.StatusConflict, "conflicto_idempotencia", "La clave de idempotencia ya se usó con otro pedido.")
 	case errors.Is(err, dominio.ErrCotizacionVencida):
-		responderError(contexto, http.StatusConflict, "cotizacion_vencida", "La cotización venció: pasaron más de 48 horas.")
+		// El dominio dice por qué venció: pasaron 48 h o ya pasó la fecha del pedido.
+		motivo := "pasaron más de 48 horas o ya pasó la fecha del pedido"
+		if detalle, encontrado := strings.CutPrefix(err.Error(), dominio.ErrCotizacionVencida.Error()+": "); encontrado {
+			motivo = detalle
+		}
+		responderError(contexto, http.StatusConflict, "cotizacion_vencida", "La cotización venció: "+motivo+".")
 	case errors.Is(err, dominio.ErrModificadoAlMismoTiempo):
 		responderError(contexto, http.StatusConflict, "modificado_al_mismo_tiempo", "El pedido cambió mientras se lo modificaba. Volvé a cargarlo.")
 	case errors.Is(err, puertos.ErrProductoNoDisponible):

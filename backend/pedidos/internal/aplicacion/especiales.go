@@ -80,7 +80,8 @@ func (servicio *Servicio) CotizarEspecial(contexto context.Context, id string, p
 
 // ResponderEspecial acepta o rechaza la cotización (C6). Al aceptar reserva el
 // cupo del día y sigue como un pedido pendiente de confirmación. Una cotización de
-// más de 48 h queda vencida y responde ErrCotizacionVencida (R8).
+// más de 48 h (R8), o de una fecha que ya pasó, queda vencida y responde
+// ErrCotizacionVencida.
 func (servicio *Servicio) ResponderEspecial(contexto context.Context, idComprador, id string, acepta bool) (dominio.Pedido, error) {
 	pedido, err := servicio.Obtener(contexto, idComprador, id)
 	if err != nil {
@@ -105,9 +106,31 @@ func (servicio *Servicio) ResponderEspecial(contexto context.Context, idComprado
 		// retoma el proceso en segundo plano.
 		contextoConfirmacion, cancelar := context.WithTimeout(context.WithoutCancel(contexto), esperaConfirmacionInicial)
 		defer cancelar()
-		if err := servicio.confirmar(contextoConfirmacion, &pedido); errors.Is(err, dominio.ErrModificadoAlMismoTiempo) {
+		aceptado := pedido
+		err := servicio.confirmar(contextoConfirmacion, &pedido)
+		if errors.Is(err, dominio.ErrModificadoAlMismoTiempo) {
 			return servicio.repositorio.Buscar(contexto, pedido.ID)
 		}
+		if err != nil {
+			servicio.eventos.ConfirmacionNoGuardada(contexto, pedido.ID, err)
+			return aceptado, nil
+		}
+	}
+	return pedido, nil
+}
+
+// cancelarSolicitud retira un especial que todavía no se cotizó. No libera cupo
+// ni insumos porque no los reservó.
+func (servicio *Servicio) cancelarSolicitud(contexto context.Context, pedido dominio.Pedido, motivo string) (dominio.Pedido, error) {
+	versionLeida := pedido.Version
+	ahora := servicio.ahora()
+	anterior, err := pedido.CancelarSolicitud(motivo, ahora)
+	if err != nil {
+		return dominio.Pedido{}, err
+	}
+	evento := dominio.NuevoEventoEstadoCambiado(servicio.nuevoID(), pedido, anterior, ahora)
+	if err := servicio.guardar(contexto, &pedido, puertos.Cambio{Pedido: pedido, VersionAnterior: versionLeida, Evento: &evento}); err != nil {
+		return dominio.Pedido{}, err
 	}
 	return pedido, nil
 }

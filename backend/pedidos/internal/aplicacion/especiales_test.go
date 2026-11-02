@@ -80,6 +80,108 @@ func TestCotizacionVenceA48Horas(prueba *testing.T) {
 	}
 }
 
+// Si la fecha del pedido ya pasó cuando el comprador responde, la cotización
+// vence aunque no hayan pasado 48 h, y no reserva cupo de un día que ya fue.
+func TestCotizacionVenceSiYaPasoLaFecha(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, fechaEspecial, 5)
+	especial, _ := actual.servicio.SolicitarEspecial(context.Background(), comprador, "clave-especial", "Torta de casamiento", fechaEspecial)
+	*actual.reloj = time.Date(2026, 11, 5, 20, 0, 0, 0, time.UTC) // el mismo día, a la tarde
+	if _, err := actual.servicio.CotizarEspecial(context.Background(), especial.ID, 9000000); err != nil {
+		prueba.Fatalf("cotizar el mismo día: %v", err)
+	}
+	*actual.reloj = actual.reloj.Add(24 * time.Hour) // al día siguiente: menos de 48 h
+
+	_, err := actual.servicio.ResponderEspecial(context.Background(), comprador.ID, especial.ID, true)
+
+	if !errors.Is(err, dominio.ErrCotizacionVencida) {
+		prueba.Fatalf("se esperaba ErrCotizacionVencida, dio %v", err)
+	}
+	if guardado, _ := actual.repositorio.Buscar(context.Background(), especial.ID); guardado.Estado != dominio.EstadoVencido {
+		prueba.Errorf("estado = %s, se esperaba vencido", guardado.Estado)
+	}
+	if reservados := actual.repositorio.reservados(fechaEspecial); reservados != 0 {
+		prueba.Errorf("no se reserva cupo de un día que ya pasó; reservados = %d", reservados)
+	}
+}
+
+func TestNoSeCotizaUnaFechaPasada(prueba *testing.T) {
+	actual := nuevoEntorno()
+	especial, _ := actual.servicio.SolicitarEspecial(context.Background(), comprador, "clave-especial", "Torta de casamiento", fechaEspecial)
+	*actual.reloj = time.Date(2026, 11, 6, 15, 0, 0, 0, time.UTC)
+
+	_, err := actual.servicio.CotizarEspecial(context.Background(), especial.ID, 9000000)
+
+	if !errors.Is(err, dominio.ErrTransicionInvalida) {
+		prueba.Fatalf("se esperaba ErrTransicionInvalida, dio %v", err)
+	}
+	if guardado, _ := actual.repositorio.Buscar(context.Background(), especial.ID); guardado.Estado != dominio.EstadoSolicitado {
+		prueba.Errorf("estado = %s, se esperaba solicitado", guardado.Estado)
+	}
+}
+
+// El comprador puede retirar un especial que todavía no se cotizó. No tiene cupo
+// ni insumos reservados, así que no se devuelve nada.
+func TestCompradorCancelaUnEspecialSolicitado(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, fechaEspecial, 5)
+	contexto := context.Background()
+	especial, _ := actual.servicio.SolicitarEspecial(contexto, comprador, "clave-especial", "Torta de casamiento", fechaEspecial)
+
+	if _, err := actual.servicio.CambiarEstado(contexto, especial.ID, dominio.EstadoCancelado); !errors.Is(err, dominio.ErrTransicionInvalida) {
+		prueba.Errorf("el vendedor no cancela una solicitud, dio %v", err)
+	}
+	cancelado, err := actual.servicio.Cancelar(contexto, comprador.ID, especial.ID)
+
+	if err != nil || cancelado.Estado != dominio.EstadoCancelado || cancelado.LiberarInsumos {
+		prueba.Fatalf("estado %s, liberar insumos %v, err %v", cancelado.Estado, cancelado.LiberarInsumos, err)
+	}
+	if reservados := actual.repositorio.reservados(fechaEspecial); reservados != 0 {
+		prueba.Errorf("no tenía cupo reservado; reservados = %d", reservados)
+	}
+	if len(actual.inventario.liberados) != 0 {
+		prueba.Errorf("no tenía insumos reservados; se liberaron %v", actual.inventario.liberados)
+	}
+	if abiertos, _ := actual.servicio.ListarEspecialesAbiertos(contexto); len(abiertos) != 0 {
+		prueba.Errorf("un cancelado no queda abierto; hay %d", len(abiertos))
+	}
+	if estados := actual.repositorio.estadosDeLosEventos(); !slices.Equal(estados, []string{"solicitado", "cancelado"}) {
+		prueba.Errorf("eventos = %v", estados)
+	}
+}
+
+// Una cotización se rechaza, no se cancela.
+func TestUnEspecialCotizadoNoSeCancela(prueba *testing.T) {
+	actual := nuevoEntorno()
+	cotizado := actual.especialCotizado(prueba)
+
+	if _, err := actual.servicio.Cancelar(context.Background(), comprador.ID, cotizado.ID); !errors.Is(err, dominio.ErrTransicionInvalida) {
+		prueba.Errorf("se esperaba ErrTransicionInvalida, dio %v", err)
+	}
+}
+
+// Igual que al crear: si se acepta pero falla guardar la confirmación, se
+// responde lo que está en la base y lo retoma el proceso en segundo plano.
+func TestGuardadoFallidoAlAceptarDevuelveLoQueEstaEnLaBase(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, fechaEspecial, 5)
+	cotizado := actual.especialCotizado(prueba)
+	actual.inventario.alReservar = func() { actual.repositorio.fallarGuardar = errCaido }
+
+	aceptado, err := actual.servicio.ResponderEspecial(context.Background(), comprador.ID, cotizado.ID, true)
+
+	if err != nil {
+		prueba.Fatalf("la aceptación ya está guardada, no tiene que fallar: %v", err)
+	}
+	guardado, _ := actual.repositorio.Buscar(context.Background(), cotizado.ID)
+	if aceptado.Estado != guardado.Estado || guardado.Estado != dominio.EstadoPendienteConfirmacion {
+		prueba.Errorf("respondió %s y en la base está %s", aceptado.Estado, guardado.Estado)
+	}
+	if len(actual.eventos.noGuardadas) != 1 {
+		prueba.Errorf("el error de guardado se avisó %d veces, se esperaba 1", len(actual.eventos.noGuardadas))
+	}
+}
+
 func TestEspecialRechazadoYReglasDeCotizacion(prueba *testing.T) {
 	actual := nuevoEntorno()
 	contexto := context.Background()

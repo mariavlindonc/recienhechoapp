@@ -77,6 +77,8 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 **C6 y VE5. Pedido especial**
 - Dado un pedido especial solicitado, cuando el vendedor lo cotiza, entonces el comprador recibe un email con el precio y puede aceptarlo dentro de las 48 h.
 - Dado un pedido especial cotizado hace más de 48 h, cuando el comprador intenta aceptarlo, entonces se le informa que la cotización venció.
+- Dado un pedido especial cotizado para una fecha que ya pasó, cuando el comprador intenta aceptarlo, entonces se le informa que la cotización venció y no se reserva cupo.
+- Dado un pedido especial solicitado y todavía sin cotizar, cuando el comprador lo cancela, entonces pasa a `cancelado` y deja de figurar entre los especiales del vendedor.
 
 **C8. Cancelar**
 - Dado un pedido `confirmado`, cuando el comprador lo cancela, entonces pasa a `cancelado` y el cupo del día vuelve a estar disponible.
