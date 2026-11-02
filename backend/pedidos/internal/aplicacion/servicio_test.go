@@ -214,6 +214,37 @@ func TestInventarioCaidoDejaElPedidoPendiente(prueba *testing.T) {
 	}
 }
 
+func TestGuardadoFallidoAlConfirmarDevuelveLoQueEstaEnLaBase(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, hoy, 10)
+	// El inventario confirma, pero falla el guardado del pedido confirmado.
+	actual.repositorio.fallarGuardar = errCaido
+
+	pedido, err := actual.servicio.Crear(context.Background(), comprador, "clave-1", medialunas(1, hoy))
+
+	if err != nil {
+		prueba.Fatalf("el pedido ya está registrado, no tiene que fallar: %v", err)
+	}
+	guardado, _ := actual.servicio.Obtener(context.Background(), comprador.ID, pedido.ID)
+	if pedido.Estado != guardado.Estado {
+		prueba.Errorf("respondió %s pero en la base está %s", pedido.Estado, guardado.Estado)
+	}
+	if len(actual.eventos.noGuardadas) != 1 {
+		prueba.Errorf("el error de guardado se avisó %d veces, se esperaba 1", len(actual.eventos.noGuardadas))
+	}
+
+	// Vuelve la base: pasado el apartado, el proceso en segundo plano lo confirma.
+	actual.repositorio.fallarGuardar = nil
+	*actual.reloj = momento.Add(2 * time.Minute)
+	if _, err := actual.servicio.ProcesarConfirmaciones(context.Background()); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+	confirmado, _ := actual.servicio.Obtener(context.Background(), comprador.ID, pedido.ID)
+	if confirmado.Estado != dominio.EstadoConfirmado {
+		prueba.Errorf("estado = %s, se esperaba confirmado", confirmado.Estado)
+	}
+}
+
 func TestSinStockCancelaYLiberaElCupo(prueba *testing.T) {
 	actual := nuevoEntorno()
 	actual.capacidad(prueba, hoy, 10)
@@ -332,6 +363,29 @@ func TestPublicarEventosEnOrdenYEsperarAlBroker(prueba *testing.T) {
 	publicados, err := actual.servicio.PublicarEventos(context.Background())
 	if publicados != 2 || err != nil || len(actual.repositorio.eventos) != 0 {
 		prueba.Errorf("publicados %d (%v), quedan %d", publicados, err, len(actual.repositorio.eventos))
+	}
+}
+
+// Si el broker vuelve antes de que venza el apartado del evento que falló, el
+// siguiente no se le adelanta: el comprador recibe los avisos en orden.
+func TestBrokerQueVuelveRespetaElOrdenDeLosEventos(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, hoy, 10)
+	actual.servicio.Crear(context.Background(), comprador, "clave-1", medialunas(1, hoy))
+	enOrden := []string{actual.repositorio.eventos[0].Evento.ID, actual.repositorio.eventos[1].Evento.ID}
+
+	actual.publicador.fallar = errCaido
+	actual.servicio.PublicarEventos(context.Background())
+
+	actual.publicador.fallar = nil
+	*actual.reloj = momento.Add(3 * time.Second)
+	publicados, err := actual.servicio.PublicarEventos(context.Background())
+
+	if publicados != 2 || err != nil {
+		prueba.Fatalf("publicados %d (%v): al volver el broker salen los dos", publicados, err)
+	}
+	if actual.publicador.publicados[0] != enOrden[0] || actual.publicador.publicados[1] != enOrden[1] {
+		prueba.Errorf("se publicaron %v, el orden es %v", actual.publicador.publicados, enOrden)
 	}
 }
 

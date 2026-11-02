@@ -76,7 +76,7 @@ func Nuevas() *Metricas {
 	}
 	for _, resultado := range []puertos.ResultadoInventario{
 		puertos.InventarioConfirmada, puertos.InventarioSinStock, puertos.InventarioLiberada,
-		puertos.InventarioRechazada, puertos.InventarioFallaTransit, puertos.InventarioNoDisponible,
+		puertos.InventarioRechazada, puertos.InventarioFallaTransitoria, puertos.InventarioNoDisponible,
 	} {
 		metricas.inventario.WithLabelValues(string(resultado))
 	}

@@ -83,6 +83,9 @@ type BandejaDeSalida interface {
 	TomarEvento(contexto context.Context, ahora, hasta time.Time) (evento EventoGuardado, encontrado bool, err error)
 	// MarcarPublicado lo saca de la bandeja.
 	MarcarPublicado(contexto context.Context, idEvento string) error
+	// DevolverEvento le quita el apartado a un evento que no se pudo publicar, para
+	// que sea el próximo en tomarse y no se le adelanten los más nuevos.
+	DevolverEvento(contexto context.Context, idEvento string, ahora time.Time) error
 }
 
 // Publicador manda un evento al broker. Devuelve nil solo cuando el broker
@@ -131,12 +134,12 @@ type ReservadorDeInsumos interface {
 type ResultadoInventario string
 
 const (
-	InventarioConfirmada   ResultadoInventario = "confirmada"
-	InventarioSinStock     ResultadoInventario = "sin_stock"
-	InventarioLiberada     ResultadoInventario = "liberada"
-	InventarioRechazada    ResultadoInventario = "rechazada"
-	InventarioFallaTransit ResultadoInventario = "falla_transitoria"
-	InventarioNoDisponible ResultadoInventario = "no_disponible"
+	InventarioConfirmada       ResultadoInventario = "confirmada"
+	InventarioSinStock         ResultadoInventario = "sin_stock"
+	InventarioLiberada         ResultadoInventario = "liberada"
+	InventarioRechazada        ResultadoInventario = "rechazada"
+	InventarioFallaTransitoria ResultadoInventario = "falla_transitoria"
+	InventarioNoDisponible     ResultadoInventario = "no_disponible"
 )
 
 // EstadoCircuito es el estado del disyuntor que protege al inventario.
@@ -155,4 +158,7 @@ type Eventos interface {
 	InventarioConsultado(contexto context.Context, idPedido string, resultado ResultadoInventario, err error)
 	CircuitoDelInventarioCambio(contexto context.Context, anterior, nuevo EstadoCircuito)
 	EventoPublicado(contexto context.Context, idEvento string, err error)
+	// ConfirmacionNoGuardada avisa que no se pudo guardar el resultado de la
+	// confirmación de un pedido recién creado; la retoma el proceso en segundo plano.
+	ConfirmacionNoGuardada(contexto context.Context, idPedido string, err error)
 }

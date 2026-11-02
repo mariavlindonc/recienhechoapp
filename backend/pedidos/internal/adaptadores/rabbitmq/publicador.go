@@ -5,6 +5,7 @@ package rabbitmq
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -20,6 +21,11 @@ const Exchange = "pedidos"
 // esperaPorPublicacion es lo máximo que se espera la confirmación del broker.
 const esperaPorPublicacion = 5 * time.Second
 
+// ErrSinCola es cuando el broker devolvió el evento porque ninguna cola lo recibe
+// (por ejemplo, notificaciones todavía no creó la suya). El evento sigue en la
+// bandeja de salida y se vuelve a intentar.
+var ErrSinCola = errors.New("ninguna cola recibe el evento")
+
 // Publicador cumple puertos.Publicador. Se conecta recién cuando tiene algo para
 // publicar y se reconecta si la conexión se cae: con RabbitMQ caído el servicio
 // sigue funcionando y los eventos esperan en la bandeja de salida (ADR-011).
@@ -29,6 +35,8 @@ type Publicador struct {
 	mutex    sync.Mutex
 	conexion *amqp.Connection
 	canal    *amqp.Channel
+	// devueltos recibe los mensajes que el broker no pudo mandar a ninguna cola.
+	devueltos chan amqp.Return
 }
 
 var _ puertos.Publicador = (*Publicador)(nil)
@@ -65,7 +73,9 @@ type cuerpoItem struct {
 }
 
 // Publicar manda el evento como mensaje persistente y devuelve nil solo si el
-// broker confirmó que lo guardó.
+// broker confirmó que lo guardó en al menos una cola. Se publica con mandatory:
+// sin una cola enlazada, el broker devuelve el mensaje en vez de descartarlo, y
+// eso es ErrSinCola.
 func (publicador *Publicador) Publicar(contexto context.Context, guardado puertos.EventoGuardado) error {
 	evento := guardado.Evento
 	datos := evento.Datos
@@ -105,7 +115,7 @@ func (publicador *Publicador) Publicar(contexto context.Context, guardado puerto
 	}
 	contexto, cancelar := context.WithTimeout(contexto, esperaPorPublicacion)
 	defer cancelar()
-	confirmacion, err := publicador.canal.PublishWithDeferredConfirmWithContext(contexto, Exchange, evento.Tipo, false, false, amqp.Publishing{
+	confirmacion, err := publicador.canal.PublishWithDeferredConfirmWithContext(contexto, Exchange, evento.Tipo, true, false, amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		MessageId:    evento.ID,
@@ -125,7 +135,29 @@ func (publicador *Publicador) Publicar(contexto context.Context, guardado puerto
 	if !confirmado {
 		return fmt.Errorf("el broker no aceptó el evento %s", evento.ID)
 	}
+	if publicador.fueDevuelto(evento.ID) {
+		return fmt.Errorf("%w: evento %s, clave %s", ErrSinCola, evento.ID, evento.Tipo)
+	}
 	return nil
+}
+
+// fueDevuelto lee las devoluciones pendientes y dice si alguna es de ese evento.
+// El broker manda la devolución antes de la confirmación, y se publica de a un
+// evento por vez: si hubo devolución, ya está en el canal. Se leen todas para que
+// una vieja no ocupe el lugar de la próxima.
+func (publicador *Publicador) fueDevuelto(idEvento string) bool {
+	devuelto := false
+	for {
+		select {
+		case mensaje, abierto := <-publicador.devueltos:
+			if !abierto {
+				return devuelto
+			}
+			devuelto = devuelto || mensaje.MessageId == idEvento
+		default:
+			return devuelto
+		}
+	}
 }
 
 // conectar abre la conexión y el canal si no están abiertos, y declara el exchange.
@@ -149,6 +181,8 @@ func (publicador *Publicador) conectar() error {
 		conexion.Close()
 		return fmt.Errorf("preparar el canal de RabbitMQ: %w", err)
 	}
+	// Con lugar para uno: la librería se frena si no puede entregar la devolución.
+	publicador.devueltos = canal.NotifyReturn(make(chan amqp.Return, 1))
 	publicador.conexion, publicador.canal = conexion, canal
 	return nil
 }
@@ -157,7 +191,7 @@ func (publicador *Publicador) desconectar() {
 	if publicador.conexion != nil {
 		publicador.conexion.Close()
 	}
-	publicador.conexion, publicador.canal = nil, nil
+	publicador.conexion, publicador.canal, publicador.devueltos = nil, nil, nil
 }
 
 // Cerrar cierra la conexión al apagar el servicio.

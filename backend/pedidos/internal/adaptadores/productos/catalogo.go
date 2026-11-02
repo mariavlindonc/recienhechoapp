@@ -66,6 +66,11 @@ func (falla errorTransitorio) Unwrap() error { return falla.causa }
 
 // ObtenerProducto pide el producto. El precio que vale es este, sin caché (ADR-002).
 func (catalogo *Catalogo) ObtenerProducto(contexto context.Context, id string) (dominio.Producto, error) {
+	// El id lo manda el comprador y va en la ruta: con "/", ".." u otros caracteres
+	// que haya que escapar podría llevar la llamada a otra ruta de productos.
+	if id == "." || id == ".." || url.PathEscape(id) != id {
+		return dominio.Producto{}, dominio.ErrProductoInexistente
+	}
 	var ultimo error
 	for intento := 0; intento <= len(catalogo.esperas); intento++ {
 		if intento > 0 {

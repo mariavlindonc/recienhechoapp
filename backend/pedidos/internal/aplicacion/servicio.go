@@ -119,12 +119,20 @@ func (servicio *Servicio) Crear(contexto context.Context, comprador dominio.Comp
 	// comprador corte la conexión; si no termina, la retoma el proceso en segundo plano.
 	contextoConfirmacion, cancelar := context.WithTimeout(context.WithoutCancel(contexto), esperaConfirmacionInicial)
 	defer cancelar()
-	if err := servicio.confirmar(contextoConfirmacion, &pedido); errors.Is(err, dominio.ErrModificadoAlMismoTiempo) {
+	// confirmar cambia el pedido en memoria antes de guardarlo: si el guardado
+	// falla, lo que está en la base es lo que se registró.
+	registrado := pedido
+	err = servicio.confirmar(contextoConfirmacion, &pedido)
+	if errors.Is(err, dominio.ErrModificadoAlMismoTiempo) {
 		// Alguien lo cambió en el medio (por ejemplo, el comprador lo canceló).
 		return servicio.repositorio.Buscar(contexto, pedido.ID)
 	}
-	// Si la confirmación falló por otra cosa, el pedido igual existe y queda
-	// pendiente_confirmacion hasta que lo retome el proceso en segundo plano.
+	if err != nil {
+		// El pedido igual existe y queda pendiente_confirmacion hasta que lo retome
+		// el proceso en segundo plano.
+		servicio.eventos.ConfirmacionNoGuardada(contexto, pedido.ID, err)
+		return registrado, nil
+	}
 	return pedido, nil
 }
 
@@ -205,7 +213,7 @@ func (servicio *Servicio) confirmar(contexto context.Context, pedido *dominio.Pe
 		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioNoDisponible, errReserva)
 		pedido.RegistrarFalloDeConfirmacion(ahora)
 	default:
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioFallaTransit, errReserva)
+		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioFallaTransitoria, errReserva)
 		pedido.RegistrarFalloDeConfirmacion(ahora)
 	}
 	return servicio.guardar(contexto, pedido, puertos.Cambio{Pedido: *pedido, VersionAnterior: versionLeida})
@@ -377,7 +385,7 @@ func (servicio *Servicio) liberar(contexto context.Context, pedido *dominio.Pedi
 	ahora := servicio.ahora()
 	versionLeida := pedido.Version
 	if errLiberar != nil {
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioFallaTransit, errLiberar)
+		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioFallaTransitoria, errLiberar)
 		pedido.ProximaLiberacion = ahora.Add(esperaReintentoLiberar)
 	} else {
 		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioLiberada, nil)
@@ -390,7 +398,9 @@ func (servicio *Servicio) liberar(contexto context.Context, pedido *dominio.Pedi
 
 // PublicarEventos manda al broker los eventos de la bandeja de salida, del más
 // viejo al más nuevo, y devuelve cuántos publicó. Si el broker no responde, corta:
-// los eventos esperan guardados hasta que vuelva (ADR-011).
+// los eventos esperan guardados hasta que vuelva (ADR-011). El que falló se
+// devuelve a la bandeja para que siga primero; con una sola instancia, los
+// eventos salen en orden (ADR-015).
 func (servicio *Servicio) PublicarEventos(contexto context.Context) (int, error) {
 	publicados := 0
 	for {
@@ -407,6 +417,10 @@ func (servicio *Servicio) PublicarEventos(contexto context.Context) (int, error)
 		}
 		if err := servicio.publicador.Publicar(contexto, guardado); err != nil {
 			servicio.eventos.EventoPublicado(contexto, guardado.Evento.ID, err)
+			// Si devolverlo falla, el evento sale igual cuando vence el apartado.
+			if err := servicio.bandeja.DevolverEvento(contexto, guardado.Evento.ID, ahora); err != nil {
+				return publicados, fmt.Errorf("devolver evento %s a la bandeja de salida: %w", guardado.Evento.ID, err)
+			}
 			return publicados, nil
 		}
 		// Si esto falla, el evento se vuelve a publicar cuando vence el apartado: el

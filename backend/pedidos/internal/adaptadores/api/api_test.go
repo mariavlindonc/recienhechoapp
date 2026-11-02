@@ -128,6 +128,8 @@ func TestErroresAlCrear(prueba *testing.T) {
 		{"vendedor no encarga", conClave(vendedor), cuerpoPedido, nil, http.StatusForbidden, "prohibido"},
 		{"sin Idempotency-Key", comprador, cuerpoPedido, nil, http.StatusBadRequest, "solicitud_invalida"},
 		{"campo desconocido", conClave(comprador), `{"tipo":"inmediato","precio":1}`, nil, http.StatusBadRequest, "solicitud_invalida"},
+		{"datos después del JSON", conClave(comprador), cuerpoPedido + ` {"precio":1}`, nil, http.StatusBadRequest, "solicitud_invalida"},
+		{"llave sobrante", conClave(comprador), cuerpoPedido + `}`, nil, http.StatusBadRequest, "solicitud_invalida"},
 		{"sin cupo", conClave(comprador), cuerpoPedido, dominio.ErrSinCupo, http.StatusConflict, "sin_cupo"},
 		{"producto inexistente", conClave(comprador), cuerpoPedido, dominio.ErrProductoInexistente, http.StatusUnprocessableEntity, "producto_inexistente"},
 		{"productos caído", conClave(comprador), cuerpoPedido, puertos.ErrProductoNoDisponible, http.StatusServiceUnavailable, "productos_no_disponible"},

@@ -283,6 +283,15 @@ func TestBandejaDeSalida(prueba *testing.T) {
 	if err != nil || !encontrado || guardado.Evento.Datos.EmailComprador != "comprador-1@ejemplo.com" {
 		prueba.Fatalf("evento %+v, encontrado %v (%v)", guardado, encontrado, err)
 	}
+	if _, encontrado, _ := repositorio.TomarEvento(context.Background(), momento, momento.Add(2*time.Minute)); encontrado {
+		prueba.Fatal("un evento apartado no se toma de nuevo")
+	}
+	if err := repositorio.DevolverEvento(context.Background(), "evento-1", momento); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+	if _, encontrado, _ := repositorio.TomarEvento(context.Background(), momento, momento.Add(2*time.Minute)); !encontrado {
+		prueba.Fatal("un evento devuelto se puede tomar enseguida")
+	}
 	if err := repositorio.MarcarPublicado(context.Background(), "evento-1"); err != nil {
 		prueba.Fatalf("error inesperado: %v", err)
 	}

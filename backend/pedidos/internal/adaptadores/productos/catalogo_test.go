@@ -83,6 +83,21 @@ func TestNoReintentaLoQueNoSeArreglaReintentando(prueba *testing.T) {
 	}
 }
 
+// El id lo manda el comprador: no puede llevar la llamada a otra ruta de productos.
+func TestIdQueSaleDeLaRutaNoSeConsulta(prueba *testing.T) {
+	for _, id := range []string{"../../metrics", "..", ".", "torta/../../metrics", "a/b", "torta?x=1", "%2e%2e"} {
+		prueba.Run(id, func(prueba *testing.T) {
+			catalogo, llamadas := servidor(prueba, http.StatusOK)
+
+			_, err := catalogo.ObtenerProducto(context.Background(), id)
+
+			if !errors.Is(err, dominio.ErrProductoInexistente) || llamadas.Load() != 0 {
+				prueba.Errorf("se esperaba producto inexistente sin llamar a productos: %v (%d llamadas)", err, llamadas.Load())
+			}
+		})
+	}
+}
+
 func TestCortaAlSegundo(prueba *testing.T) {
 	lento := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		time.Sleep(2 * tiempoMaximoPorIntento)
