@@ -228,6 +228,8 @@ func mensajeDe(recibido evento) (string, string) {
 		return "Estamos preparando tu pedido", fmt.Sprintf("Empezamos a preparar %s.", pedido)
 	case "listo":
 		return "Tu pedido está listo", fmt.Sprintf("Ya está listo %s.", pedido)
+	case "en_camino":
+		return "Tu pedido está en camino", fmt.Sprintf("Ya salió %s y va camino a tu casa.", pedido)
 	case "entregado":
 		return "Entregamos tu pedido", fmt.Sprintf("Entregamos %s. ¡Que lo disfrutes!", pedido)
 	case "cancelado":

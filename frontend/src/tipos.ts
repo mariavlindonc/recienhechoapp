@@ -6,6 +6,7 @@ export type EstadoPedido =
   | 'confirmado'
   | 'en_produccion'
   | 'listo'
+  | 'en_camino'
   | 'entregado'
   | 'cancelado'
 

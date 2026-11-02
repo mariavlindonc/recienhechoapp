@@ -26,7 +26,9 @@ export const TRANSICIONES: Record<EstadoPedido, EstadoPedido[]> = {
   pendiente_confirmacion: ['confirmado', 'cancelado'],
   confirmado: ['en_produccion', 'cancelado'],
   en_produccion: ['listo'],
-  listo: ['entregado'],
+  // Un envío pasa por en_camino; lo que se retira en el local va directo a entregado.
+  listo: ['en_camino', 'entregado'],
+  en_camino: ['entregado'],
   entregado: [],
   cancelado: [],
 }

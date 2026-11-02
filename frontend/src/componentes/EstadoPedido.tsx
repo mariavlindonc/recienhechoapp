@@ -6,6 +6,7 @@ const ETIQUETAS: Record<Estado, string> = {
   confirmado: 'Confirmado',
   en_produccion: 'En producción',
   listo: 'Listo',
+  en_camino: 'En camino',
   entregado: 'Entregado',
   cancelado: 'Cancelado',
 }

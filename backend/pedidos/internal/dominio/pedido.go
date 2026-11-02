@@ -22,17 +22,22 @@ const (
 	EstadoConfirmado            Estado = "confirmado"
 	EstadoEnProduccion          Estado = "en_produccion"
 	EstadoListo                 Estado = "listo"
-	EstadoEntregado             Estado = "entregado"
-	EstadoCancelado             Estado = "cancelado"
+	// EstadoEnCamino es cuando el pedido salió a entregarse a domicilio. Es opcional:
+	// lo que se retira en el local pasa de listo a entregado.
+	EstadoEnCamino  Estado = "en_camino"
+	EstadoEntregado Estado = "entregado"
+	EstadoCancelado Estado = "cancelado"
 )
 
 // transiciones son los cambios de estado válidos (R6). No se puede cancelar en
-// producción ni entregar algo que no está listo.
+// producción ni entregar algo que no está listo. Un envío pasa por en_camino; un
+// retiro en el local va de listo a entregado.
 var transiciones = map[Estado][]Estado{
 	EstadoPendienteConfirmacion: {EstadoConfirmado, EstadoCancelado},
 	EstadoConfirmado:            {EstadoEnProduccion, EstadoCancelado},
 	EstadoEnProduccion:          {EstadoListo},
-	EstadoListo:                 {EstadoEntregado},
+	EstadoListo:                 {EstadoEnCamino, EstadoEntregado},
+	EstadoEnCamino:              {EstadoEntregado},
 }
 
 // Tipo de pedido: inmediato (el primer día con cupo, C4) o programado (fecha

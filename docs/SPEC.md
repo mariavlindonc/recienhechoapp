@@ -40,7 +40,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 | VE3 | Definir la capacidad de producción de cada día |
 | VE4 | Ver el calendario de producción: qué hay que hacer cada día |
 | VE5 | Cotizar, aceptar o rechazar pedidos especiales |
-| VE6 | Avanzar el estado de los pedidos (en producción, listo, entregado) |
+| VE6 | Avanzar el estado de los pedidos (en producción, listo, en camino si se envía a domicilio, entregado) |
 
 ## Reglas de negocio
 
@@ -84,6 +84,11 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 **C8. Cancelar**
 - Dado un pedido `confirmado`, cuando el comprador lo cancela, entonces pasa a `cancelado` y el cupo del día vuelve a estar disponible.
 - Dado un pedido `en_produccion`, cuando el comprador intenta cancelarlo, entonces se le informa que ya no se puede.
+
+**VE6. Avanzar estados**
+- Dado un pedido `listo` que se envía a domicilio, cuando el vendedor lo marca `en_camino`, entonces el comprador recibe un email avisándole que salió, y después el vendedor lo puede marcar `entregado`.
+- Dado un pedido `listo` que se retira en el local, cuando el vendedor lo marca `entregado`, entonces pasa directo, sin pasar por `en_camino`.
+- Dado un pedido `en_camino`, cuando alguien intenta cancelarlo, entonces se le informa que ya no se puede.
 
 **C9. Avisos**
 - Dado un pedido que pasa a `listo`, cuando el cambio se guarda, entonces el comprador recibe un único email aunque el evento se entregue más de una vez.
