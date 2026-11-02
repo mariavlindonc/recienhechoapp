@@ -8,6 +8,7 @@ import { mensajeDe } from '../../ayudas.ts'
 const ETIQUETAS_SIGUIENTE: Partial<Record<Estado, string>> = {
   en_produccion: 'Pasar a producción',
   listo: 'Marcar listo',
+  en_camino: 'Marcar en camino',
   entregado: 'Marcar entregado',
 }
 

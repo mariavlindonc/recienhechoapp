@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, ingresar, listarEspeciales, listarMisPedidos, rechazarEspecial, responderCotizacion } from './api.ts'
+import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, ingresar, listarEspeciales, listarMisPedidos, rechazarEspecial, responderCotizacion, TRANSICIONES } from './api.ts'
 
 // sessionStorage no existe en bun test: alcanza con un mapa.
 const guardado = new Map<string, string>()
@@ -138,4 +138,10 @@ test('el comprador ve el mensaje del vendedor en sus pedidos', async () => {
 
   expect(pedido!.mensajeVendedor).toBe('No llegamos para esa fecha.')
   expect(pedido!.motivoCancelacion).toBe('Rechazado por la pastelería.')
+})
+
+// R6: un envío pasa por en_camino; un retiro va de listo a entregado. El vendedor ve los dos botones.
+test('desde listo se puede mandar en camino o entregar directo', () => {
+  expect(TRANSICIONES.listo).toEqual(['en_camino', 'entregado'])
+  expect(TRANSICIONES.en_camino).toEqual(['entregado'])
 })

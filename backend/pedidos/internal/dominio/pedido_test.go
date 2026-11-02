@@ -207,6 +207,43 @@ func TestTransicionesDeEstado(prueba *testing.T) {
 	}
 }
 
+// en_camino es opcional, entre listo y entregado: el vendedor lo usa para los envíos, y un
+// pedido que se retira en el local sigue pasando de listo a entregado.
+func TestEnCaminoEsUnPasoOpcionalDelEnvio(prueba *testing.T) {
+	hastaListo := []dominio.Estado{dominio.EstadoConfirmado, dominio.EstadoEnProduccion, dominio.EstadoListo}
+
+	enviado := pedidoNuevo(prueba)
+	for _, estado := range append(hastaListo, dominio.EstadoEnCamino, dominio.EstadoEntregado) {
+		if _, err := enviado.CambiarEstado(estado, "", momento); err != nil {
+			prueba.Fatalf("envío: pasar a %s: %v", estado, err)
+		}
+	}
+	retirado := pedidoNuevo(prueba)
+	for _, estado := range append(hastaListo, dominio.EstadoEntregado) {
+		if _, err := retirado.CambiarEstado(estado, "", momento); err != nil {
+			prueba.Fatalf("retiro: pasar a %s: %v", estado, err)
+		}
+	}
+
+	invalidas := []struct {
+		hasta []dominio.Estado
+		nuevo dominio.Estado
+	}{
+		{hastaListo[:2], dominio.EstadoEnCamino},                              // en producción todavía no sale
+		{append(hastaListo, dominio.EstadoEnCamino), dominio.EstadoCancelado}, // en camino no se cancela
+		{append(hastaListo, dominio.EstadoEnCamino), dominio.EstadoListo},     // no vuelve atrás
+	}
+	for _, caso := range invalidas {
+		pedido := pedidoNuevo(prueba)
+		for _, estado := range caso.hasta {
+			pedido.CambiarEstado(estado, "", momento)
+		}
+		if _, err := pedido.CambiarEstado(caso.nuevo, "", momento); !errors.Is(err, dominio.ErrTransicionInvalida) {
+			prueba.Errorf("de %s a %s se esperaba ErrTransicionInvalida, dio: %v", pedido.Estado, caso.nuevo, err)
+		}
+	}
+}
+
 func TestCancelarMarcaLosInsumosParaLiberar(prueba *testing.T) {
 	pedido := pedidoNuevo(prueba)
 

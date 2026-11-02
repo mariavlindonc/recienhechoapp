@@ -145,3 +145,17 @@ func TestFallaTransitoriaSeReintenta(prueba *testing.T) {
 		prueba.Errorf("un evento procesado se confirma: %+v", receptor)
 	}
 }
+
+// El pedido salió a entregarse a domicilio: el comprador tiene su propio aviso.
+func TestElPedidoEnCaminoTieneSuMail(prueba *testing.T) {
+	casos := &casosFalsos{}
+	enCamino := strings.NewReplacer(`"estadoNuevo":"listo"`, `"estadoNuevo":"en_camino"`).Replace(eventoListo)
+
+	if err := Procesar(context.Background(), casos, []byte(enCamino)); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+
+	if solicitud := casos.creadas["evento-1"]; solicitud.Asunto != "Tu pedido está en camino" || !strings.Contains(solicitud.Cuerpo, "salió") {
+		prueba.Errorf("solicitud = %+v", solicitud)
+	}
+}

@@ -122,7 +122,9 @@ stateDiagram-v2
     confirmado --> en_produccion
     confirmado --> cancelado: cancelado antes de producir
     en_produccion --> listo
-    listo --> entregado
+    listo --> entregado: se retira en el local
+    listo --> en_camino: sale a domicilio
+    en_camino --> entregado
     entregado --> [*]
     cancelado --> [*]
 ```
