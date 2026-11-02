@@ -1,0 +1,293 @@
+openapi: 3.1.0
+info:
+  title: Stock Volcamelli - Inventario
+  version: 2.0.0
+  description: >-
+    Consultas del catálogo de productos y del stock disponible por sucursal de Stock Volcamelli.
+    Todas las operaciones son de lectura y requieren la API key del grupo consumidor en el header X-API-Key.
+    Cada respuesta trae el header X-Track-ID, que identifica el pedido en nuestros logs.
+servers:
+  - url: https://stock-volcamelli-inventario.onrender.com
+    description: Inventario publicado
+security:
+  - apiKeyAuth: []
+tags:
+  - name: Productos
+    description: Catálogo de productos
+  - name: Stock
+    description: Stock disponible por sucursal
+paths:
+  /api/products:
+    get:
+      tags: [Productos]
+      operationId: listProducts
+      summary: Listar productos
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Una página del catálogo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPage'
+              example:
+                items:
+                  - id: 15
+                    name: Harina 000
+                    description: Bolsa de 1 kg
+                    supplier: Molinos del Centro
+                  - id: 21
+                    name: Aceite de girasol
+                    description: Botella de 900 ml
+                    supplier: null
+                page: 1
+                size: 20
+                total: 2
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/products/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Productos]
+      operationId: getProduct
+      summary: Ver un producto
+      responses:
+        '200':
+          description: El producto.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+              example:
+                id: 15
+                name: Harina 000
+                description: Bolsa de 1 kg
+                supplier: Molinos del Centro
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/branches/{branchId}/stock:
+    parameters:
+      - $ref: '#/components/parameters/BranchId'
+      - name: lowStock
+        in: query
+        required: false
+        description: Si es true, devuelve solo los productos con 5 unidades disponibles o menos.
+        schema:
+          type: boolean
+          default: false
+    get:
+      tags: [Stock]
+      operationId: listBranchStock
+      summary: Ver el stock disponible de una sucursal
+      description: >-
+        Devuelve todos los productos que tienen stock cargado en la sucursal. Si la sucursal
+        no tiene ninguno, la lista viene vacía.
+      responses:
+        '200':
+          description: El stock disponible de la sucursal.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [branchId, items]
+                properties:
+                  branchId:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Stock'
+              example:
+                branchId: 3
+                items:
+                  - branchId: 3
+                    productId: 15
+                    productName: Harina 000
+                    quantity: 42
+                  - branchId: 3
+                    productId: 21
+                    productName: Aceite de girasol
+                    quantity: 8
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/branches/{branchId}/products/{productId}/stock:
+    parameters:
+      - $ref: '#/components/parameters/BranchId'
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Stock]
+      operationId: getBranchProductStock
+      summary: Ver el stock disponible de un producto en una sucursal
+      description: Si el producto existe pero no tiene stock cargado en esa sucursal, devuelve cantidad 0.
+      responses:
+        '200':
+          description: El stock disponible del producto en la sucursal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stock'
+              example:
+                branchId: 3
+                productId: 15
+                productName: Harina 000
+                quantity: 42
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: La API key que le pasamos al grupo consumidor por un medio privado.
+  parameters:
+    BranchId:
+      name: branchId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      example: 3
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      example: 15
+    Page:
+      name: page
+      in: query
+      required: false
+      description: Número de página, empieza en 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Size:
+      name: size
+      in: query
+      required: false
+      description: Cantidad de productos por página.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+  responses:
+    InvalidRequest:
+      description: Algún parámetro es inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: INVALID_REQUEST
+            message: El parámetro page tiene que ser un número mayor a 0.
+    Unauthorized:
+      description: Falta la API key o no es válida.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: UNAUTHORIZED
+            message: Falta la API key o no es válida.
+    ProductNotFound:
+      description: El producto no existe.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: PRODUCT_NOT_FOUND
+            message: No existe el producto 15.
+    InternalError:
+      description: Error de nuestro lado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: INTERNAL_ERROR
+            message: Ocurrió un error inesperado. Probá de nuevo en unos minutos.
+  schemas:
+    Product:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        description:
+          type: string
+        supplier:
+          type: [string, 'null']
+          description: A quién le compramos el producto. Puede venir en null.
+    ProductPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+          description: Cantidad total de productos.
+    Stock:
+      type: object
+      required: [branchId, productId, productName, quantity]
+      properties:
+        branchId:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        quantity:
+          type: integer
+          minimum: 0
+          description: >-
+            Stock disponible en la sucursal al momento de la consulta: el total menos lo que
+            está reservado para transferencias a otras sucursales que todavía no llegaron a destino.
+            Nunca es negativo.
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string

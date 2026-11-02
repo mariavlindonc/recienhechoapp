@@ -361,11 +361,11 @@ services:
       - ./tests/carga:/carga:ro
     networks: [interna]
 
-  # Mock del contrato publicado (docs/contracts/notificaciones.yaml), ver ADR-004.
+  # Mock del contrato publicado (docs/contracts/notificaciones/notificaciones.yaml), ver ADR-004.
   notificaciones-mock:
     image: stoplight/prism:5
     container_name: recienhecho-notificaciones-mock
-    command: mock -m false -h 0.0.0.0 -p ${NOTIFICACIONES_MOCK_PORT} /contrato/notificaciones.yaml
+    command: mock -m false -h 0.0.0.0 -p ${NOTIFICACIONES_MOCK_PORT} /contrato/notificaciones/notificaciones.yaml
     volumes:
       - ./docs/contracts:/contrato:ro
     ports:

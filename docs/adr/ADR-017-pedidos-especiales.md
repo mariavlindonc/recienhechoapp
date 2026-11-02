@@ -70,5 +70,5 @@ El vencimiento se controla cuando el comprador responde, como pide el SPEC: pasa
 ## Consecuencias
 
 - El evento suma el campo opcional `totalCentavos`; la versión sigue en 1 porque un consumidor viejo lo ignora ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
-- El proveedor de inventario recibe reservas sin insumos para los especiales. Cuando publique su contrato (D9) hay que confirmar que lo acepta; si no, se pasa a A1.
+- El proveedor de inventario recibe reservas sin insumos para los especiales. Como reservar es reducir stock ([ADR-010](ADR-010-consumo-de-inventario.md)), un especial no tiene nada que descontar: cuando llegue la versión del contrato con reducir y aumentar, hay que confirmar si acepta una reducción vacía o si el adaptador no lo llama; si no se puede ninguna de las dos, se pasa a A1.
 - Con A1 o A2, los especiales no pasarían por el disyuntor del inventario ([ADR-011](ADR-011-resiliencia.md)).
