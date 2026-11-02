@@ -18,6 +18,8 @@ services:
       # Las mismas claves que notificaciones, para contar el límite por grupo (ADR-004).
       NOTIFICACIONES_CLAVES_API: ${NOTIFICACIONES_CLAVES_API}
       NOTIFICACIONES_LIMITE_POR_MINUTO: ${NOTIFICACIONES_LIMITE_POR_MINUTO}
+      # Intentos de registro e inicio de sesión por minuto y por IP (ADR-016). Vacío, 10.
+      USUARIOS_INTENTOS_POR_MINUTO: ${USUARIOS_INTENTOS_POR_MINUTO:-}
       # Destino de las trazas (ADR-006). Si Jaeger no está, el gateway funciona igual.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
