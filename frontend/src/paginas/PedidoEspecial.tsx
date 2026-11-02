@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { solicitarPedidoEspecial } from '../api.ts'
-import { mensajeDe, valorDe } from '../ayudas.ts'
+import { claveDeIntento, mensajeDe, valorDe, type Intento } from '../ayudas.ts'
 
 // C6: se pide un pedido a medida; el vendedor lo cotiza después.
 export default function PedidoEspecial() {
@@ -8,10 +8,13 @@ export default function PedidoEspecial() {
   const [fecha, setFecha] = useState('')
   const [enviado, setEnviado] = useState(false)
   const [error, setError] = useState('')
+  // Reintentar la misma solicitud manda la misma clave y no crea otra (como en Encargar).
+  const intento = useRef<Intento | null>(null)
 
   const enviar = (evento: FormEvent) => {
     evento.preventDefault()
-    solicitarPedidoEspecial({ descripcion, fecha })
+    intento.current = claveDeIntento(intento.current, { descripcion, fecha })
+    solicitarPedidoEspecial({ descripcion, fecha, clave: intento.current.clave })
       .then(() => setEnviado(true))
       .catch(errorSolicitud => setError(mensajeDe(errorSolicitud)))
   }

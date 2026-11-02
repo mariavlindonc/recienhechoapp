@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
-import { cotizarEspecial, listarEspeciales } from '../../api.ts'
+import { cotizarEspecial, listarEspeciales, rechazarEspecial } from '../../api.ts'
 import { formatearPrecio } from '../../formato.ts'
 import type { PedidoEspecial } from '../../tipos.ts'
 import { mensajeDe, valorDe } from '../../ayudas.ts'
 
-// VE5: cotizar pedidos especiales. La aceptación la hace el comprador (C6).
+// Lo mismo que acepta pedidos para el mensaje del vendedor (ADR-017).
+const LARGO_MAXIMO_MENSAJE = 500
+
+// VE5: cotizar pedidos especiales, o rechazarlos con un mensaje para el comprador. La
+// aceptación la hace el comprador (C6).
 export default function Especiales() {
   const [especiales, setEspeciales] = useState<PedidoEspecial[]>([])
   const [precios, setPrecios] = useState<Record<string, string>>({})
+  const [mensajes, setMensajes] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
 
   const cargar = () => listarEspeciales().then(setEspeciales).catch(errorListar => setError(mensajeDe(errorListar)))
@@ -16,10 +21,25 @@ export default function Especiales() {
   }, [])
 
   const cotizar = (especial: PedidoEspecial) => {
+    setError('')
     // Pesos a centavos enteros (R5).
     cotizarEspecial(especial.id, Math.round(Number(precios[especial.id]) * 100))
       .then(cargar)
       .catch(errorCotizar => setError(mensajeDe(errorCotizar)))
+  }
+
+  // El mensaje le llega al comprador por mail y lo ve en sus pedidos.
+  const rechazar = (especial: PedidoEspecial) => {
+    // Un aviso de un intento anterior no tiene que quedar a la vista.
+    setError('')
+    const mensaje = (mensajes[especial.id] ?? '').trim()
+    if (!mensaje) {
+      setError('Escribí un mensaje para el comprador antes de rechazar.')
+      return
+    }
+    rechazarEspecial(especial.id, mensaje)
+      .then(cargar)
+      .catch(errorRechazar => setError(mensajeDe(errorRechazar)))
   }
 
   return (
@@ -41,6 +61,11 @@ export default function Especiales() {
                     setPrecios(anteriores => ({ ...anteriores, [especial.id]: valor }))
                   }}></md-text-field>
                   <md-button color="filled" onClick={() => cotizar(especial)}>Cotizar</md-button>
+                  <md-text-field label="O rechazalo: mensaje para el comprador" type="textarea" rows="2" maxlength={LARGO_MAXIMO_MENSAJE} value={mensajes[especial.id] ?? ''} onInput={evento => {
+                    const valor = valorDe(evento)
+                    setMensajes(anteriores => ({ ...anteriores, [especial.id]: valor }))
+                  }}></md-text-field>
+                  <md-button color="text" onClick={() => rechazar(especial)}>Rechazar</md-button>
                 </>
               )}
             </div>

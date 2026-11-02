@@ -68,8 +68,15 @@ export default function MisPedidos() {
             <div className="formulario" style={{ padding: 16 }}>
               <h3>{pedido.nombreProducto} × {pedido.cantidad}</h3>
               <p>{formatearFecha(pedido.fecha)} {pedido.franja ?? ''}</p>
-              <strong>{formatearPrecio(pedido.precioCentavos)}</strong>
+              {/* Un especial que nunca se cotizó no tiene precio: "$ 0,00" parecería que es gratis. */}
+              {(pedido.tipo !== 'especial' || pedido.precioCentavos > 0) && <strong>{formatearPrecio(pedido.precioCentavos)}</strong>}
               <EstadoPedido estado={pedido.estado} />
+              {/* Si el vendedor rechazó un especial, su mensaje explica por qué; si no, el motivo de la cancelación. */}
+              {pedido.mensajeVendedor ? (
+                <p>Mensaje de la pastelería: «{pedido.mensajeVendedor}»</p>
+              ) : (
+                pedido.estado === 'cancelado' && pedido.motivoCancelacion && <p>{pedido.motivoCancelacion}</p>
+              )}
               {['pendiente_confirmacion', 'confirmado'].includes(pedido.estado) && (
                 <md-button color="text" onClick={() => cancelar(pedido.id)}>Cancelar</md-button>
               )}

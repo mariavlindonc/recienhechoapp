@@ -1,9 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { crearPedido, obtenerProducto } from '../api.ts'
 import { hoyIso } from '../formato.ts'
 import type { Producto } from '../tipos.ts'
-import { mensajeDe, valorDe } from '../ayudas.ts'
+import { claveDeIntento, mensajeDe, valorDe, type Intento } from '../ayudas.ts'
 
 // C4 y C5: pedido inmediato (sin fecha) o programado (fecha y franja).
 export default function Encargar() {
@@ -15,6 +15,9 @@ export default function Encargar() {
   const [franja, setFranja] = useState('mañana')
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState(false)
+  // Si "Confirmar" falla y se vuelve a tocar con los mismos datos, va la misma clave: si el
+  // primer intento llegó a guardarse, pedidos devuelve ese pedido en vez de crear otro.
+  const intento = useRef<Intento | null>(null)
 
   useEffect(() => {
     obtenerProducto(id).then(setProducto)
@@ -27,11 +30,15 @@ export default function Encargar() {
     evento.preventDefault()
     if (enviando) return
     setEnviando(true)
-    crearPedido({ productoId: id, cantidad, fecha: fecha || undefined, franja: fecha ? franja : undefined })
+    const datos = { productoId: id, cantidad, fecha: fecha || undefined, franja: fecha ? franja : undefined }
+    intento.current = claveDeIntento(intento.current, datos)
+    crearPedido({ ...datos, clave: intento.current.clave })
       // Mis pedidos resalta el que se acaba de crear.
       .then(pedido => navegar('/mis-pedidos', { state: { recienCreado: pedido.id } }))
       .catch(errorPedido => {
-        setError(mensajeDe(errorPedido))
+        // Sin respuesta (se cortó la red) no se sabe si el pedido llegó: reintentar es seguro
+        // porque va la misma clave, y se lo decimos al comprador.
+        setError(errorPedido instanceof TypeError ? 'Se cortó la conexión. Volvé a tocar «Confirmar pedido»: si el pedido ya había llegado, no se va a duplicar.' : mensajeDe(errorPedido))
         setEnviando(false)
       })
   }

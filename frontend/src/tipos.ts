@@ -45,6 +45,9 @@ export type Pedido = {
   precioCentavos: number
   tipo: 'programado' | 'inmediato' | 'especial'
   estado: EstadoPedido
+  motivoCancelacion?: string
+  // mensajeVendedor es lo que escribió el vendedor al rechazar un especial sin cotizarlo.
+  mensajeVendedor?: string
 }
 
 // Un especial aceptado pasa a ser un Pedido más (pendiente_confirmacion en adelante, ADR-017).

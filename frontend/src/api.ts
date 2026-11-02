@@ -193,6 +193,8 @@ type PedidoDeApi = {
   precioCentavos: number
   tipo: 'programado' | 'inmediato' | 'especial'
   estado: EstadoPedido
+  motivoCancelacion?: string
+  mensajeVendedor?: string
 }
 
 // Las pantallas muestran un producto por pedido; si hay varios, se juntan los nombres.
@@ -207,14 +209,17 @@ export function aPedido(pedido: PedidoDeApi): Pedido {
     precioCentavos: pedido.precioCentavos,
     tipo: pedido.tipo,
     estado: pedido.estado,
+    motivoCancelacion: pedido.motivoCancelacion,
+    mensajeVendedor: pedido.mensajeVendedor,
   }
 }
 
-// Sin fecha es un pedido inmediato: pedidos busca el primer día con cupo (C4).
-export async function crearPedido({ productoId, cantidad, fecha, franja }: { productoId: string; cantidad: number; fecha?: string; franja?: string }) {
+// Sin fecha es un pedido inmediato: pedidos busca el primer día con cupo (C4). La clave la
+// arma la pantalla con claveDeIntento: la misma en cada reintento del mismo pedido, así si la
+// red o el gateway cortan, reintentar no lo duplica (ADR-003).
+export async function crearPedido({ productoId, cantidad, fecha, franja, clave }: { productoId: string; cantidad: number; fecha?: string; franja?: string; clave: string }) {
   const cuerpo = fecha ? { tipo: 'programado', items: [{ productoId, cantidad }], fecha, franja } : { tipo: 'inmediato', items: [{ productoId, cantidad }] }
-  // Una clave por intento: si la red corta, reintentar con la misma no duplica el pedido (ADR-003).
-  const pedido = await pedir<PedidoDeApi>('/pedidos', { metodo: 'POST', cuerpo, headers: { 'Idempotency-Key': crypto.randomUUID() } })
+  const pedido = await pedir<PedidoDeApi>('/pedidos', { metodo: 'POST', cuerpo, headers: { 'Idempotency-Key': clave } })
   return aPedido(pedido)
 }
 
@@ -265,8 +270,9 @@ export function aEspecial(pedido: PedidoDeApi): PedidoEspecial {
   }
 }
 
-export async function solicitarPedidoEspecial({ descripcion, fecha }: { descripcion: string; fecha: string }) {
-  const pedido = await pedir<PedidoDeApi>('/pedidos/especiales', { metodo: 'POST', cuerpo: { descripcion, fecha }, headers: { 'Idempotency-Key': crypto.randomUUID() } })
+// Como crearPedido: la clave es la misma en cada reintento de la misma solicitud.
+export async function solicitarPedidoEspecial({ descripcion, fecha, clave }: { descripcion: string; fecha: string; clave: string }) {
+  const pedido = await pedir<PedidoDeApi>('/pedidos/especiales', { metodo: 'POST', cuerpo: { descripcion, fecha }, headers: { 'Idempotency-Key': clave } })
   return aEspecial(pedido)
 }
 
@@ -278,6 +284,11 @@ export async function listarEspeciales() {
 
 export async function cotizarEspecial(id: string, precioCentavos: number) {
   return aEspecial(await pedir<PedidoDeApi>(`/pedidos/especiales/${encodeURIComponent(id)}/cotizacion`, { metodo: 'PUT', cuerpo: { precioCentavos } }))
+}
+
+// El vendedor no cotiza una solicitud: queda cancelada y el mensaje le llega al comprador por mail.
+export async function rechazarEspecial(id: string, mensaje: string) {
+  return aPedido(await pedir<PedidoDeApi>(`/pedidos/especiales/${encodeURIComponent(id)}/declinacion`, { metodo: 'POST', cuerpo: { mensaje } }))
 }
 
 // Al aceptar reserva el cupo del día; vencidas las 48 h, pedidos responde 409 cotizacion_vencida (R8).
