@@ -124,3 +124,23 @@ func TestSaludDegradadaSinBase(prueba *testing.T) {
 		prueba.Errorf("estado = %d", respuesta.Code)
 	}
 }
+
+// El registro público crea solo compradores: si alguien manda el rol (o cualquier
+// otro campo), se rechaza. Es lo que impide registrarse como vendedor.
+func TestElRegistroNoAceptaElRol(prueba *testing.T) {
+	respuesta := atender(servicioFalso{usuario: ana}, http.MethodPost, "/usuarios", `{"email":"ana@ejemplo.com","nombre":"Ana","clave":"clave-segura","rol":"vendedor"}`, nil)
+
+	if respuesta.Code != http.StatusBadRequest || !strings.Contains(respuesta.Body.String(), "solicitud_invalida") {
+		prueba.Errorf("estado %d: %s", respuesta.Code, respuesta.Body)
+	}
+}
+
+// Solo se lee un objeto JSON: lo que venga después se rechaza, no se ignora.
+func TestDatosDespuesDelJSONSeRechazan(prueba *testing.T) {
+	for _, sobrante := range []string{` {"rol":"vendedor"}`, `}`} {
+		respuesta := atender(servicioFalso{usuario: ana}, http.MethodPost, "/usuarios", `{"email":"ana@ejemplo.com","nombre":"Ana","clave":"clave-segura"}`+sobrante, nil)
+		if respuesta.Code != http.StatusBadRequest {
+			prueba.Errorf("sobrante %q: estado %d", sobrante, respuesta.Code)
+		}
+	}
+}

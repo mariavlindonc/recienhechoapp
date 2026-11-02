@@ -147,6 +147,10 @@ func leerCuerpo(contexto *gin.Context, destino any) bool {
 		responderError(contexto, http.StatusBadRequest, "solicitud_invalida", fmt.Sprintf("JSON inválido: %v.", err))
 		return false
 	}
+	if err := decodificador.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		responderError(contexto, http.StatusBadRequest, "solicitud_invalida", "JSON inválido: hay datos después del objeto.")
+		return false
+	}
 	return true
 }
 
