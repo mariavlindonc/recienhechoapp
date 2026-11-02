@@ -29,6 +29,12 @@ El enunciado pide tests de carga con resultados documentados y analizados, el pr
 
 En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de errores, CPU y memoria por contenedor, y en notificaciones cuántas quedan `pendiente` y cuánto tardan en enviarse.
 
+**Carga esperada del negocio** (definida por María y Athina, 30/10/2026, [#79](https://github.com/mariavlindonc/recienhechoapp/issues/79)):
+
+- **Carga real:** hasta **5 pedidos por día** en el pico del año. Es un emprendimiento real de una persona que cocina: el cuello de botella es la producción, no el sistema, y por eso existe el cupo diario del dominio.
+- **Techo hipotético:** **50 pedidos por segundo**, exagerado a propósito, solo para tener un margen de seguridad con el que comparar las mediciones. No es una carga que se espere.
+- Los escenarios de carga de abajo no representan esa demanda: buscan el punto de quiebre y prueban la concurrencia. Por ejemplo, el cupo de 500 del escenario de pedidos sirve para que 50 compradores peleen por el mismo día; no es un dato del negocio.
+
 **Límites esperados:**
 
 1. **Servidor de correo.** Gmail permite unos 500 mails por día ([ADR-005](ADR-005-envio-de-email.md)). La API puede aceptar muchas más notificaciones de las que se pueden enviar: el límite real del servicio está en el envío. Con Mailpit no aparece, por eso se mide aparte el ritmo de envío. Además, cada instancia envía de a una notificación por vez (revisa las pendientes cada 5 s y las manda en serie): con 200 ms por envío serían unas 5 por segundo por instancia, y el ritmo se multiplica con más instancias.
@@ -73,6 +79,15 @@ Corridos el 29/10/2026 con `tests/carga/` ([README](../../tests/carga/README.md)
 
 **Pedidos:** en las dos corridas se crearon exactamente 500 pedidos, el cupo del día. No hubo sobreventa con 50 usuarios a la vez: la reserva atómica de [ADR-015](ADR-015-consistencia-y-concurrencia.md) se cumple. El cupo se agota al principio del test; después, casi todas las respuestas son `409 sin_cupo`, en unos 40 ms. Con el inventario lento, crear un pedido tarda más (p95 de 1,6 s en las `201`) porque espera la primera confirmación hasta el timeout del inventario. Después responde con el pedido en `pendiente_confirmacion`, y sigue tomando pedidos (RNF4). Al volver el inventario a `confirma`, el proceso en segundo plano confirmó los 500 sin intervención. En esta corrida, el umbral de k6 todavía medía todas las respuestas, incluidos los `409`; el p95 de los pedidos creados de la tabla salió del resumen de k6. Ahora el umbral mide solo los creados.
 
+**Capacidad contra la carga esperada:**
+
+| | Carga real | Techo hipotético | Medido sin errores | Margen sobre el techo |
+|---|---|---|---|---|
+| Pedidos | 5 por día | 50 por segundo | ~300 por segundo (el límite de conexiones del gateway aparece a ~860) | ~6 veces |
+| Catálogo | Unas pocas consultas por día | ~150 por segundo (3 consultas por pedido, supuesto) | 303 por segundo, 0 % de errores (no se buscó su límite) | al menos 2 veces |
+
+Contra la carga real, el sistema sobra por muchos órdenes de magnitud. La arquitectura responde a los requisitos del Trabajo Práctico (microservicios, balanceo, mensajería, etc.), no a la carga del negocio.
+
 **Límites esperados, contra lo medido:**
 
 1. **Servidor de correo.** Con Mailpit, el envío no fue un límite: unas 150 notificaciones por segundo entre las dos instancias. La estimación de unas 5 por segundo por instancia suponía 200 ms por envío, y Mailpit tarda unos milisegundos. Con Gmail el límite sigue siendo el de unos 500 mails por día; no se midió.
@@ -80,6 +95,8 @@ Corridos el 29/10/2026 con `tests/carga/` ([README](../../tests/carga/README.md)
 3. **Cupo de `pedidos`.** Correcto bajo contención (500 de 500, sin sobreventa) y sin demoras visibles: el p95 de las `201` fue de 300 ms.
 
 **Principal límite encontrado: las conexiones del api-gateway hacia los servicios.** Con 860 solicitudes por segundo a `pedidos`, el gateway respondió `503` a 6.908 solicitudes (4,5 % y 1,9 %). Todas fallaron con `dial tcp ...: connect: cannot assign requested address`: el contenedor del gateway se quedó sin puertos locales para abrir conexiones nuevas. El gateway usa el transporte HTTP por defecto de Go, que guarda solo 2 conexiones libres por servicio para reusarlas. Con 50 solicitudes a la vez, cada solicitud de más abre una conexión nueva y la cierra al terminar, y los puertos cerrados quedan unos segundos sin poder usarse (estado `TIME_WAIT`). Con notificaciones y catálogo, a 300 por segundo, no pasó. Se resolvería subiendo las conexiones libres que el gateway guarda por servicio (`MaxIdleConnsPerHost`).
+
+**Qué se hace con ese límite:** se acepta como deuda técnica, sin subir `MaxIdleConnsPerHost` (decidido por María y Athina, 30/10/2026, [#79](https://github.com/mariavlindonc/recienhechoapp/issues/79)). Aparece a ~860 solicitudes por segundo, unas 17 veces por encima del techo hipotético de 50 pedidos por segundo y muchísimo más que la carga real. La causa está entendida y la solución es conocida (subir las conexiones libres que el gateway guarda por servicio), así que se puede aplicar si la carga alguna vez se acerca.
 
 **Otras observaciones:**
 
