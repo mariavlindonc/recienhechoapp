@@ -56,15 +56,16 @@ type cuerpoEvento struct {
 }
 
 type cuerpoDatos struct {
-	IDPedido       string       `json:"idPedido"`
-	IDComprador    string       `json:"idComprador"`
-	EmailComprador string       `json:"emailComprador"`
-	EstadoAnterior string       `json:"estadoAnterior,omitempty"`
-	EstadoNuevo    string       `json:"estadoNuevo"`
-	Items          []cuerpoItem `json:"items"`
-	Fecha          string       `json:"fecha"`
-	Motivo         string       `json:"motivo,omitempty"`
-	TotalCentavos  int64        `json:"totalCentavos,omitempty"`
+	IDPedido        string       `json:"idPedido"`
+	IDComprador     string       `json:"idComprador"`
+	EmailComprador  string       `json:"emailComprador"`
+	EstadoAnterior  string       `json:"estadoAnterior,omitempty"`
+	EstadoNuevo     string       `json:"estadoNuevo"`
+	Items           []cuerpoItem `json:"items"`
+	Fecha           string       `json:"fecha"`
+	Motivo          string       `json:"motivo,omitempty"`
+	TotalCentavos   int64        `json:"totalCentavos,omitempty"`
+	MensajeVendedor string       `json:"mensajeVendedor,omitempty"`
 }
 
 type cuerpoItem struct {
@@ -89,15 +90,16 @@ func (publicador *Publicador) Publicar(contexto context.Context, guardado puerto
 		Version:    evento.Version,
 		OcurridoEn: evento.OcurridoEn,
 		Datos: cuerpoDatos{
-			IDPedido:       datos.IDPedido,
-			IDComprador:    datos.IDComprador,
-			EmailComprador: datos.EmailComprador,
-			EstadoAnterior: datos.EstadoAnterior,
-			EstadoNuevo:    datos.EstadoNuevo,
-			Items:          items,
-			Fecha:          datos.Fecha,
-			Motivo:         datos.Motivo,
-			TotalCentavos:  datos.TotalCentavos,
+			IDPedido:        datos.IDPedido,
+			IDComprador:     datos.IDComprador,
+			EmailComprador:  datos.EmailComprador,
+			EstadoAnterior:  datos.EstadoAnterior,
+			EstadoNuevo:     datos.EstadoNuevo,
+			Items:           items,
+			Fecha:           datos.Fecha,
+			Motivo:          datos.Motivo,
+			TotalCentavos:   datos.TotalCentavos,
+			MensajeVendedor: datos.MensajeVendedor,
 		},
 	})
 	if err != nil {

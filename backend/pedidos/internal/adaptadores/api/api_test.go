@@ -62,6 +62,9 @@ func (casos *casosFalsos) ListarEspecialesAbiertos(context.Context) ([]dominio.P
 func (casos *casosFalsos) CotizarEspecial(context.Context, string, int64) (dominio.Pedido, error) {
 	return dominio.Pedido{}, nil
 }
+func (casos *casosFalsos) RechazarEspecial(_ context.Context, id, mensaje string) (dominio.Pedido, error) {
+	return dominio.Pedido{ID: id, Tipo: dominio.TipoEspecial, Estado: dominio.EstadoCancelado, MensajeVendedor: mensaje}, nil
+}
 func (casos *casosFalsos) ResponderEspecial(context.Context, string, string, bool) (dominio.Pedido, error) {
 	if casos.errResponder != nil {
 		return dominio.Pedido{}, casos.errResponder
@@ -214,6 +217,17 @@ func TestRutasDeEspeciales(prueba *testing.T) {
 	}
 	if _, datos := pedir(&casosFalsos{}, http.MethodPost, "/pedidos/especiales/e1/aceptacion", "", comprador); datos["codigo"] != "cotizacion_vencida" {
 		prueba.Errorf("se esperaba cotizacion_vencida, llegó %v", datos)
+	}
+}
+
+func TestVendedorDeclinaUnaSolicitud(prueba *testing.T) {
+	cuerpo := `{"mensaje":"No llegamos para esa fecha."}`
+	if respuesta, _ := pedir(&casosFalsos{}, http.MethodPost, "/pedidos/especiales/e1/declinacion", cuerpo, comprador); respuesta.Code != http.StatusForbidden {
+		prueba.Errorf("el comprador no declina: estado %d", respuesta.Code)
+	}
+	respuesta, datos := pedir(&casosFalsos{}, http.MethodPost, "/pedidos/especiales/e1/declinacion", cuerpo, vendedor)
+	if respuesta.Code != http.StatusOK || datos["estado"] != "cancelado" || datos["mensajeVendedor"] != "No llegamos para esa fecha." {
+		prueba.Errorf("estado %d, datos %v", respuesta.Code, datos)
 	}
 }
 

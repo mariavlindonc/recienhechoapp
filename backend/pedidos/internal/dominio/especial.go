@@ -133,3 +133,22 @@ func (pedido *Pedido) CancelarSolicitud(motivo string, ahora time.Time) (Estado,
 	pedido.ActualizadoEn = ahora
 	return anterior, nil
 }
+
+// RechazarSolicitud es cuando el vendedor no va a cotizar un especial (VE5): queda
+// cancelado y el mensaje le explica al comprador por qué. No hay cupo ni insumos
+// que devolver.
+func (pedido *Pedido) RechazarSolicitud(mensaje string, ahora time.Time) (Estado, error) {
+	anterior := pedido.Estado
+	if pedido.Tipo != TipoEspecial || anterior != EstadoSolicitado {
+		return anterior, fmt.Errorf("%w: solo se rechaza un pedido especial solicitado", ErrTransicionInvalida)
+	}
+	mensaje = strings.TrimSpace(mensaje)
+	if mensaje == "" || utf8.RuneCountInString(mensaje) > largoMaximoDescripcion {
+		return anterior, fmt.Errorf("%w: mensaje tiene que tener entre 1 y %d caracteres", ErrSolicitudInvalida, largoMaximoDescripcion)
+	}
+	pedido.Estado = EstadoCancelado
+	pedido.MotivoCancelacion = "Rechazado por la pastelería."
+	pedido.MensajeVendedor = mensaje
+	pedido.ActualizadoEn = ahora
+	return anterior, nil
+}

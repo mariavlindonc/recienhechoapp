@@ -94,6 +94,20 @@ func TestElMailDeVencimientoNombraLasDosCausas(prueba *testing.T) {
 	}
 }
 
+// Cuando el vendedor rechaza una solicitud, el comprador lee su mensaje.
+func TestElRechazoDelVendedorLlevaSuMensaje(prueba *testing.T) {
+	casos := &casosFalsos{}
+	rechazado := strings.NewReplacer(`"estadoNuevo":"listo"`, `"estadoNuevo":"cancelado","mensajeVendedor":"No llegamos para esa fecha."`).Replace(eventoListo)
+
+	if err := Procesar(context.Background(), casos, []byte(rechazado)); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+
+	if solicitud := casos.creadas["evento-1"]; solicitud.Asunto != "No podemos hacer tu pedido especial" || !strings.Contains(solicitud.Cuerpo, "No llegamos para esa fecha.") {
+		prueba.Errorf("solicitud = %+v", solicitud)
+	}
+}
+
 func TestMensajesNoProcesablesVanAFallidos(prueba *testing.T) {
 	casos := []struct {
 		nombre string

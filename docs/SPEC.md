@@ -79,6 +79,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 - Dado un pedido especial cotizado hace más de 48 h, cuando el comprador intenta aceptarlo, entonces se le informa que la cotización venció.
 - Dado un pedido especial cotizado para una fecha que ya pasó, cuando el comprador intenta aceptarlo, entonces se le informa que la cotización venció y no se reserva cupo.
 - Dado un pedido especial solicitado y todavía sin cotizar, cuando el comprador lo cancela, entonces pasa a `cancelado` y deja de figurar entre los especiales del vendedor.
+- Dado un pedido especial solicitado que la pastelería no puede hacer, cuando el vendedor lo rechaza con un mensaje, entonces pasa a `cancelado` y el comprador recibe un email con ese mensaje.
 
 **C8. Cancelar**
 - Dado un pedido `confirmado`, cuando el comprador lo cancela, entonces pasa a `cancelado` y el cupo del día vuelve a estar disponible.

@@ -4,7 +4,7 @@
 
 Propuesto el 28/10/2026. Implementado como dice la Decisión, en `develop` (PR #64).
 
-Revisión del 02/11/2026 (revisión del #64, decidido por María): el comprador puede cancelar un especial `solicitado`; una cotización vence también si ya pasó la fecha del pedido, y no se cotiza una fecha que ya pasó.
+Revisión del 02/11/2026 (revisión del #64, decidido por María): el comprador puede cancelar un especial `solicitado`, y el vendedor puede rechazarlo sin cotizarlo, con un mensaje que le llega al comprador por mail; una cotización vence también si ya pasó la fecha del pedido, y no se cotiza una fecha que ya pasó.
 
 ## Contexto
 
@@ -29,7 +29,7 @@ Lo que los docs no definen:
 - Se guarda como un pedido de tipo `especial` con un solo ítem (la descripción, cantidad 1) y sin insumos.
 - Al aceptar, reserva 1 unidad del cupo del día en la misma transacción (B1) y pasa a `pendiente_confirmacion`. Sin cupo, `409 sin_cupo` y sigue `cotizado`.
 - Lo confirma el proceso de siempre con el inventario, que recibe la lista de insumos vacía (variante de A3 sin insumos: no cambia el contrato ni el proceso).
-- Cada cambio publica `pedido.estado_cambiado` con el total (C1). `notificaciones` arma un mail propio para `solicitado`, `cotizado` (con el precio y las 48 h), `rechazado` y `vencido`.
+- Cada cambio publica `pedido.estado_cambiado` con el total (C1). `notificaciones` arma un mail propio para `solicitado`, `cotizado` (con el precio y las 48 h), `rechazado` y `vencido`, y uno con el mensaje del vendedor cuando él rechaza la solicitud.
 - Los especiales sin aceptar no aparecen en el calendario del día (`GET /pedidos?fecha=`).
 
 Pasar a A1 (confirmar sin inventario) o a A2 (confirma el vendedor) cambia solo `ResponderEspecial` en la aplicación.
@@ -41,6 +41,7 @@ Rutas:
 | `POST /pedidos/especiales` | comprador | Solicita (`descripcion`, `fecha`) con `Idempotency-Key` |
 | `GET /pedidos/especiales` | vendedor | Lista los `solicitado` y `cotizado`; el comprador ve los suyos en `GET /pedidos` |
 | `PUT /pedidos/especiales/:id/cotizacion` | vendedor | Cotiza (`precioCentavos`); si la fecha del pedido ya pasó, `409 transicion_invalida` |
+| `POST /pedidos/especiales/:id/declinacion` | vendedor | Rechaza un `solicitado` sin cotizarlo, con `mensaje` (de 1 a 500 caracteres) para el comprador. Pasa a `cancelado` con `mensajeVendedor`, sin cupo ni insumos que devolver |
 | `POST /pedidos/especiales/:id/aceptacion` y `/rechazo` | comprador | Responde; después de 48 h o de la fecha del pedido, `409 cotizacion_vencida` |
 | `POST /pedidos/:id/cancelacion` | comprador | Retira un especial `solicitado`: pasa a `cancelado` sin cupo ni insumos que devolver. Un `cotizado` no se cancela, se rechaza |
 
@@ -72,6 +73,6 @@ El vencimiento se controla cuando el comprador responde, como pide el SPEC: pasa
 
 ## Consecuencias
 
-- El evento suma el campo opcional `totalCentavos`; la versión sigue en 1 porque un consumidor viejo lo ignora ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
+- El evento suma los campos opcionales `totalCentavos` y `mensajeVendedor`; la versión sigue en 1 porque un consumidor viejo los ignora ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
 - El proveedor de inventario recibe reservas sin insumos para los especiales. Como reservar es reducir stock ([ADR-010](ADR-010-consumo-de-inventario.md)), un especial no tiene nada que descontar: cuando llegue la versión del contrato con reducir y aumentar, hay que confirmar si acepta una reducción vacía o si el adaptador no lo llama; si no se puede ninguna de las dos, se pasa a A1.
 - Con A1 o A2, los especiales no pasarían por el disyuntor del inventario ([ADR-011](ADR-011-resiliencia.md)).

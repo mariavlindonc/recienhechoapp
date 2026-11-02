@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -147,6 +148,47 @@ func TestCompradorCancelaUnEspecialSolicitado(prueba *testing.T) {
 	}
 	if estados := actual.repositorio.estadosDeLosEventos(); !slices.Equal(estados, []string{"solicitado", "cancelado"}) {
 		prueba.Errorf("eventos = %v", estados)
+	}
+}
+
+// El vendedor puede no cotizar una solicitud y explicarle al comprador por qué:
+// el mensaje viaja en el evento para el mail.
+func TestVendedorRechazaUnEspecialSolicitado(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, fechaEspecial, 5)
+	contexto := context.Background()
+	especial, _ := actual.servicio.SolicitarEspecial(contexto, comprador, "clave-especial", "Torta de seis pisos", fechaEspecial)
+
+	rechazado, err := actual.servicio.RechazarEspecial(contexto, especial.ID, "  Para esa fecha no llegamos con una torta tan grande.  ")
+
+	if err != nil || rechazado.Estado != dominio.EstadoCancelado || rechazado.MensajeVendedor != "Para esa fecha no llegamos con una torta tan grande." {
+		prueba.Fatalf("estado %s, mensaje %q, err %v", rechazado.Estado, rechazado.MensajeVendedor, err)
+	}
+	if reservados := actual.repositorio.reservados(fechaEspecial); reservados != 0 || len(actual.inventario.liberados) != 0 {
+		prueba.Errorf("no tenía cupo ni insumos reservados; reservados %d, liberados %v", reservados, actual.inventario.liberados)
+	}
+	ultimo := actual.repositorio.eventos[len(actual.repositorio.eventos)-1].Evento.Datos
+	if ultimo.EstadoNuevo != "cancelado" || ultimo.MensajeVendedor != rechazado.MensajeVendedor {
+		prueba.Errorf("evento %+v", ultimo)
+	}
+	if abiertos, _ := actual.servicio.ListarEspecialesAbiertos(contexto); len(abiertos) != 0 {
+		prueba.Errorf("un rechazado por el vendedor no queda abierto; hay %d", len(abiertos))
+	}
+}
+
+func TestReglasDelRechazoDelVendedor(prueba *testing.T) {
+	actual := nuevoEntorno()
+	contexto := context.Background()
+	especial, _ := actual.servicio.SolicitarEspecial(contexto, comprador, "clave-solicitud", "Torta", fechaEspecial)
+
+	for _, invalido := range []string{"", "   ", strings.Repeat("a", 501)} {
+		if _, err := actual.servicio.RechazarEspecial(contexto, especial.ID, invalido); !errors.Is(err, dominio.ErrSolicitudInvalida) {
+			prueba.Errorf("mensaje de %d caracteres: se esperaba ErrSolicitudInvalida, dio %v", len(invalido), err)
+		}
+	}
+	cotizado := actual.especialCotizado(prueba)
+	if _, err := actual.servicio.RechazarEspecial(contexto, cotizado.ID, "Ya no podemos"); !errors.Is(err, dominio.ErrTransicionInvalida) {
+		prueba.Errorf("un cotizado ya tiene precio: se esperaba ErrTransicionInvalida, dio %v", err)
 	}
 }
 

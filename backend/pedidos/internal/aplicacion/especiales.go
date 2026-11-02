@@ -134,3 +134,23 @@ func (servicio *Servicio) cancelarSolicitud(contexto context.Context, pedido dom
 	}
 	return pedido, nil
 }
+
+// RechazarEspecial lo usa el vendedor para no cotizar una solicitud (VE5), con un
+// mensaje para el comprador que le llega por mail.
+func (servicio *Servicio) RechazarEspecial(contexto context.Context, id, mensaje string) (dominio.Pedido, error) {
+	pedido, err := servicio.Obtener(contexto, "", id)
+	if err != nil {
+		return dominio.Pedido{}, err
+	}
+	versionLeida := pedido.Version
+	ahora := servicio.ahora()
+	anterior, err := pedido.RechazarSolicitud(mensaje, ahora)
+	if err != nil {
+		return dominio.Pedido{}, err
+	}
+	evento := dominio.NuevoEventoEstadoCambiado(servicio.nuevoID(), pedido, anterior, ahora)
+	if err := servicio.guardar(contexto, &pedido, puertos.Cambio{Pedido: pedido, VersionAnterior: versionLeida, Evento: &evento}); err != nil {
+		return dominio.Pedido{}, err
+	}
+	return pedido, nil
+}
