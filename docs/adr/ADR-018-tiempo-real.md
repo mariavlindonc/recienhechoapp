@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto el 02/11/2026 (#75). Decidido por María el mismo día: el WebSocket vive en `pedidos`, con la librería `coder/websocket`, y el token del comprador viaja en la URL. El resto de la Decisión (cómo llegan los eventos, el formato de los mensajes, el paso por el gateway y por el servidor del frontend) es la propuesta del agente: el equipo la acepta o la cambia en la revisión de este ADR, antes de implementar (regla 5 de AGENTS.md).
+Aceptado por el equipo (María, Athina y Agustín) el 02/11/2026 (#75). Revisado el 03/11/2026 (decidido por María): como `pedidos` corre con una sola instancia, los cambios llegan al WebSocket desde la aplicación al guardar, en vez de una cola de RabbitMQ.
 
 ## Contexto
 
@@ -16,7 +16,7 @@ Lo que ya existe y condiciona el diseño:
 - El api-gateway corta cada solicitud a los 3 s (`context.WithTimeout` en `proxy.go`, ADR-003). Una conexión WebSocket dura minutos.
 - La API de WebSocket del navegador no permite agregar headers: el JWT no puede ir en `Authorization` como en el resto de las solicitudes (ADR-016).
 - El servidor del frontend (`frontend/servidor.ts`) reenvía `/api` con `fetch`, que no sirve para WebSocket.
-- El gateway ya puede repartir `pedidos` entre varias instancias (`PEDIDOS_URLS`), aunque hoy corre una.
+- `pedidos` corre con una sola instancia: los cambios de los pedidos y los compradores conectados están en el mismo proceso.
 
 ## Decisión
 
@@ -28,9 +28,7 @@ Lo que ya existe y condiciona el diseño:
 
 **Autenticación: el token va en la URL** (`/api/pedidos/tiempo-real?token=<jwt>`). El api-gateway lo lee de la query **solo en esa ruta**, lo verifica como siempre (HS256, `exp` obligatorio) y arma `X-Id-Usuario`, `X-Email-Usuario` y `X-Rol-Usuario`. `pedidos` no verifica el JWT. Como las URLs suelen quedar registradas, el token no puede aparecer en ningún log ni traza: el gateway registra la ruta sin la query (ya lo hace, con `FullPath`), y la ruta queda afuera de las trazas o con la query borrada, porque OpenTelemetry guarda la URL completa.
 
-Lo que sigue es la **propuesta** para que el equipo la confirme:
-
-**Cómo llegan los cambios al WebSocket.** Cada instancia de `pedidos` consume sus propios eventos con una **cola exclusiva**, sin nombre fijo, que se borra sola al cerrar la conexión, enlazada al exchange `pedidos`. Así cada instancia recibe **todos** los eventos y se los manda a los compradores que tiene conectados. El comprador recibe solo los eventos cuyo `idComprador` coincide con su `X-Id-Usuario`. Los eventos salen después de guardar el cambio, así que lo que llega por el WebSocket ya está en la base. La demora es la de la bandeja de salida: alrededor de 1 s.
+**Cómo llegan los cambios al WebSocket: al guardar.** Cuando la aplicación guarda un cambio que trae evento (el mismo `pedido.estado_cambiado` que va a la bandeja de salida), y recién cuando el guardado salió bien, se lo pasa a un puerto nuevo, `AvisosEnVivo`. El adaptador WebSocket lo cumple y se lo manda a los compradores conectados cuyo `X-Id-Usuario` coincide con el `idComprador` del evento. Así lo que llega por el WebSocket ya está en la base, llega al instante y no depende de RabbitMQ. Los mails siguen saliendo por la bandeja de salida, como siempre.
 
 **Formato de los mensajes**, del servidor al navegador, en JSON, con un `tipo` para que se puedan sumar otros sin cambiar el protocolo:
 
@@ -42,7 +40,7 @@ Más adelante, el mapa del delivery sería otro tipo (por ejemplo, `{ "tipo": "u
 
 **Reconexión y estado actual.** El WebSocket solo avisa cambios: no es la fuente de verdad. Al conectarse, y cada vez que se reconecta, la pantalla vuelve a pedir sus pedidos por la API HTTP de siempre, así lo que pasó mientras estaba desconectada no se pierde. Se reconecta sola con esperas crecientes (1, 2, 4… hasta 30 s). El servidor manda un ping cada 30 s para detectar conexiones muertas.
 
-**Paso por el api-gateway.** `httputil.ReverseProxy` ya reenvía conexiones con `Upgrade`. La ruta `/pedidos/tiempo-real` queda afuera del corte de 3 s. Sigue pasando por el balanceo; con varias instancias, cada conexión queda en una instancia, y eso alcanza porque cada instancia recibe todos los eventos.
+**Paso por el api-gateway.** `httputil.ReverseProxy` ya reenvía conexiones con `Upgrade`. La ruta `/pedidos/tiempo-real` queda afuera del corte de 3 s.
 
 **Paso por el servidor del frontend.** `servidor.ts` acepta el WebSocket del navegador en `/api/pedidos/tiempo-real` y abre otro hacia el gateway, copiando los mensajes en los dos sentidos. Así el navegador sigue hablando con un solo origen (ADR-001). En desarrollo, el proxy de Vite lo hace con `ws: true`.
 
@@ -66,15 +64,16 @@ Más adelante, el mapa del delivery sería otro tipo (por ejemplo, `{ "tipo": "u
 - **Un ticket de un solo uso.** Primero `POST` con `Authorization` devuelve un ticket que vale 30 s, y el WebSocket se abre con él. Lo que quede en un log ya no sirve, pero suma una ruta y guardar los tickets.
 - **En el primer mensaje.** El gateway no lo podría verificar, y `pedidos` tendría que verificar el JWT por su cuenta, fuera del gateway (ADR-016).
 
-**Cómo llegan los cambios (propuesta):**
+**Cómo llegan los cambios:**
 
-- **Avisar desde la aplicación al guardar, sin pasar por RabbitMQ.** Es más rápido, pero con varias instancias el cambio guardado en una no llega a los compradores conectados a otra.
+- **Que `pedidos` consuma sus propios eventos desde RabbitMQ**, con una cola exclusiva. Son los mismos eventos que usan los mails, pero llegan con la demora de la bandeja de salida (alrededor de 1 s) y sin RabbitMQ no hay tiempo real. Con una sola instancia no aporta nada sobre avisar al guardar.
 - **Que la pantalla consulte cada pocos segundos (*polling*).** Sin WebSocket, pero no cumple B2, que pide WebSocket, y no sirve para el mapa.
 
 ## Consecuencias
 
-- `pedidos` suma una dependencia (`coder/websocket`), un adaptador de entrada y un consumidor de RabbitMQ para sus propios eventos.
-- Si RabbitMQ está caído, el WebSocket no recibe cambios. La pantalla sigue mostrando el estado que trae por HTTP al conectarse, y los cambios llegan cuando vuelve el broker (los eventos esperan en la bandeja de salida).
+- `pedidos` suma una dependencia (`coder/websocket`), un adaptador de entrada y el puerto `AvisosEnVivo`, que la aplicación llama después de cada guardado con evento.
+- El tiempo real no depende de RabbitMQ: con el broker caído, el comprador igual ve los cambios en vivo, y los mails salen cuando vuelve.
+- Los compradores conectados viven en la memoria de `pedidos`: un reinicio corta las conexiones, y la pantalla se reconecta sola y vuelve a pedir el estado por HTTP.
 - El token queda en la URL: hay que cuidar que no aparezca en logs ni trazas del gateway, de `pedidos` ni del servidor del frontend. Si un token se filtrara, vale hasta su vencimiento (1 h, ADR-016).
 - El gateway y el servidor del frontend necesitan un caso especial para esta ruta: sin el corte de 3 s y con el puente de WebSocket.
 - Con el formato con `tipo`, sumar el mapa del delivery no cambia el protocolo. El estado `en_camino` (entre `listo` y `entregado`, opcional, lo provoca el vendedor) se agrega aparte, decidido por María el 02/11/2026: es el momento en que tendría sentido mandar la ubicación.

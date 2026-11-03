@@ -22,9 +22,9 @@ const (
 	// busca cupo para un pedido inmediato.
 	diasDeBusqueda = 30
 
-	// tiempoApartado es cuánto queda reservado un pedido o un evento para la
-	// instancia que lo tomó. Si se cae a mitad de camino, pasado este tiempo otra
-	// lo vuelve a tomar.
+	// tiempoApartado es cuánto queda reservado un pedido para quien lo tomó (una
+	// solicitud o el proceso en segundo plano), así no lo procesan los dos a la vez.
+	// Si el servicio se cae a mitad de camino, pasado este tiempo se vuelve a tomar.
 	tiempoApartado = 2 * time.Minute
 
 	// tiempoApartadoEvento es lo mismo para un evento de la bandeja de salida. Es
@@ -403,8 +403,8 @@ func (servicio *Servicio) liberar(contexto context.Context, pedido *dominio.Pedi
 // PublicarEventos manda al broker los eventos de la bandeja de salida, del más
 // viejo al más nuevo, y devuelve cuántos publicó. Si el broker no responde, corta:
 // los eventos esperan guardados hasta que vuelva (ADR-011). El que falló se
-// devuelve a la bandeja para que siga primero; con una sola instancia, los
-// eventos salen en orden (ADR-015).
+// devuelve a la bandeja para que siga primero, así los eventos salen en orden
+// (ADR-015).
 func (servicio *Servicio) PublicarEventos(contexto context.Context) (int, error) {
 	publicados := 0
 	for {

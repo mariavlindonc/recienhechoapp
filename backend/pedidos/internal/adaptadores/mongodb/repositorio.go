@@ -277,8 +277,8 @@ func (repositorio *Repositorio) listar(contexto context.Context, filtro, orden b
 }
 
 // TomarParaConfirmar aparta un pedido pendiente en una sola operación atómica:
-// si dos instancias lo piden al mismo tiempo, solo una lo obtiene. Sube la
-// versión, así un proceso que lo tenía leído de antes no lo pisa.
+// si el proceso en segundo plano y una solicitud lo piden al mismo tiempo, solo
+// uno lo obtiene. Sube la versión, así quien lo tenía leído de antes no lo pisa.
 func (repositorio *Repositorio) TomarParaConfirmar(contexto context.Context, ahora, hasta time.Time) (dominio.Pedido, bool, error) {
 	return repositorio.tomar(contexto, bson.D{
 		{Key: "estado", Value: string(dominio.EstadoPendienteConfirmacion)},
