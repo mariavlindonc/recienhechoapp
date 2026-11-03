@@ -93,6 +93,11 @@ func (servicio *Servicio) ResponderEspecial(contexto context.Context, idComprado
 	if errRespuesta != nil && !errors.Is(errRespuesta, dominio.ErrCotizacionVencida) {
 		return dominio.Pedido{}, errRespuesta
 	}
+	if pedido.Estado == dominio.EstadoPendienteConfirmacion {
+		// Como en Crear: hasta que termine la confirmación de acá abajo, el proceso
+		// en segundo plano no lo toma, así no se piden los insumos dos veces.
+		pedido.ProximaConfirmacion = ahora.Add(tiempoApartado)
+	}
 	evento := dominio.NuevoEventoEstadoCambiado(servicio.nuevoID(), pedido, anterior, ahora)
 	cambio := puertos.Cambio{Pedido: pedido, VersionAnterior: versionLeida, Evento: &evento, ReservarCupo: pedido.Estado == dominio.EstadoPendienteConfirmacion}
 	if err := servicio.guardar(contexto, &pedido, cambio); err != nil {

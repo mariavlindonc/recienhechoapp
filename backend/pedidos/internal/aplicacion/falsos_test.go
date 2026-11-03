@@ -265,22 +265,27 @@ type inventarioFalso struct {
 	reservas    int
 	liberados   []string
 	fallarLiber error
-	// alReservar, si no es nil, corre en cada reserva: sirve para que algo falle
-	// justo después de hablar con el inventario.
+	// alReservar, si no es nil, corre una sola vez, en la próxima reserva: sirve
+	// para que algo pase justo mientras se habla con el inventario (que falle la
+	// base, o que el proceso en segundo plano corra al mismo tiempo).
 	alReservar func()
 }
 
 func (inventario *inventarioFalso) Reservar(_ context.Context, idPedido string, _ []dominio.Insumo) (puertos.ResultadoReserva, error) {
 	inventario.mutex.Lock()
-	defer inventario.mutex.Unlock()
 	inventario.reservas++
-	if inventario.alReservar != nil {
-		inventario.alReservar()
+	gancho := inventario.alReservar
+	inventario.alReservar = nil
+	fallar, resultado := inventario.fallar, inventario.resultado
+	inventario.mutex.Unlock()
+	// Sin el mutex tomado: el gancho puede volver a llamar al inventario.
+	if gancho != nil {
+		gancho()
 	}
-	if inventario.fallar != nil {
-		return "", inventario.fallar
+	if fallar != nil {
+		return "", fallar
 	}
-	return inventario.resultado, nil
+	return resultado, nil
 }
 
 func (inventario *inventarioFalso) Liberar(_ context.Context, idPedido string) error {
