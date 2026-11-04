@@ -56,7 +56,7 @@ type Repositorio interface {
 	ListarEspecialesAbiertos(contexto context.Context) ([]dominio.Pedido, error)
 
 	// TomarParaConfirmar aparta hasta `hasta` un pedido pendiente de confirmación
-	// cuya próxima confirmación ya llegó, para que otra instancia no lo tome.
+	// cuya próxima confirmación ya llegó, para que nadie más lo procese mientras tanto.
 	TomarParaConfirmar(contexto context.Context, ahora, hasta time.Time) (pedido dominio.Pedido, encontrado bool, err error)
 
 	// TomarParaLiberar aparta un pedido con insumos por liberar en el proveedor.

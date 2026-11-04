@@ -264,3 +264,24 @@ func TestSolicitarEspecialValidaEsIdempotente(prueba *testing.T) {
 		}
 	}
 }
+
+// Como al crear un pedido: mientras la aceptación confirma con el inventario, el
+// proceso en segundo plano no toma el mismo pedido. Si lo tomara, le pediría los
+// insumos al inventario dos veces.
+func TestAceptarUnEspecialLoApartaDelProcesoEnSegundoPlano(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, fechaEspecial, 5)
+	cotizado := actual.especialCotizado(prueba)
+	actual.inventario.alReservar = func() {
+		actual.servicio.ProcesarConfirmaciones(context.Background())
+	}
+
+	aceptado, err := actual.servicio.ResponderEspecial(context.Background(), comprador.ID, cotizado.ID, true)
+
+	if err != nil || aceptado.Estado != dominio.EstadoConfirmado {
+		prueba.Fatalf("estado %s, err %v", aceptado.Estado, err)
+	}
+	if actual.inventario.reservas != 1 {
+		prueba.Errorf("se le pidieron los insumos al inventario %d veces, se esperaba 1", actual.inventario.reservas)
+	}
+}
