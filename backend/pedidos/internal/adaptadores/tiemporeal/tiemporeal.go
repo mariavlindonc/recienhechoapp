@@ -20,7 +20,7 @@ import (
 const (
 	// largoDeCola es cuántos mensajes puede tener pendientes una conexión. Un estado
 	// cambia pocas veces: si se llena, el navegador no está leyendo.
-	largoDeCola = 16
+	largoDeCola = 32
 	// intervaloDePing es cada cuánto se comprueba que la conexión sigue viva (ADR-018).
 	intervaloDePing = 30 * time.Second
 	// esperaPorEscritura es lo máximo que se espera a un navegador en cada envío o ping.
