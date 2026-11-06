@@ -39,9 +39,11 @@ Vendedor pasa a producción
 
 **Todos los pedidos los confirma el vendedor**, también los especiales aceptados. Ya no se confirma ni se cancela nada automáticamente por el inventario. El vendedor ve los pedidos pendientes de confirmar, con una **nota en los que tienen insumos faltantes** (por ejemplo, "Faltan 200 g de harina"). Puede confirmarlos igual: decide él.
 
-### Stock y reservas en nuestra base
+### Stock y reservas en su propia base
 
-`pedidos` guarda en su base, por ingrediente y unidad, el stock conocido, lo reservado y el `productId` del proveedor.
+El stock vive en una base propia, `inventario`, separada de la base `pedidos`, en el mismo servidor MongoDB (`mongo-pedidos`). Guarda, por ingrediente y unidad, el stock conocido, lo reservado y el `productId` del proveedor. El servicio dueño sigue siendo `pedidos`, que es el único que la usa ([ADR-002](ADR-002-persistencia.md)).
+
+Estar en el mismo servidor importa: MongoDB permite una transacción entre dos bases del mismo replica set, así que el pedido, el cupo y la reserva se siguen guardando juntos ([ADR-015](ADR-015-consistencia-y-concurrencia.md)).
 
 - **Al encargar** se reservan los insumos de la receta, en la misma transacción que el cupo (R1). La reserva nunca rechaza un pedido: si no alcanza, queda negativo el disponible y aparece la nota.
 - **Disponible = stock conocido − reservado.**
@@ -105,6 +107,12 @@ El vendedor tiene una pantalla simple: elige un ingrediente y una cantidad, y es
 
 ## Alternativas consideradas
 
+**Dónde vive el stock:**
+
+- **En la base `pedidos`.** Lo más simple, pero mezcla el stock con los pedidos.
+- **En un MongoDB propio, en otro contenedor.** Separación total, pero no hay transacción entre dos servidores: si se guarda el pedido y falla la reserva, quedan desparejos, y crear un pedido depende de una base más.
+- **En un servicio nuevo de inventario.** Los límites más prolijos, pero suma un servicio entero, y reservar pasa a ser una llamada que puede fallar.
+
 **Dónde viven las reservas:**
 
 - **En el proveedor.** Una sola fuente de verdad, pero el contrato no ofrece reservas.
@@ -133,6 +141,7 @@ El vendedor tiene una pantalla simple: elige un ingrediente y una cantidad, y es
 - `pendiente_confirmacion` pasa a significar "espera al vendedor". Un pedido puede quedar ahí hasta que el vendedor lo revise, y el comprador lo ve así.
 - El vendedor suma trabajo: confirmar cada pedido y cargar el stock. Hasta que lo cargue, todos los pedidos van a tener la nota de insumos faltantes.
 - Desaparecen la reconfirmación en segundo plano, la marca a las 24 h, la cancelación por falta de insumos y la liberación en el proveedor. Liberar insumos ya no llama a nadie, así que se resuelven los dos problemas de la revisión del #59 ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)).
+- La base `inventario` comparte servidor con la base `pedidos`: se cae con ella, y si algún día se separan, se pierde la transacción.
 - Nuestro stock puede diferir del de la base del proveedor si alguien la cambia por afuera: la comparación después de un timeout lo detecta y lo manda al vendedor.
 - Si `pedidos` pasara a tener varias instancias, habría que asegurar que el consumo siga yendo de a un pedido por vez.
-- Cambian R3 y R7 del SPEC, los criterios de aceptación de C4 y C5, [ADR-011](ADR-011-resiliencia.md), [ADR-015](ADR-015-consistencia-y-concurrencia.md) y [ADR-017](ADR-017-pedidos-especiales.md). Se actualizan al implementar.
+- Cambian R3 y R7 del SPEC, los criterios de aceptación de C4 y C5, [ADR-002](ADR-002-persistencia.md), [ADR-011](ADR-011-resiliencia.md), [ADR-015](ADR-015-consistencia-y-concurrencia.md), [ADR-017](ADR-017-pedidos-especiales.md) y la tabla de infraestructura de AGENTS.md. Se actualizan al implementar.
