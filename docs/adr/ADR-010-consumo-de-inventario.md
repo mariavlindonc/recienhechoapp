@@ -2,6 +2,8 @@
 
 ## Estado
 
+Reemplazado por [ADR-020](ADR-020-reserva-y-consumo-de-insumos.md) el 06/11/2026.
+
 Propuesto (Entrega 2). Todavía no tenemos el contrato del grupo proveedor: la parte que depende de él se completa cuando llegue.
 
 Las tres decisiones sobre los pedidos que el inventario no llega a confirmar las tomó el grupo (María, Athina y Agustín) el 22/10/2026 en [#23](https://github.com/mariavlindonc/recienhechoapp/issues/23).
