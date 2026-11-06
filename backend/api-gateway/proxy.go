@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -81,8 +82,13 @@ func (balanceador *proxyBalanceado) ServeHTTP(escritor http.ResponseWriter, pedi
 		responderNoDisponible(escritor)
 		return
 	}
-	contexto, cancelar := context.WithTimeoutCause(pedido.Context(), balanceador.tiempoMaximo, errTiempoAgotado)
-	defer cancelar()
+	contexto := pedido.Context()
+	// Un WebSocket dura minutos: el tiempo máximo es para las solicitudes (ADR-018).
+	if !esWebSocket(pedido) {
+		var cancelar context.CancelFunc
+		contexto, cancelar = context.WithTimeoutCause(contexto, balanceador.tiempoMaximo, errTiempoAgotado)
+		defer cancelar()
+	}
 	contexto = context.WithValue(contexto, claveInstancia{}, elegida)
 
 	conEstado := &escritorConEstado{ResponseWriter: escritor, estado: http.StatusOK}
@@ -90,6 +96,11 @@ func (balanceador *proxyBalanceado) ServeHTTP(escritor http.ResponseWriter, pedi
 	if balanceador.alTerminar != nil {
 		balanceador.alTerminar(balanceador.instancias[elegida].Host, conEstado.estado)
 	}
+}
+
+// esWebSocket dice si la solicitud abre el WebSocket de tiempo real.
+func esWebSocket(pedido *http.Request) bool {
+	return pedido.URL.Path == rutaTiempoReal && strings.EqualFold(pedido.Header.Get("Upgrade"), "websocket")
 }
 
 // escritorConEstado recuerda el código de estado de la respuesta para poder

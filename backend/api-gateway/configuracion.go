@@ -16,17 +16,17 @@ type configuracion struct {
 	instanciasPedidos        []*url.URL
 	instanciasProductos      []*url.URL
 	instanciasUsuarios       []*url.URL
-	// secretoJWT es el mismo con el que usuarios firma los tokens (ADR-016).
+	// secretoJWT es el mismo con el que usuarios firma los tokens (ADR-019).
 	secretoJWT []byte
 	// clavesAPI asocia cada clave de notificaciones con su grupo (clave -> grupo),
 	// para contar el límite por grupo (ADR-004).
 	clavesAPI       map[string]string
 	limitePorMinuto int
-	// intentosPorMinuto es el límite por IP del registro y el inicio de sesión (ADR-016).
+	// intentosPorMinuto es el límite por IP del registro y el inicio de sesión (ADR-019).
 	intentosPorMinuto int
 }
 
-// largoMinimoSecreto es el mínimo de JWT_SECRETO, igual que en usuarios (ADR-016).
+// largoMinimoSecreto es el mínimo de JWT_SECRETO, igual que en usuarios (ADR-019).
 const largoMinimoSecreto = 32
 
 // leerConfiguracion recibe la función que busca cada variable (os.Getenv en el

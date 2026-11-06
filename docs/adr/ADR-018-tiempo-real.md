@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado por el equipo (María, Athina y Agustín) el 02/11/2026 (#75). Revisado el 03/11/2026 (decidido por María): como `pedidos` corre con una sola instancia, los cambios llegan al WebSocket desde la aplicación al guardar, en vez de una cola de RabbitMQ.
+Aceptado por el equipo (María, Athina y Agustín) el 02/11/2026 (#75). Revisado el 03/11/2026 (decidido por María): como `pedidos` corre con una sola instancia, los cambios llegan al WebSocket desde la aplicación al guardar, en vez de una cola de RabbitMQ. Revisado el 06/11/2026 (decidido por María): el token ya no viaja en la URL; el WebSocket se autentica con la cookie de sesión ([ADR-019](ADR-019-sesion-en-cookie.md)).
 
 ## Contexto
 
@@ -14,19 +14,19 @@ Lo que ya existe y condiciona el diseño:
 
 - `pedidos` publica `pedido.estado_cambiado` en el exchange `pedidos` de RabbitMQ desde la bandeja de salida (ADR-015), solo después de guardar el cambio.
 - El api-gateway corta cada solicitud a los 3 s (`context.WithTimeout` en `proxy.go`, ADR-003). Una conexión WebSocket dura minutos.
-- La API de WebSocket del navegador no permite agregar headers: el JWT no puede ir en `Authorization` como en el resto de las solicitudes (ADR-016).
+- La API de WebSocket del navegador no permite agregar headers, pero sí manda las cookies del sitio al abrir la conexión ([ADR-019](ADR-019-sesion-en-cookie.md)).
 - El servidor del frontend (`frontend/servidor.ts`) reenvía `/api` con `fetch`, que no sirve para WebSocket.
 - `pedidos` corre con una sola instancia: los cambios de los pedidos y los compradores conectados están en el mismo proceso.
 
 ## Decisión
 
-**El WebSocket vive en `pedidos`**, que es el dueño de los pedidos y de sus eventos. Para la arquitectura hexagonal (ADR-007) es un adaptador de entrada más, `internal/adaptadores/tiempo_real`, al lado de la API HTTP.
+**El WebSocket vive en `pedidos`**, que es el dueño de los pedidos y de sus eventos. Para la arquitectura hexagonal (ADR-007) es un adaptador de entrada más, `internal/adaptadores/tiemporeal`, al lado de la API HTTP.
 
 **Librería: `github.com/coder/websocket` v1.8.15** (publicada el 15/06/2026). Trabaja con `context`, como el resto del servicio, así los timeouts y el apagado ordenado se manejan igual que en HTTP.
 
 **Ruta:** `GET /pedidos/tiempo-real`, con `Upgrade: websocket`. Solo para compradores: el vendedor recibe `403`.
 
-**Autenticación: el token va en la URL** (`/api/pedidos/tiempo-real?token=<jwt>`). El api-gateway lo lee de la query **solo en esa ruta**, lo verifica como siempre (HS256, `exp` obligatorio) y arma `X-Id-Usuario`, `X-Email-Usuario` y `X-Rol-Usuario`. `pedidos` no verifica el JWT. Como las URLs suelen quedar registradas, el token no puede aparecer en ningún log ni traza: el gateway registra la ruta sin la query (ya lo hace, con `FullPath`), y la ruta queda afuera de las trazas o con la query borrada, porque OpenTelemetry guarda la URL completa.
+**Autenticación: la cookie de sesión** ([ADR-019](ADR-019-sesion-en-cookie.md)). El navegador la manda sola al abrir el WebSocket. El api-gateway la verifica como en cualquier solicitud, arma `X-Id-Usuario`, `X-Email-Usuario` y `X-Rol-Usuario`, y la saca antes de reenviar. `pedidos` no ve el token. La ruta queda afuera de las trazas, porque una conexión que dura minutos no dice nada como traza.
 
 **Cómo llegan los cambios al WebSocket: al guardar.** Cuando la aplicación guarda un cambio que trae evento (el mismo `pedido.estado_cambiado` que va a la bandeja de salida), y recién cuando el guardado salió bien, se lo pasa a un puerto nuevo, `AvisosEnVivo`. El adaptador WebSocket lo cumple y se lo manda a los compradores conectados cuyo `X-Id-Usuario` coincide con el `idComprador` del evento. Así lo que llega por el WebSocket ya está en la base, llega al instante y no depende de RabbitMQ. Los mails siguen saliendo por la bandeja de salida, como siempre.
 
@@ -42,7 +42,7 @@ Más adelante, el mapa del delivery sería otro tipo (por ejemplo, `{ "tipo": "u
 
 **Paso por el api-gateway.** `httputil.ReverseProxy` ya reenvía conexiones con `Upgrade`. La ruta `/pedidos/tiempo-real` queda afuera del corte de 3 s.
 
-**Paso por el servidor del frontend.** `servidor.ts` acepta el WebSocket del navegador en `/api/pedidos/tiempo-real` y abre otro hacia el gateway, copiando los mensajes en los dos sentidos. Así el navegador sigue hablando con un solo origen (ADR-001). En desarrollo, el proxy de Vite lo hace con `ws: true`.
+**Paso por el servidor del frontend.** `servidor.ts` acepta el WebSocket del navegador en `/api/pedidos/tiempo-real`, rechaza un `Origin` de otro sitio y abre otro WebSocket hacia el gateway con la cookie, copiando los mensajes hacia el navegador. Así el navegador sigue hablando con un solo origen (ADR-001). En desarrollo, el proxy de Vite lo hace con `ws: true`.
 
 **Observabilidad (ADR-006):** la métrica `pedidos_conexiones_tiempo_real` (conexiones abiertas) y `pedidos_mensajes_tiempo_real_total` (mensajes enviados), y logs al conectar y desconectar, con el id del comprador y sin el token.
 
@@ -59,10 +59,7 @@ Más adelante, el mapa del delivery sería otro tipo (por ejemplo, `{ "tipo": "u
 - **`gorilla/websocket`.** La más conocida y con más ejemplos, pero sin `context`: los timeouts y el cierre se manejan a mano.
 - **`golang.org/x/net/websocket`.** Su propia documentación recomienda usar otra, porque le faltan funciones como el cierre ordenado.
 
-**Cómo viaja el token:**
-
-- **Un ticket de un solo uso.** Primero `POST` con `Authorization` devuelve un ticket que vale 30 s, y el WebSocket se abre con él. Lo que quede en un log ya no sirve, pero suma una ruta y guardar los tickets.
-- **En el primer mensaje.** El gateway no lo podría verificar, y `pedidos` tendría que verificar el JWT por su cuenta, fuera del gateway (ADR-016).
+**Cómo se autentica:** las alternativas están en [ADR-019](ADR-019-sesion-en-cookie.md).
 
 **Cómo llegan los cambios:**
 
@@ -74,7 +71,18 @@ Más adelante, el mapa del delivery sería otro tipo (por ejemplo, `{ "tipo": "u
 - `pedidos` suma una dependencia (`coder/websocket`), un adaptador de entrada y el puerto `AvisosEnVivo`, que la aplicación llama después de cada guardado con evento.
 - El tiempo real no depende de RabbitMQ: con el broker caído, el comprador igual ve los cambios en vivo, y los mails salen cuando vuelve.
 - Los compradores conectados viven en la memoria de `pedidos`: un reinicio corta las conexiones, y la pantalla se reconecta sola y vuelve a pedir el estado por HTTP.
-- El token queda en la URL: hay que cuidar que no aparezca en logs ni trazas del gateway, de `pedidos` ni del servidor del frontend. Si un token se filtrara, vale hasta su vencimiento (1 h, ADR-016).
 - El gateway y el servidor del frontend necesitan un caso especial para esta ruta: sin el corte de 3 s y con el puente de WebSocket.
 - Con el formato con `tipo`, sumar el mapa del delivery no cambia el protocolo. El estado `en_camino` (entre `listo` y `entregado`, opcional, lo provoca el vendedor) se agrega aparte, decidido por María el 02/11/2026: es el momento en que tendría sentido mandar la ubicación.
 - Para los tests: el adaptador se prueba con un servidor de prueba y un cliente de `coder/websocket`, y el filtro por comprador, con eventos de dos compradores distintos.
+
+## Validación (implementación, 06/11/2026)
+
+Medido en el navegador con la app completa en Docker (#75):
+
+- **Sin recargar:** con Mis pedidos abierta, cuando el vendedor pasa un pedido a `listo`, la pantalla lo muestra en unos 50 ms.
+- **Solo sus pedidos:** un comprador conectado no recibió ningún mensaje del pedido de otro comprador.
+- **Reconexión:** con la conexión cortada se cambió el estado del pedido; al volver, la pantalla se reconectó sola en menos de 1 s y mostró el estado actual.
+- **Conexión larga:** después de 2,5 minutos sin actividad, la conexión seguía abierta y el siguiente cambio llegó igual.
+- **Sin RabbitMQ:** con el broker detenido, el cambio llegó en vivo.
+- **Sesión:** el WebSocket se abre con la cookie, y el token no aparece en los logs del api-gateway, de `pedidos` ni del servidor del frontend.
+- **Desarrollo:** también funciona por el proxy de Vite, que no reenvía el `Origin`, porque `pedidos` rechaza un `Origin` distinto de su host.

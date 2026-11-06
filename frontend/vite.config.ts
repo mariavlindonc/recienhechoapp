@@ -10,6 +10,10 @@ export default defineConfig({
         target: process.env.API_GATEWAY_URL ?? 'http://localhost:8080',
         changeOrigin: true,
         rewrite: ruta => ruta.replace(/^\/api/, ''),
+        // El WebSocket del seguimiento en vivo (ADR-018). Sin Origin, porque pedidos rechaza uno
+        // distinto de su host. Es solo para desarrollo: en producción lo controla servidor.ts.
+        ws: true,
+        configure: proxy => proxy.on('proxyReqWs', solicitud => solicitud.removeHeader('origin')),
       },
     },
   },

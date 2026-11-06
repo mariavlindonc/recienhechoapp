@@ -49,6 +49,7 @@ type Servicio struct {
 	catalogo    puertos.Catalogo
 	inventario  puertos.ReservadorDeInsumos
 	eventos     puertos.Eventos
+	avisos      puertos.AvisosEnVivo
 	ahora       func() time.Time
 	nuevoID     func() string
 }
@@ -62,6 +63,7 @@ type Dependencias struct {
 	Catalogo    puertos.Catalogo
 	Inventario  puertos.ReservadorDeInsumos
 	Eventos     puertos.Eventos
+	Avisos      puertos.AvisosEnVivo
 	Ahora       func() time.Time
 	NuevoID     func() string
 }
@@ -75,6 +77,7 @@ func NuevoServicio(dependencias Dependencias) *Servicio {
 		catalogo:    dependencias.Catalogo,
 		inventario:  dependencias.Inventario,
 		eventos:     dependencias.Eventos,
+		avisos:      dependencias.Avisos,
 		ahora:       dependencias.Ahora,
 		nuevoID:     dependencias.NuevoID,
 	}
@@ -186,6 +189,7 @@ func (servicio *Servicio) registrar(contexto context.Context, comprador dominio.
 			return dominio.Pedido{}, err
 		}
 		servicio.eventos.PedidoRegistrado(contexto, "aceptado")
+		servicio.avisos.Avisar(evento)
 		return pedido, nil
 	}
 	servicio.eventos.PedidoRegistrado(contexto, "sin_cupo")
@@ -244,6 +248,9 @@ func (servicio *Servicio) guardar(contexto context.Context, pedido *dominio.Pedi
 		return fmt.Errorf("guardar pedido %s: %w", pedido.ID, err)
 	}
 	pedido.Version = cambio.VersionAnterior + 1
+	if cambio.Evento != nil {
+		servicio.avisos.Avisar(*cambio.Evento)
+	}
 	return nil
 }
 

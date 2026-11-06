@@ -30,7 +30,7 @@ const (
 )
 
 // Headers con la identidad del usuario. Los pone el api-gateway a partir del
-// token y descarta los que mande el cliente (ADR-016).
+// token y descarta los que mande el cliente (ADR-019).
 const (
 	headerIDUsuario  = "X-Id-Usuario"
 	headerRolUsuario = "X-Rol-Usuario"

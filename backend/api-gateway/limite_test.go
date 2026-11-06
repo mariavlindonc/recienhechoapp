@@ -54,7 +54,7 @@ func TestLimitePorGrupo(prueba *testing.T) {
 }
 
 // El inicio de sesión y el registro tienen un límite por IP: frena a quien prueba
-// contraseñas y protege la CPU, que bcrypt usa en cada intento (ADR-016).
+// contraseñas y protege la CPU, que bcrypt usa en cada intento (ADR-019).
 func TestLimiteDeIntentosPorIP(prueba *testing.T) {
 	reloj := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
 	limite := nuevoLimitador(2, time.Minute, func() time.Time { return reloj })
