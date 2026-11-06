@@ -74,7 +74,7 @@ func ejecutar() error {
 	proxyUsuarios := limitarIntentos(limiteIntentos, nuevoProxyBalanceado("usuarios", configuracion.instanciasUsuarios, tiempoMaximoServicios, medidor.contarReenvio("usuarios")))
 	servidor := &http.Server{
 		Addr:              ":" + configuracion.puerto,
-		Handler:           nuevoRouter(configuracion.secretoJWT, proxyNotificaciones, proxyPedidos, proxyProductos, proxyUsuarios, medidor.medirSolicitudes()),
+		Handler:           nuevoRouter(configuracion.secretoJWT, proxyNotificaciones, proxyPedidos, proxyProductos, proxyUsuarios, medidor.medirSolicitudes(), leerIPDelNavegador(configuracion.claveFrontend)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

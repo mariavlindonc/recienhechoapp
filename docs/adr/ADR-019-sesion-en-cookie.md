@@ -67,7 +67,7 @@ Set-Cookie: sesion=<token>; Path=/; HttpOnly; Secure; SameSite=Strict
 
 Ninguna respuesta incluye la contraseña ni su hash. Un email inexistente y una contraseña incorrecta responden igual y tardan lo mismo (se compara contra un hash de relleno), para no delatar qué emails tienen cuenta. El email se guarda en minúsculas y es único en MySQL.
 
-**Límite de intentos.** El api-gateway deja pasar hasta `USUARIOS_INTENTOS_POR_MINUTO` (10 por defecto) `POST /usuarios` y `POST /usuarios/sesion` por minuto desde cada IP, y después responde `429 demasiados_intentos` con `Retry-After`. La IP es la de la conexión, no la de `X-Forwarded-For`, que cualquiera puede inventar; detrás de un proxy todos comparten su IP (ver la deuda técnica en [ARCHITECTURE](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
+**Límite de intentos.** El api-gateway deja pasar hasta `USUARIOS_INTENTOS_POR_MINUTO` (10 por defecto) `POST /usuarios` y `POST /usuarios/sesion` por minuto desde cada IP, y después responde `429 demasiados_intentos` con `Retry-After`. Los navegadores entran por el servidor del frontend, así que `servidor.ts` le informa al gateway la IP real en `X-IP-Navegador`, y pisa lo que haya mandado el cliente. Como el gateway publica su puerto, le cree solo si viene `X-Clave-Frontend` con la clave compartida (`CLAVE_FRONTEND`); si no, cuenta la IP de la conexión. No se usa `X-Forwarded-For`, que cualquiera puede inventar. El gateway saca esos dos headers antes de reenviar (ver las limitaciones en [ARCHITECTURE](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
 
 ## Alternativas consideradas
 

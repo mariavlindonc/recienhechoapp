@@ -4,6 +4,8 @@ const puerto = Number(process.env.PORT)
 if (!Number.isInteger(puerto) || puerto <= 0) problemas.push('PORT debe ser un número de puerto')
 const destinoApi = process.env.API_GATEWAY_URL
 if (!destinoApi) problemas.push('API_GATEWAY_URL es obligatoria')
+const claveFrontend = process.env.CLAVE_FRONTEND
+if (!claveFrontend) problemas.push('CLAVE_FRONTEND es obligatoria')
 if (problemas.length > 0) {
   console.error(`configuración inválida:\n- ${problemas.join('\n- ')}`)
   process.exit(1)
@@ -32,7 +34,14 @@ const servidor = Bun.serve<Puente>({
     }
     if (url.pathname.startsWith('/api/')) {
       const destino = new URL(url.pathname.replace(/^\/api/, '') + url.search, destinoApi)
-      return fetch(destino, { method: pedido.method, headers: pedido.headers, body: pedido.body, redirect: 'manual' })
+      // Todo llega al gateway desde acá: le informamos la IP real del navegador para el límite
+      // de intentos (#95). Se pisa lo que mande el cliente, y la clave prueba que somos nosotros.
+      const headers = new Headers(pedido.headers)
+      headers.delete('X-IP-Navegador')
+      const ip = servidorActual.requestIP(pedido)?.address
+      if (ip) headers.set('X-IP-Navegador', ip)
+      headers.set('X-Clave-Frontend', claveFrontend!)
+      return fetch(destino, { method: pedido.method, headers, body: pedido.body, redirect: 'manual' })
     }
     const archivo = Bun.file(new URL(`.${url.pathname}`, carpetaCompilada))
     if (url.pathname !== '/' && (await archivo.exists())) return new Response(archivo)
