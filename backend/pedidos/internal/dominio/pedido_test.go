@@ -291,3 +291,26 @@ func TestEventoLlevaLoNecesarioParaAvisar(prueba *testing.T) {
 		prueba.Errorf("datos = %+v", datos)
 	}
 }
+
+// Los mismos ítems en otro orden son el mismo pedido: un reintento no puede dar
+// conflicto de idempotencia por eso (#93).
+func TestLaHuellaNoDependeDelOrdenDeLosItems(prueba *testing.T) {
+	item := func(id string, cantidad int) dominio.ItemSolicitado {
+		return dominio.ItemSolicitado{ProductoID: id, Cantidad: cantidad}
+	}
+	solicitud := dominio.Solicitud{Tipo: dominio.TipoProgramado, Fecha: "2026-11-10", Franja: "mañana", Items: []dominio.ItemSolicitado{item("a", 1), item("b", 2)}}
+	invertida := solicitud
+	invertida.Items = []dominio.ItemSolicitado{item("b", 2), item("a", 1)}
+	otraCantidad := solicitud
+	otraCantidad.Items = []dominio.ItemSolicitado{item("a", 2), item("b", 1)}
+
+	if solicitud.Huella() != invertida.Huella() {
+		prueba.Error("el mismo contenido en otro orden tiene que dar la misma huella")
+	}
+	if solicitud.Huella() == otraCantidad.Huella() {
+		prueba.Error("otro contenido tiene que dar otra huella")
+	}
+	if solicitud.Items[0].ProductoID != "a" || invertida.Items[0].ProductoID != "b" {
+		prueba.Error("calcular la huella no puede cambiar el orden de la solicitud")
+	}
+}
