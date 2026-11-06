@@ -20,7 +20,7 @@ Lo que ya existe y condiciona el diseño:
 
 ## Decisión
 
-**El WebSocket vive en `pedidos`**, que es el dueño de los pedidos y de sus eventos. Para la arquitectura hexagonal (ADR-007) es un adaptador de entrada más, `internal/adaptadores/tiempo_real`, al lado de la API HTTP.
+**El WebSocket vive en `pedidos`**, que es el dueño de los pedidos y de sus eventos. Para la arquitectura hexagonal (ADR-007) es un adaptador de entrada más, `internal/adaptadores/tiemporeal`, al lado de la API HTTP.
 
 **Librería: `github.com/coder/websocket` v1.8.15** (publicada el 15/06/2026). Trabaja con `context`, como el resto del servicio, así los timeouts y el apagado ordenado se manejan igual que en HTTP.
 
@@ -78,3 +78,15 @@ Más adelante, el mapa del delivery sería otro tipo (por ejemplo, `{ "tipo": "u
 - El gateway y el servidor del frontend necesitan un caso especial para esta ruta: sin el corte de 3 s y con el puente de WebSocket.
 - Con el formato con `tipo`, sumar el mapa del delivery no cambia el protocolo. El estado `en_camino` (entre `listo` y `entregado`, opcional, lo provoca el vendedor) se agrega aparte, decidido por María el 02/11/2026: es el momento en que tendría sentido mandar la ubicación.
 - Para los tests: el adaptador se prueba con un servidor de prueba y un cliente de `coder/websocket`, y el filtro por comprador, con eventos de dos compradores distintos.
+
+## Validación (implementación, 06/11/2026)
+
+Medido en el navegador con la app completa en Docker (#75):
+
+- **Sin recargar:** con Mis pedidos abierta, cuando el vendedor pasa un pedido a `listo`, la pantalla lo muestra en unos 50 ms.
+- **Solo sus pedidos:** un comprador conectado no recibió ningún mensaje del pedido de otro comprador.
+- **Reconexión:** con la conexión cortada se cambió el estado del pedido; al volver, la pantalla se reconectó sola en menos de 1 s y mostró el estado actual.
+- **Conexión larga:** después de 2,5 minutos sin actividad, la conexión seguía abierta y el siguiente cambio llegó igual.
+- **Sin RabbitMQ:** con el broker detenido, el cambio llegó en vivo.
+- **Token:** no aparece en los logs del api-gateway, de `pedidos` ni del servidor del frontend.
+- **Desarrollo:** también funciona por el proxy de Vite, que no reenvía el `Origin`, porque `pedidos` rechaza un `Origin` distinto de su host.

@@ -298,3 +298,46 @@ export async function responderCotizacion(id: string, acepta: boolean) {
   const accion = acepta ? 'aceptacion' : 'rechazo'
   return aPedido(await pedir<PedidoDeApi>(`/pedidos/especiales/${encodeURIComponent(id)}/${accion}`, { metodo: 'POST' }))
 }
+
+// Seguimiento en vivo (B2, ADR-018). El WebSocket solo avisa que algo cambió: la pantalla vuelve
+// a pedir sus pedidos por HTTP, también al conectarse, así no se pierde lo que pasó sin conexión.
+const ESPERA_INICIAL_MS = 1000
+const ESPERA_MAXIMA_MS = 30000
+
+export function esperaParaReconectar(intento: number) {
+  return Math.min(ESPERA_INICIAL_MS * 2 ** intento, ESPERA_MAXIMA_MS)
+}
+
+// Devuelve la función para dejar de seguir. Si se corta, se reconecta sola.
+export function seguirPedidos(alCambiar: () => void, espera = esperaParaReconectar) {
+  let socket: WebSocket | undefined
+  let reconexion: ReturnType<typeof setTimeout> | undefined
+  let intentos = 0
+  let terminado = false
+
+  const conectar = () => {
+    const sesion = leerSesion()
+    if (terminado || sesion?.usuario.rol !== 'comprador') return
+    // El navegador no deja mandar headers en un WebSocket: el token va en la URL (ADR-018).
+    const protocolo = location.protocol === 'https:' ? 'wss:' : 'ws:'
+    socket = new WebSocket(`${protocolo}//${location.host}/api/pedidos/tiempo-real?token=${encodeURIComponent(sesion.token)}`)
+    socket.onopen = () => {
+      intentos = 0
+      alCambiar()
+    }
+    socket.onmessage = evento => {
+      // Los tipos que no se conocen se ignoran: así se pueden sumar otros, como la ubicación.
+      if ((JSON.parse(evento.data) as { tipo?: string }).tipo === 'estado_cambiado') alCambiar()
+    }
+    socket.onclose = () => {
+      if (!terminado) reconexion = setTimeout(conectar, espera(intentos++))
+    }
+  }
+
+  conectar()
+  return () => {
+    terminado = true
+    clearTimeout(reconexion)
+    socket?.close()
+  }
+}

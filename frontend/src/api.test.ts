@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, ingresar, listarEspeciales, listarMisPedidos, rechazarEspecial, responderCotizacion, TRANSICIONES } from './api.ts'
+import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, esperaParaReconectar, ingresar, listarEspeciales, listarMisPedidos, rechazarEspecial, responderCotizacion, seguirPedidos, TRANSICIONES } from './api.ts'
 
 // sessionStorage no existe en bun test: alcanza con un mapa.
 const guardado = new Map<string, string>()
@@ -144,4 +144,89 @@ test('el comprador ve el mensaje del vendedor en sus pedidos', async () => {
 test('desde listo se puede mandar en camino o entregar directo', () => {
   expect(TRANSICIONES.listo).toEqual(['en_camino', 'entregado'])
   expect(TRANSICIONES.en_camino).toEqual(['entregado'])
+})
+
+// WebSocket falso: guarda las conexiones abiertas para que el test maneje cada una.
+class SocketFalso {
+  static abiertos: SocketFalso[] = []
+  onopen?: () => void
+  onmessage?: (evento: { data: string }) => void
+  onclose?: () => void
+  cerrado = false
+  constructor(readonly url: string) {
+    SocketFalso.abiertos.push(this)
+  }
+  close() {
+    this.cerrado = true
+    this.onclose?.()
+  }
+}
+
+async function conSesion() {
+  responder(200, { token: 'token/1', usuario: { id: 'u1', email: 'a@a.com', nombre: 'Ana', rol: 'comprador' } })
+  await ingresar('a@a.com', 'clave-segura')
+}
+
+function prepararSockets() {
+  SocketFalso.abiertos = []
+  globalThis.WebSocket = SocketFalso as unknown as typeof WebSocket
+  globalThis.location = { protocol: 'http:', host: 'localhost:5173' } as Location
+}
+
+test('B2: se conecta con el token, se pone al día y actualiza con cada cambio (ADR-018)', async () => {
+  await conSesion()
+  prepararSockets()
+  let actualizaciones = 0
+
+  const dejar = seguirPedidos(() => actualizaciones++, () => 0)
+  const socket = SocketFalso.abiertos[0]!
+  expect(socket.url).toBe('ws://localhost:5173/api/pedidos/tiempo-real?token=token%2F1')
+
+  socket.onopen!()
+  expect(actualizaciones).toBe(1)
+  socket.onmessage!({ data: JSON.stringify({ tipo: 'estado_cambiado', idPedido: 'pd1', estadoNuevo: 'listo' }) })
+  expect(actualizaciones).toBe(2)
+  // Los tipos nuevos, como la ubicación del delivery, se ignoran hasta que la pantalla los use.
+  socket.onmessage!({ data: JSON.stringify({ tipo: 'ubicacion', idPedido: 'pd1' }) })
+  expect(actualizaciones).toBe(2)
+  dejar()
+})
+
+test('B2: si se corta se reconecta sola y, al volver, se pone al día', async () => {
+  await conSesion()
+  prepararSockets()
+  let actualizaciones = 0
+
+  const dejar = seguirPedidos(() => actualizaciones++, () => 0)
+  SocketFalso.abiertos[0]!.onclose!()
+  await Bun.sleep(5)
+
+  expect(SocketFalso.abiertos).toHaveLength(2)
+  SocketFalso.abiertos[1]!.onopen!()
+  expect(actualizaciones).toBe(1)
+  dejar()
+})
+
+test('al salir de la pantalla se cierra y no se reconecta', async () => {
+  await conSesion()
+  prepararSockets()
+
+  const dejar = seguirPedidos(() => {}, () => 0)
+  dejar()
+  await Bun.sleep(5)
+
+  expect(SocketFalso.abiertos[0]!.cerrado).toBe(true)
+  expect(SocketFalso.abiertos).toHaveLength(1)
+})
+
+test('sin sesión de comprador no se conecta', () => {
+  prepararSockets()
+
+  seguirPedidos(() => {}, () => 0)()
+
+  expect(SocketFalso.abiertos).toHaveLength(0)
+})
+
+test('las esperas para reconectarse crecen hasta 30 s', () => {
+  expect([0, 1, 2, 3, 4, 5, 6, 20].map(esperaParaReconectar)).toEqual([1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000])
 })

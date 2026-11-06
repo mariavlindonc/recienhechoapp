@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router'
-import { cancelarPedido, listarEspeciales, listarMisPedidos, responderCotizacion } from '../api.ts'
+import { cancelarPedido, listarEspeciales, listarMisPedidos, responderCotizacion, seguirPedidos } from '../api.ts'
 import EstadoPedido from '../componentes/EstadoPedido.tsx'
 import PrecioQueSube from '../componentes/PrecioQueSube.tsx'
 import { formatearFecha, formatearPrecio } from '../formato.ts'
@@ -20,8 +20,10 @@ export default function MisPedidos() {
     listarMisPedidos().then(setPedidos)
     listarEspeciales().then(setEspeciales)
   }
+  // B2: la lista se actualiza sola cuando cambia un pedido, sin recargar la página.
   useEffect(() => {
     cargar()
+    return seguirPedidos(cargar)
   }, [])
 
   // C6 y R8: el comprador acepta o rechaza la cotización; si pasaron 48 h, se le avisa que venció.

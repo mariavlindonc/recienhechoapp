@@ -146,6 +146,7 @@ Montos siempre en centavos (`int64`). Detalle y limitaciones en [ADR-002](adr/AD
 
 - **Síncrona (HTTP/JSON):** frontend y otros grupos → api-gateway → servicios; `pedidos` → `productos` (precio y receta); `pedidos` → inventario del otro grupo. Con timeouts y reintentos solo en operaciones idempotentes.
 - **Asíncrona (RabbitMQ):** `pedidos` publica `pedido.estado_cambiado` cada vez que un pedido se crea o cambia de estado; `notificaciones` lo consume y avisa al comprador.
+- **Tiempo real (WebSocket):** con Mis pedidos abierta, el navegador mantiene una conexión con `pedidos` (`GET /pedidos/tiempo-real`), que pasa por el servidor del frontend y el api-gateway. Después de guardar un cambio, `pedidos` se lo avisa solo al dueño del pedido, y la pantalla vuelve a pedir sus pedidos por HTTP ([ADR-018](adr/ADR-018-tiempo-real.md)).
 
 Valores y reglas en [ADR-003](adr/ADR-003-comunicacion-entre-servicios.md).
 
