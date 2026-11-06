@@ -169,7 +169,7 @@ Decisiones en [ADR-006](adr/ADR-006-observabilidad.md) (D11).
 | Integración | Rol | Servicio responsable | Estado |
 |---|---|---|---|
 | Notificaciones | Publicamos | notificaciones (vía api-gateway) | Implementada en local (`localhost:8080`), con el mock del contrato para probar formatos. Falta publicarla en una URL pública ([docs/contracts](contracts/README.md), [ADR-004](adr/ADR-004-contrato-de-notificaciones.md)) |
-| Inventario | Consumimos | pedidos | Esperando la versión del contrato con reducir y aumentar stock (la 2.0.0 es solo de lectura). Mientras tanto, `pedidos` usa un inventario falso configurable (`INVENTARIO_MODO`) detrás del disyuntor ([ADR-010](adr/ADR-010-consumo-de-inventario.md)) |
+| Inventario | Consumimos | pedidos | Contrato 2.1.0, con reducir y aumentar stock; falta definir el modelo de consumo ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)). Mientras tanto, `pedidos` usa un inventario falso configurable (`INVENTARIO_MODO`) detrás del disyuntor ([ADR-010](adr/ADR-010-consumo-de-inventario.md)) |
 
 ## Limitaciones conocidas y deuda técnica
 
