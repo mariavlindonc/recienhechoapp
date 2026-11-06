@@ -4,7 +4,7 @@
 
 Propuesto el 28/10/2026. Implementado como dice la Decisión, en `develop` (PR #64).
 
-Revisión del 02/11/2026 (revisión del #64, decidido por María): el comprador puede cancelar un especial `solicitado`, y el vendedor puede rechazarlo sin cotizarlo, con un mensaje que le llega al comprador por mail; una cotización vence también si ya pasó la fecha del pedido, y no se cotiza una fecha que ya pasó.
+Revisión del 02/11/2026 (revisión del #64): el comprador puede cancelar un especial `solicitado`, y el vendedor puede rechazarlo sin cotizarlo, con un mensaje que le llega al comprador por mail; una cotización vence también si ya pasó la fecha del pedido, y no se cotiza una fecha que ya pasó.
 
 ## Contexto
 

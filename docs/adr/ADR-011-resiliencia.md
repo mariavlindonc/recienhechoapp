@@ -3,10 +3,10 @@
 ## Estado
 
 - **Aceptado** para `api-gateway` y `notificaciones`, Entrega 2.
-- **Aceptado** para `productos` con el plan que aprobó Agustín el 26/10/2026; implementado el mismo día.
+- **Aceptado** para `productos` con el plan aprobado el 26/10/2026; implementado el mismo día.
 - **Propuesto** para `pedidos`: se acepta al revisar su PR.
 
-Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementado en la issue #33: el adaptador `internal/adaptadores/disyuntor` envuelve al remitente SMTP. Con el circuito abierto devuelve `ErrCorreoNoDisponible`, y la aplicación posterga la notificación sin gastar un intento. El disyuntor vive del lado de los adaptadores, como el de `pedidos` en ADR-010, porque la aplicación no importa tecnologías ([ADR-007](ADR-007-arquitectura-interna.md)). Falta la métrica y la alerta del estado del circuito (parte de Athina en la #33).
+Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementado en la issue #33: el adaptador `internal/adaptadores/disyuntor` envuelve al remitente SMTP. Con el circuito abierto devuelve `ErrCorreoNoDisponible`, y la aplicación posterga la notificación sin gastar un intento. El disyuntor vive del lado de los adaptadores, como el de `pedidos` en ADR-010, porque la aplicación no importa tecnologías ([ADR-007](ADR-007-arquitectura-interna.md)). Falta la métrica y la alerta del estado del circuito (#33).
 
 Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB y envío en segundo plano con reintentos. El api-gateway ya tiene el proxy con timeout de 3 s, `503 no_disponible` y el límite de uso. Falta el balanceo con chequeos de `/vivo` ([ADR-012](ADR-012-balanceo-de-carga.md)).
 

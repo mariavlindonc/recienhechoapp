@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto (Entrega 2: plan de medición y límites esperados). Los tests de carga se corrieron el 29/10/2026 con la Decisión tal como está escrita; los resultados están en [Resultados](#resultados). La demo se despliega en un servidor propio con Cloudflare Tunnel: Agustín lo consultó con la cátedra, que lo aprobó, el 29/10/2026.
+Propuesto (Entrega 2: plan de medición y límites esperados). Los tests de carga se corrieron el 29/10/2026 con la Decisión tal como está escrita; los resultados están en [Resultados](#resultados). La demo se despliega en un servidor propio con Cloudflare Tunnel: se consultó con la cátedra, que lo aprobó, el 29/10/2026.
 
 ## Contexto
 
@@ -29,7 +29,7 @@ El enunciado pide tests de carga con resultados documentados y analizados, el pr
 
 En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de errores, CPU y memoria por contenedor, y en notificaciones cuántas quedan `pendiente` y cuánto tardan en enviarse.
 
-**Carga esperada del negocio** (definida por María y Athina, 30/10/2026, [#79](https://github.com/mariavlindonc/recienhechoapp/issues/79)):
+**Carga esperada del negocio** (30/10/2026, [#79](https://github.com/mariavlindonc/recienhechoapp/issues/79)):
 
 - **Carga real:** hasta **5 pedidos por día** en el pico del año. Es un emprendimiento real de una persona que cocina: el cuello de botella es la producción, no el sistema, y por eso existe el cupo diario del dominio.
 - **Techo hipotético:** **50 pedidos por segundo**, exagerado a propósito, solo para tener un margen de seguridad con el que comparar las mediciones. No es una carga que se espere.
@@ -96,7 +96,7 @@ Contra la carga real, el sistema sobra por muchos órdenes de magnitud. La arqui
 
 **Principal límite encontrado: las conexiones del api-gateway hacia los servicios.** Con 860 solicitudes por segundo a `pedidos`, el gateway respondió `503` a 6.908 solicitudes (4,5 % y 1,9 %). Todas fallaron con `dial tcp ...: connect: cannot assign requested address`: el contenedor del gateway se quedó sin puertos locales para abrir conexiones nuevas. El gateway usa el transporte HTTP por defecto de Go, que guarda solo 2 conexiones libres por servicio para reusarlas. Con 50 solicitudes a la vez, cada solicitud de más abre una conexión nueva y la cierra al terminar, y los puertos cerrados quedan unos segundos sin poder usarse (estado `TIME_WAIT`). Con notificaciones y catálogo, a 300 por segundo, no pasó. Se resolvería subiendo las conexiones libres que el gateway guarda por servicio (`MaxIdleConnsPerHost`).
 
-**Qué se hace con ese límite:** se acepta como deuda técnica, sin subir `MaxIdleConnsPerHost` (decidido por María y Athina, 30/10/2026, [#79](https://github.com/mariavlindonc/recienhechoapp/issues/79)). Aparece a ~860 solicitudes por segundo, unas 17 veces por encima del techo hipotético de 50 pedidos por segundo y muchísimo más que la carga real. La causa está entendida y la solución es conocida (subir las conexiones libres que el gateway guarda por servicio), así que se puede aplicar si la carga alguna vez se acerca.
+**Qué se hace con ese límite:** se acepta como deuda técnica, sin subir `MaxIdleConnsPerHost` (30/10/2026, [#79](https://github.com/mariavlindonc/recienhechoapp/issues/79)). Aparece a ~860 solicitudes por segundo, unas 17 veces por encima del techo hipotético de 50 pedidos por segundo y muchísimo más que la carga real. La causa está entendida y la solución es conocida (subir las conexiones libres que el gateway guarda por servicio), así que se puede aplicar si la carga alguna vez se acerca.
 
 **Otras observaciones:**
 

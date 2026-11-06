@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado por el equipo (María, Athina y Agustín) el 02/11/2026 (#75). Revisado el 03/11/2026 (decidido por María): como `pedidos` corre con una sola instancia, los cambios llegan al WebSocket desde la aplicación al guardar, en vez de una cola de RabbitMQ. Revisado el 06/11/2026 (decidido por María): el token ya no viaja en la URL; el WebSocket se autentica con la cookie de sesión ([ADR-019](ADR-019-sesion-en-cookie.md)).
+Aceptado el 02/11/2026 (#75). Revisado el 03/11/2026: como `pedidos` corre con una sola instancia, los cambios llegan al WebSocket desde la aplicación al guardar, en vez de una cola de RabbitMQ. Revisado el 06/11/2026: el token ya no viaja en la URL; el WebSocket se autentica con la cookie de sesión ([ADR-019](ADR-019-sesion-en-cookie.md)).
 
 ## Contexto
 
@@ -72,7 +72,7 @@ Más adelante, el mapa del delivery sería otro tipo (por ejemplo, `{ "tipo": "u
 - El tiempo real no depende de RabbitMQ: con el broker caído, el comprador igual ve los cambios en vivo, y los mails salen cuando vuelve.
 - Los compradores conectados viven en la memoria de `pedidos`: un reinicio corta las conexiones, y la pantalla se reconecta sola y vuelve a pedir el estado por HTTP.
 - El gateway y el servidor del frontend necesitan un caso especial para esta ruta: sin el corte de 3 s y con el puente de WebSocket.
-- Con el formato con `tipo`, sumar el mapa del delivery no cambia el protocolo. El estado `en_camino` (entre `listo` y `entregado`, opcional, lo provoca el vendedor) se agrega aparte, decidido por María el 02/11/2026: es el momento en que tendría sentido mandar la ubicación.
+- Con el formato con `tipo`, sumar el mapa del delivery no cambia el protocolo. El estado `en_camino` (entre `listo` y `entregado`, opcional, lo provoca el vendedor) se agrega aparte: es el momento en que tendría sentido mandar la ubicación.
 - Para los tests: el adaptador se prueba con un servidor de prueba y un cliente de `coder/websocket`, y el filtro por comprador, con eventos de dos compradores distintos.
 
 ## Validación (implementación, 06/11/2026)

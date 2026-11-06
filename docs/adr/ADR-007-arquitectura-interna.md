@@ -4,8 +4,8 @@
 
 - **Aceptado** para `notificaciones` (hexagonal) y `api-gateway`, Entrega 2.
 - **Aceptado** para `pedidos` (hexagonal), implementado el 26/10/2026.
-- **Aceptado** para `productos` (hexagonal) por Agustín el 26/10/2026, implementado el mismo día.
-- **Aceptado** para `usuarios` (capas) por Agustín el 28/10/2026.
+- **Aceptado** para `productos` (hexagonal) el 26/10/2026, implementado el mismo día.
+- **Aceptado** para `usuarios` (capas) el 28/10/2026.
 
 Implementación: `notificaciones`, `pedidos` y `productos` (26/10/2026) ya tienen esta estructura, y `usuarios` (capas) desde el 28/10/2026.
 
@@ -41,14 +41,14 @@ internal/adaptadores/   api (Gin), mongodb, mysql, smtp, rabbitmq, inventario, m
   - `Eventos` para logs y métricas.
 
   Cambiar de motor de búsqueda es cambiar el adaptador, como prevé [ADR-008](ADR-008-busqueda.md).
-- **Las entidades deciden sus cambios** (*tell, don't ask*; decisión de Agustín del 26/10/2026). La aplicación le ordena al objeto que haga algo, en vez de pedirle los datos y decidir afuera:
+- **Las entidades deciden sus cambios** (*tell, don't ask*; 26/10/2026). La aplicación le ordena al objeto que haga algo, en vez de pedirle los datos y decidir afuera:
   - `producto.ReemplazarReceta(...)` valida la receta;
   - `dominio.NuevaImagen(...)` decide si el archivo es una imagen aceptada;
   - los cambios de la bandeja resuelven solos qué guardar y qué borrar en el índice.
 
   Así la aplicación solo coordina: lee, ordena y guarda.
 - La dirección de las dependencias se verifica con `go list -deps`: `internal/dominio` y `internal/aplicacion` no pueden importar GORM, Redis, Meilisearch, Gin ni ningún adaptador.
-- **Logs y métricas también van por un puerto** (revisión del 22/10/2026, decisión de Athina a partir de la revisión del código). La aplicación no importa `slog` ni Prometheus: avisa hechos del negocio por el puerto `Eventos` (por ejemplo, `EnvioIntentado` con el id, el número de intento, el resultado y el error), y el adaptador `eventos` decide qué se cuenta en las métricas y qué se loguea, incluido tapar los emails. Así la regla es una sola: la aplicación habla con el exterior solo por puertos. Las alternativas eran dejar que la aplicación usara `slog` directo (es librería estándar) o pasarle un logger por parámetro; las dos dejaban dos criterios distintos para algo muy parecido.
+- **Logs y métricas también van por un puerto** (revisión del 22/10/2026, a partir de la revisión del código). La aplicación no importa `slog` ni Prometheus: avisa hechos del negocio por el puerto `Eventos` (por ejemplo, `EnvioIntentado` con el id, el número de intento, el resultado y el error), y el adaptador `eventos` decide qué se cuenta en las métricas y qué se loguea, incluido tapar los emails. Así la regla es una sola: la aplicación habla con el exterior solo por puertos. Las alternativas eran dejar que la aplicación usara `slog` directo (es librería estándar) o pasarle un logger por parámetro; las dos dejaban dos criterios distintos para algo muy parecido.
 - Los tests unitarios usan puertos falsos en memoria. Los adaptadores se prueban según lo que cuesta tener la dependencia real:
   - los de MongoDB, MySQL, Redis y Meilisearch, contra la base de verdad (`MONGO_URI_TEST`, `MYSQL_DSN_TEST`, `REDIS_URL_TEST`, `MEILI_URL_TEST`);
   - el de SMTP, contra un servidor falso en el mismo proceso;

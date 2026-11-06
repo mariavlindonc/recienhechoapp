@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado por María el 06/11/2026. Reemplaza a [ADR-016](ADR-016-autenticacion.md).
+Aceptado el 06/11/2026. Reemplaza a [ADR-016](ADR-016-autenticacion.md).
 
 ## Contexto
 

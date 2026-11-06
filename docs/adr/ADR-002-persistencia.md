@@ -4,8 +4,8 @@
 
 - **Aceptado** para `notificaciones` (MongoDB), Entrega 2.
 - **Aceptado** para `pedidos` (MongoDB, replica set por las transacciones de [ADR-015](ADR-015-consistencia-y-concurrencia.md)), implementado el 26/10/2026.
-- **Aceptado** para `usuarios` y `productos` (MySQL y Redis) por Agustín el 26/10/2026. `productos` está implementado; `usuarios`, desde el 28/10/2026.
-- **Aceptado** para `productos` por Agustín el 26/10/2026: acceso a MySQL con GORM, imágenes subidas a `productos`, baja lógica de productos y categorías en una tabla con ABM del vendedor.
+- **Aceptado** para `usuarios` y `productos` (MySQL y Redis) el 26/10/2026. `productos` está implementado; `usuarios`, desde el 28/10/2026.
+- **Aceptado** para `productos` el 26/10/2026: acceso a MySQL con GORM, imágenes subidas a `productos`, baja lógica de productos y categorías en una tabla con ABM del vendedor.
 
 ## Contexto
 

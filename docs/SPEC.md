@@ -120,7 +120,7 @@ Valores preliminares; se ajustan con los tests de carga.
 
 ## Desafíos adicionales (bonus)
 
-Anunciados en la Entrega 2, como pide el enunciado (sección 7: hasta dos desafíos). Decisión del grupo (María, Athina y Agustín, 22/10/2026). Para que cuenten, cada uno tiene que estar integrado al sistema, documentado, testeado y defendido.
+Anunciados en la Entrega 2, como pide el enunciado (sección 7: hasta dos desafíos). Elegidos el 22/10/2026. Para que cuenten, cada uno tiene que estar integrado al sistema, documentado, testeado y defendido.
 
 | Id | Desafío | Qué incluye |
 |---|---|---|
