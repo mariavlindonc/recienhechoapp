@@ -20,6 +20,8 @@ services:
       NOTIFICACIONES_LIMITE_POR_MINUTO: ${NOTIFICACIONES_LIMITE_POR_MINUTO}
       # Intentos de registro e inicio de sesión por minuto y por IP (ADR-019). Vacío, 10.
       USUARIOS_INTENTOS_POR_MINUTO: ${USUARIOS_INTENTOS_POR_MINUTO:-}
+      # Con esta clave le cree al frontend la IP del navegador (ADR-019).
+      CLAVE_FRONTEND: ${CLAVE_FRONTEND}
       # Destino de las trazas (ADR-006). Si Jaeger no está, el gateway funciona igual.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
@@ -35,6 +37,7 @@ services:
     environment:
       PORT: ${FRONTEND_PORT}
       API_GATEWAY_URL: http://api-gateway:${API_GATEWAY_PORT}
+      CLAVE_FRONTEND: ${CLAVE_FRONTEND}
     ports:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
     depends_on: [api-gateway]

@@ -8,7 +8,7 @@ import (
 func variablesValidas() map[string]string {
 	return map[string]string{
 		"NOTIFICACIONES_URLS": "http://notificaciones:8084", "PEDIDOS_URLS": "http://pedidos:8083", "PRODUCTOS_URLS": "http://productos:8082",
-		"USUARIOS_URLS": "http://usuarios:8081", "JWT_SECRETO": secretoDePrueba,
+		"USUARIOS_URLS": "http://usuarios:8081", "JWT_SECRETO": secretoDePrueba, "CLAVE_FRONTEND": "clave-del-frontend-de-prueba",
 		"NOTIFICACIONES_CLAVES_API": "grupo-a:clave-a1, grupo-a:clave-a2,grupo-b:clave-b",
 	}
 }
@@ -106,6 +106,16 @@ func TestLeerConfiguracionExigeLasDemasVariables(prueba *testing.T) {
 
 		if err == nil || !strings.Contains(err.Error(), variable) {
 			prueba.Errorf("se esperaba un error que mencione %s, dio: %v", variable, err)
+		}
+	}
+}
+
+func TestLeerConfiguracionExigeLaClaveDelFrontend(prueba *testing.T) {
+	for _, invalida := range []string{"", "corta"} {
+		variables := variablesValidas()
+		variables["CLAVE_FRONTEND"] = invalida
+		if _, err := leerConfiguracion(func(nombre string) string { return variables[nombre] }); err == nil || !strings.Contains(err.Error(), "CLAVE_FRONTEND") {
+			prueba.Errorf("CLAVE_FRONTEND=%q tenía que dar error: %v", invalida, err)
 		}
 	}
 }
