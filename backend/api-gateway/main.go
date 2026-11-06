@@ -151,7 +151,8 @@ func nuevoRouter(secretoJWT []byte, notificaciones, pedidos, productos, usuarios
 
 // sinChequeosDeSalud evita trazar los chequeos de salud: los consultan máquinas,
 // cada pocos segundos y siempre igual, así que no aportan información y tapan las
-// trazas útiles (ADR-006).
+// trazas útiles (ADR-006). Tampoco se traza el WebSocket: dura minutos y su URL lleva
+// el token, que no puede quedar guardado en Jaeger (ADR-018).
 func sinChequeosDeSalud(pedido *http.Request) bool {
-	return pedido.URL.Path != "/health"
+	return pedido.URL.Path != "/health" && pedido.URL.Path != rutaTiempoReal
 }

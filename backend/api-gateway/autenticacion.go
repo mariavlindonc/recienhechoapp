@@ -13,6 +13,9 @@ import (
 // quién hace la solicitud (ADR-016).
 var headersDeIdentidad = []string{"X-Id-Usuario", "X-Email-Usuario", "X-Rol-Usuario"}
 
+// rutaTiempoReal es el WebSocket con el que el comprador sigue sus pedidos (ADR-018).
+const rutaTiempoReal = "/pedidos/tiempo-real"
+
 // afirmaciones son los datos del token que firma usuarios.
 type afirmaciones struct {
 	Email string `json:"email"`
@@ -34,6 +37,14 @@ func autenticar(secreto []byte) gin.HandlerFunc {
 			contexto.Request.Header.Del(header)
 		}
 		autorizacion := contexto.GetHeader("Authorization")
+		if contexto.Request.URL.Path == rutaTiempoReal {
+			// El navegador no puede mandar headers al abrir un WebSocket: el token viene
+			// en la URL, solo en esta ruta, y no sigue viaje hacia pedidos (ADR-018).
+			if token := contexto.Request.URL.Query().Get("token"); token != "" && autorizacion == "" {
+				autorizacion = "Bearer " + token
+			}
+			contexto.Request.URL.RawQuery = ""
+		}
 		if autorizacion == "" {
 			contexto.Next()
 			return
