@@ -81,7 +81,7 @@ func limitarPorGrupo(limite *limitador, clavesAPI map[string]string, siguiente h
 
 // limitarIntentos aplica un límite por IP al registro y al inicio de sesión: frena
 // a quien prueba contraseñas y protege la CPU, porque cada intento usa bcrypt
-// (ADR-016). La IP es la de la conexión (RemoteAddr): X-Forwarded-For lo puede
+// (ADR-019). La IP es la de la conexión (RemoteAddr): X-Forwarded-For lo puede
 // inventar cualquiera. Detrás de un proxy (por ejemplo, el de Vite en desarrollo)
 // todos comparten la IP del proxy.
 func limitarIntentos(limite *limitador, siguiente http.Handler) http.Handler {

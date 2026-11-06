@@ -25,7 +25,7 @@ import (
 const largoMaximoCuerpoHTTP = 16 << 10
 
 // Headers con la identidad del usuario. Los pone el api-gateway a partir del
-// token y descarta los que mande el cliente (ADR-016).
+// token y descarta los que mande el cliente (ADR-019).
 const (
 	headerIDUsuario    = "X-Id-Usuario"
 	headerEmailUsuario = "X-Email-Usuario"
@@ -372,7 +372,7 @@ func responderError(contexto *gin.Context, estado int, codigo, mensaje string) {
 }
 
 // identificar lee la identidad del usuario de los headers que pone el api-gateway
-// a partir del token (ADR-016).
+// a partir del token (ADR-019).
 func identificar(contexto *gin.Context) {
 	actual := usuario{
 		id:    contexto.GetHeader(headerIDUsuario),

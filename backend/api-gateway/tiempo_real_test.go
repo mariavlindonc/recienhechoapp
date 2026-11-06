@@ -16,66 +16,89 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// pedirTiempoReal manda la ruta dada al gateway y devuelve la respuesta y lo que le
+// pedirConHeaders manda la ruta dada al gateway y devuelve la respuesta y lo que le
 // llegó a pedidos (nil si no le llegó nada).
-func pedirTiempoReal(prueba *testing.T, ruta string) (*httptest.ResponseRecorder, *http.Request) {
+func pedirConHeaders(prueba *testing.T, ruta string, headers map[string]string) (*httptest.ResponseRecorder, *http.Request) {
 	prueba.Helper()
 	pedidos, recibidas := instanciaFalsa(prueba, "pedidos", 0)
 	gin.SetMode(gin.TestMode)
 	router := nuevoRouter([]byte(secretoDePrueba), http.NotFoundHandler(), nuevoProxyBalanceado("pedidos", []*url.URL{pedidos}, time.Second, nil), http.NotFoundHandler(), http.NotFoundHandler())
+	pedido := httptest.NewRequest(http.MethodGet, ruta, nil)
+	for nombre, valor := range headers {
+		pedido.Header.Set(nombre, valor)
+	}
 	respuesta := httptest.NewRecorder()
-	router.ServeHTTP(respuesta, httptest.NewRequest(http.MethodGet, ruta, nil))
+	router.ServeHTTP(respuesta, pedido)
 	if len(*recibidas) == 0 {
 		return respuesta, nil
 	}
 	return respuesta, (*recibidas)[0]
 }
 
-// El navegador no puede mandar Authorization en un WebSocket: el token va en la URL,
-// y no sigue viaje, para que no quede en ningún log (ADR-018).
-func TestElWebSocketSeAutenticaConElTokenDeLaURL(prueba *testing.T) {
+// El navegador manda la cookie solo, también al abrir el WebSocket (ADR-019). El
+// token no sigue viaje: los servicios reciben la identidad, no la sesión.
+func TestLaCookieIdentificaAlUsuario(prueba *testing.T) {
 	token := firmar(prueba, secretoDePrueba, jwt.SigningMethodHS256, time.Now().Add(time.Hour))
 
-	_, recibida := pedirTiempoReal(prueba, "/pedidos/tiempo-real?token="+token)
+	for _, ruta := range []string{"/pedidos", "/pedidos/tiempo-real"} {
+		_, recibida := pedirConHeaders(prueba, ruta, map[string]string{"Cookie": "sesion=" + token})
 
-	if recibida == nil {
-		prueba.Fatal("la solicitud no llegó a pedidos")
-	}
-	if recibida.Header.Get("X-Id-Usuario") != "id-ana" || recibida.Header.Get("X-Rol-Usuario") != "comprador" {
-		prueba.Errorf("llegó la identidad %v, se esperaba la del token", recibida.Header)
-	}
-	if recibida.URL.RawQuery != "" {
-		prueba.Errorf("el token no puede llegar a pedidos: query %q", recibida.URL.RawQuery)
+		if recibida == nil {
+			prueba.Fatalf("%s: la solicitud no llegó a pedidos", ruta)
+		}
+		if recibida.Header.Get("X-Id-Usuario") != "id-ana" || recibida.Header.Get("X-Rol-Usuario") != "comprador" {
+			prueba.Errorf("%s: llegó la identidad %v, se esperaba la del token", ruta, recibida.Header)
+		}
+		if cookie := recibida.Header.Get("Cookie"); cookie != "" {
+			prueba.Errorf("%s: el token no puede llegar a los servicios: Cookie %q", ruta, cookie)
+		}
 	}
 }
 
-func TestElTokenDeLaURLSeVerificaComoLosDemas(prueba *testing.T) {
-	casos := map[string]struct{ token, codigo string }{
-		"vencido":      {firmar(prueba, secretoDePrueba, jwt.SigningMethodHS256, time.Now().Add(-time.Minute)), "sesion_vencida"},
-		"otro secreto": {firmar(prueba, "otro-secreto-de-al-menos-32-bytes!!", jwt.SigningMethodHS256, time.Now().Add(time.Hour)), "sin_sesion"},
-		"basura":       {"abc.def.ghi", "sin_sesion"},
+// Una cookie vieja no puede trabar a nadie: el POST de inicio de sesión también la
+// lleva, así que rechazarla impediría volver a entrar. Sigue sin identidad y decide
+// el servicio.
+func TestUnaCookieInvalidaSigueSinIdentidad(prueba *testing.T) {
+	casos := map[string]string{
+		"vencida":      firmar(prueba, secretoDePrueba, jwt.SigningMethodHS256, time.Now().Add(-time.Minute)),
+		"otro secreto": firmar(prueba, "otro-secreto-de-al-menos-32-bytes!!", jwt.SigningMethodHS256, time.Now().Add(time.Hour)),
+		"basura":       "abc.def.ghi",
 	}
-	for nombre, caso := range casos {
+	for nombre, token := range casos {
 		prueba.Run(nombre, func(prueba *testing.T) {
-			respuesta, recibida := pedirTiempoReal(prueba, "/pedidos/tiempo-real?token="+caso.token)
-			if recibida != nil || respuesta.Code != http.StatusUnauthorized || !strings.Contains(respuesta.Body.String(), caso.codigo) {
-				prueba.Errorf("estado %d, cuerpo %s, llegó a pedidos: %v", respuesta.Code, respuesta.Body, recibida != nil)
+			respuesta, recibida := pedirConHeaders(prueba, "/pedidos", map[string]string{"Cookie": "sesion=" + token})
+			if recibida == nil {
+				prueba.Fatalf("estado %d: la solicitud tiene que seguir", respuesta.Code)
+			}
+			if id := recibida.Header.Get("X-Id-Usuario"); id != "" || recibida.Header.Get("Cookie") != "" {
+				prueba.Errorf("X-Id-Usuario %q, Cookie %q", id, recibida.Header.Get("Cookie"))
 			}
 		})
 	}
 }
 
-// El token en la URL vale solo en esta ruta: en las demás va en Authorization.
-func TestElTokenEnLaURLNoValeEnOtraRuta(prueba *testing.T) {
+// Quien manda Authorization (k6, app.sh) sigue igual: un token malo se rechaza.
+func TestAuthorizationTienePrioridadSobreLaCookie(prueba *testing.T) {
+	buena := firmar(prueba, secretoDePrueba, jwt.SigningMethodHS256, time.Now().Add(time.Hour))
+
+	respuesta, recibida := pedirConHeaders(prueba, "/pedidos", map[string]string{"Authorization": "Bearer abc.def.ghi", "Cookie": "sesion=" + buena})
+
+	if recibida != nil || respuesta.Code != http.StatusUnauthorized {
+		prueba.Errorf("estado %d, llegó a pedidos: %v", respuesta.Code, recibida != nil)
+	}
+}
+
+// El token nunca va en la URL: ahí ya no identifica a nadie (ADR-019).
+func TestUnTokenEnLaURLNoIdentifica(prueba *testing.T) {
 	token := firmar(prueba, secretoDePrueba, jwt.SigningMethodHS256, time.Now().Add(time.Hour))
 
-	_, recibida := pedirTiempoReal(prueba, "/pedidos?token="+token)
+	_, recibida := pedirConHeaders(prueba, "/pedidos/tiempo-real?token="+token, nil)
 
 	if recibida == nil {
 		prueba.Fatal("la solicitud no llegó a pedidos")
 	}
 	if id := recibida.Header.Get("X-Id-Usuario"); id != "" {
-		prueba.Errorf("X-Id-Usuario = %q: en otra ruta el token de la URL no identifica a nadie", id)
+		prueba.Errorf("X-Id-Usuario = %q", id)
 	}
 }
 
@@ -107,7 +130,7 @@ func TestElWebSocketNoSeCortaPorElTiempoMaximo(prueba *testing.T) {
 	defer conexion.Close()
 	conexion.SetDeadline(time.Now().Add(2 * time.Second))
 	token := firmar(prueba, secretoDePrueba, jwt.SigningMethodHS256, time.Now().Add(time.Hour))
-	fmt.Fprintf(conexion, "GET /pedidos/tiempo-real?token=%s HTTP/1.1\r\nHost: gateway\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n", token)
+	fmt.Fprintf(conexion, "GET /pedidos/tiempo-real HTTP/1.1\r\nHost: gateway\r\nCookie: sesion=%s\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n", token)
 
 	lector := bufio.NewReader(conexion)
 	respuesta, err := http.ReadResponse(lector, nil)
@@ -121,7 +144,7 @@ func TestElWebSocketNoSeCortaPorElTiempoMaximo(prueba *testing.T) {
 
 func TestElWebSocketNoSeTraza(prueba *testing.T) {
 	if sinChequeosDeSalud(httptest.NewRequest(http.MethodGet, "/pedidos/tiempo-real", nil)) {
-		prueba.Error("/pedidos/tiempo-real no se traza: la URL lleva el token")
+		prueba.Error("/pedidos/tiempo-real no se traza: dura minutos")
 	}
 	if !sinChequeosDeSalud(httptest.NewRequest(http.MethodGet, "/pedidos", nil)) {
 		prueba.Error("las demás rutas se trazan")

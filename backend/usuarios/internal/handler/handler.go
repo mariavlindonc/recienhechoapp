@@ -23,10 +23,11 @@ import (
 const (
 	nombreServicio        = "usuarios"
 	largoMaximoCuerpoHTTP = 16 << 10
+	nombreCookieDeSesion  = "sesion"
 )
 
 // headerIDUsuario lo pone el api-gateway con el id del token y descarta el que
-// mande el cliente (ADR-016).
+// mande el cliente (ADR-019).
 const headerIDUsuario = "X-Id-Usuario"
 
 // Servicio es lo que esta capa necesita de la de abajo. Lo cumple
@@ -46,6 +47,7 @@ func Registrar(router gin.IRouter, servicioUsuarios Servicio, esperaSalud time.D
 	router.GET("/vivo", vivo)
 	router.POST("/usuarios", manejador.registrar)
 	router.POST("/usuarios/sesion", manejador.iniciarSesion)
+	router.DELETE("/usuarios/sesion", manejador.cerrarSesion)
 	router.GET("/usuarios/yo", manejador.perfil)
 }
 
@@ -113,7 +115,23 @@ func (manejador *manejador) iniciarSesion(contexto *gin.Context) {
 		responderErrorDelServicio(contexto, err)
 		return
 	}
+	http.SetCookie(contexto.Writer, cookieDeSesion(sesion.Token, 0))
 	contexto.JSON(http.StatusOK, respuestaSesion{Token: sesion.Token, VenceEn: sesion.VenceEn, Usuario: aRespuesta(sesion.Usuario)})
+}
+
+// cerrarSesion borra la cookie, que JavaScript no puede tocar. El token sigue
+// siendo válido hasta que vence, pero el navegador ya no lo tiene (ADR-019).
+func (manejador *manejador) cerrarSesion(contexto *gin.Context) {
+	http.SetCookie(contexto.Writer, cookieDeSesion("", -1))
+	contexto.Status(http.StatusNoContent)
+}
+
+// cookieDeSesion arma la cookie del navegador (ADR-019). HttpOnly: un script
+// inyectado no la puede leer. Secure: solo viaja por HTTPS (localhost cuenta como
+// seguro). SameSite: otro sitio no puede usarla. Con edad 0 se borra al cerrar el
+// navegador, y el token igual vence a la hora.
+func cookieDeSesion(token string, edad int) *http.Cookie {
+	return &http.Cookie{Name: nombreCookieDeSesion, Value: token, Path: "/", MaxAge: edad, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode}
 }
 
 func (manejador *manejador) perfil(contexto *gin.Context) {
