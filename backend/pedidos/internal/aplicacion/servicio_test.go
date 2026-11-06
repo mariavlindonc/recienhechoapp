@@ -28,6 +28,7 @@ type entorno struct {
 	inventario  *inventarioFalso
 	publicador  *publicadorFalso
 	eventos     *eventosFalsos
+	avisos      *avisosFalsos
 	reloj       *time.Time
 }
 
@@ -39,6 +40,7 @@ func nuevoEntorno() *entorno {
 		inventario:  &inventarioFalso{resultado: puertos.ReservaConfirmada},
 		publicador:  &publicadorFalso{},
 		eventos:     &eventosFalsos{},
+		avisos:      &avisosFalsos{},
 		reloj:       &reloj,
 	}
 	actual.servicio = aplicacion.NuevoServicio(aplicacion.Dependencias{
@@ -51,6 +53,7 @@ func nuevoEntorno() *entorno {
 		}},
 		Inventario: actual.inventario,
 		Eventos:    actual.eventos,
+		Avisos:     actual.avisos,
 		Ahora:      func() time.Time { return *actual.reloj },
 		NuevoID:    func() string { return fmt.Sprintf("id-%d", contador.Add(1)) },
 	})
@@ -399,5 +402,43 @@ func TestBaseCaidaNoCreaPedido(prueba *testing.T) {
 	}
 	if actual.inventario.reservas != 0 {
 		prueba.Error("sin pedido guardado no se piden insumos")
+	}
+}
+
+// Cada cambio guardado con evento se avisa en vivo al comprador (ADR-018).
+func TestLosCambiosGuardadosSeAvisanEnVivo(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, hoy, 10)
+
+	pedido, err := actual.servicio.Crear(context.Background(), comprador, "clave-1", medialunas(1, hoy))
+	if err != nil {
+		prueba.Fatalf("crear: %v", err)
+	}
+	if _, err := actual.servicio.CambiarEstado(context.Background(), pedido.ID, dominio.EstadoEnProduccion); err != nil {
+		prueba.Fatalf("cambiar estado: %v", err)
+	}
+
+	if estados := actual.avisos.estados(); !slices.Equal(estados, []string{"pendiente_confirmacion", "confirmado", "en_produccion"}) {
+		prueba.Errorf("avisos = %v", estados)
+	}
+	if ultimo := actual.avisos.eventos[2].Datos; ultimo.IDComprador != comprador.ID || ultimo.IDPedido != pedido.ID || ultimo.EstadoAnterior != "confirmado" {
+		prueba.Errorf("último aviso = %+v", ultimo)
+	}
+}
+
+// Lo que se avisa ya está en la base: si guardar falla, no se avisa nada.
+func TestSiNoSeGuardaNoSeAvisa(prueba *testing.T) {
+	actual := nuevoEntorno()
+	actual.capacidad(prueba, hoy, 10)
+	pedido, _ := actual.servicio.Crear(context.Background(), comprador, "clave-1", medialunas(1, hoy))
+	antes := len(actual.avisos.estados())
+	actual.repositorio.fallarGuardar = errCaido
+
+	if _, err := actual.servicio.CambiarEstado(context.Background(), pedido.ID, dominio.EstadoEnProduccion); err == nil {
+		prueba.Fatal("se esperaba el error de la base")
+	}
+
+	if despues := len(actual.avisos.estados()); despues != antes {
+		prueba.Errorf("sin guardar no se avisa: había %d avisos, hay %d", antes, despues)
 	}
 }

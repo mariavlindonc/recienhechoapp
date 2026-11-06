@@ -151,6 +151,14 @@ const (
 	CircuitoSemiabierto EstadoCircuito = "semiabierto"
 )
 
+// AvisosEnVivo les avisa a los compradores conectados que cambió un pedido suyo
+// (ADR-018). La aplicación lo llama solo después de guardar, así lo que se avisa ya
+// está en la base. No puede frenar a quien llama: si un comprador no recibe a
+// tiempo, el aviso no se reintenta, porque la pantalla pide el estado al reconectarse.
+type AvisosEnVivo interface {
+	Avisar(evento dominio.Evento)
+}
+
 // Eventos recibe los hechos que interesan fuera de la aplicación. La aplicación
 // solo avisa qué pasó; el adaptador decide qué loguear y qué contar (ADR-006, ADR-007).
 type Eventos interface {

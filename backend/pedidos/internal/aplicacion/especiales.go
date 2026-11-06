@@ -33,6 +33,7 @@ func (servicio *Servicio) SolicitarEspecial(contexto context.Context, comprador 
 	if err != nil {
 		return dominio.Pedido{}, fmt.Errorf("guardar pedido especial: %w", err)
 	}
+	servicio.avisos.Avisar(evento)
 	return pedido, nil
 }
 

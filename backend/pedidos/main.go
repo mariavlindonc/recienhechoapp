@@ -25,6 +25,7 @@ import (
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/adaptadores/mongodb"
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/adaptadores/productos"
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/adaptadores/rabbitmq"
+	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/adaptadores/tiemporeal"
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/aplicacion"
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/registro"
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/trazas"
@@ -86,6 +87,8 @@ func ejecutar() error {
 
 	medidor := metricas.Nuevas()
 	observador := eventos.Nuevos(medidor, slog.Default())
+	enVivo := tiemporeal.Nuevo(medidor, slog.Default())
+	defer enVivo.Cerrar()
 	// shortcut: inventario falso hasta que el grupo proveedor publique su contrato
 	// (ADR-010); el adaptador real se enchufa en el mismo lugar, detrás del disyuntor.
 	reservador := inventario.NuevoDisyuntor(inventario.NuevoFalso(configuracion.modoInventario), observador, inventario.ConfiguracionDelServicio)
@@ -96,6 +99,7 @@ func ejecutar() error {
 		Catalogo:    productos.NuevoCatalogo(configuracion.direccionProductos),
 		Inventario:  reservador,
 		Eventos:     observador,
+		Avisos:      enVivo,
 		Ahora:       ahora,
 		NuevoID:     nuevoUUID,
 	})
@@ -106,7 +110,7 @@ func ejecutar() error {
 		contextoSalud, cancelarSalud := context.WithTimeout(contextoSalud, esperaSalud)
 		defer cancelarSalud()
 		return clienteMongo.Ping(contextoSalud, nil)
-	})
+	}, enVivo.Atender)
 	servidor := &http.Server{
 		Addr:              ":" + configuracion.puerto,
 		Handler:           router,
@@ -177,9 +181,10 @@ func repetir(contexto context.Context, intervalo time.Duration, descripcion stri
 	}
 }
 
-// sinChequeosDeSalud evita trazar /health y /vivo (ADR-006).
+// sinChequeosDeSalud evita trazar /health y /vivo (ADR-006), y el WebSocket, que dura
+// minutos: una traza que tarda eso no dice nada (ADR-018).
 func sinChequeosDeSalud(pedido *http.Request) bool {
-	return pedido.URL.Path != "/health" && pedido.URL.Path != "/vivo"
+	return pedido.URL.Path != "/health" && pedido.URL.Path != "/vivo" && pedido.URL.Path != "/pedidos/tiempo-real"
 }
 
 // ahora es el reloj del servicio, truncado a la precisión con la que MongoDB

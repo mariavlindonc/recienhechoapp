@@ -335,3 +335,25 @@ func (eventos *eventosFalsos) ConfirmacionNoGuardada(_ context.Context, _ string
 }
 
 var errCaido = errors.New("caído")
+
+// avisosFalsos anota lo que se les avisaría a los compradores conectados.
+type avisosFalsos struct {
+	mutex   sync.Mutex
+	eventos []dominio.Evento
+}
+
+func (avisos *avisosFalsos) Avisar(evento dominio.Evento) {
+	avisos.mutex.Lock()
+	defer avisos.mutex.Unlock()
+	avisos.eventos = append(avisos.eventos, evento)
+}
+
+func (avisos *avisosFalsos) estados() []string {
+	avisos.mutex.Lock()
+	defer avisos.mutex.Unlock()
+	estados := make([]string, len(avisos.eventos))
+	for indice, evento := range avisos.eventos {
+		estados[indice] = evento.Datos.EstadoNuevo
+	}
+	return estados
+}

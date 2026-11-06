@@ -54,9 +54,12 @@ type CasosDeUso interface {
 	ResponderEspecial(contexto context.Context, idComprador, id string, acepta bool) (dominio.Pedido, error)
 }
 
+// ConectarEnVivo abre el WebSocket de un comprador ya identificado (ADR-018).
+type ConectarEnVivo func(escritor http.ResponseWriter, pedido *http.Request, idComprador string)
+
 // Registrar agrega las rutas al router. chequearSalud dice si las dependencias
 // obligatorias responden (MongoDB).
-func Registrar(router gin.IRouter, casos CasosDeUso, chequearSalud func(contexto context.Context) error) {
+func Registrar(router gin.IRouter, casos CasosDeUso, chequearSalud func(contexto context.Context) error, conectarEnVivo ConectarEnVivo) {
 	manejador := &manejador{casos: casos}
 
 	router.GET("/health", salud(chequearSalud))
@@ -68,6 +71,11 @@ func Registrar(router gin.IRouter, casos CasosDeUso, chequearSalud func(contexto
 	pedidos.GET("/:id", manejador.obtener)
 	pedidos.POST("/:id/cancelacion", soloRol(rolComprador), manejador.cancelar)
 	pedidos.PUT("/:id/estado", soloRol(rolVendedor), manejador.cambiarEstado)
+
+	// El comprador sigue sus pedidos en vivo (B2, ADR-018).
+	pedidos.GET("/tiempo-real", soloRol(rolComprador), func(contexto *gin.Context) {
+		conectarEnVivo(contexto.Writer, contexto.Request, usuarioDe(contexto).id)
+	})
 
 	// Pedidos especiales (C6, VE5, R8; ADR-017). El comprador ve los suyos en GET /pedidos.
 	pedidos.POST("/especiales", soloRol(rolComprador), manejador.solicitarEspecial)
