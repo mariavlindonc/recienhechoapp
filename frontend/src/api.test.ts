@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, esperaParaReconectar, ingresar, listarEspeciales, listarMisPedidos, cerrarSesion, rechazarEspecial, responderCotizacion, seguirPedidos, TRANSICIONES } from './api.ts'
+import { aPedido, aProducto, buscarProductos, cancelarPedido, crearPedido, ErrorDeApi, esperaParaReconectar, ingresar, listarEspeciales, listarMisPedidos, cerrarSesion, rechazarEspecial, responderCotizacion, seguirPedidos, TRANSICIONES } from './api.ts'
 
 // sessionStorage no existe en bun test: alcanza con un mapa.
 const guardado = new Map<string, string>()
@@ -256,4 +256,14 @@ test('aunque el servidor no responda, cerrar sesión limpia la pantalla', async 
   await cerrarSesion()
 
   expect(guardado.get('sesion')).toBeUndefined()
+})
+
+test('el comprador cancela una solicitud especial: deja de estar abierta y pasa a sus pedidos (ADR-017)', async () => {
+  const pedidos = responder(200, { id: 'e1', items: [{ productoId: '', nombreProducto: 'Torta', cantidad: 1 }], fecha: '2026-12-01', precioCentavos: 0, tipo: 'especial', estado: 'cancelado', motivoCancelacion: 'Cancelado por el comprador.' })
+
+  const cancelado = await cancelarPedido('e1')
+
+  expect(pedidos[0]!.url).toBe('/api/pedidos/e1/cancelacion')
+  expect(pedidos[0]!.opciones.method).toBe('POST')
+  expect(cancelado.estado).toBe('cancelado')
 })
