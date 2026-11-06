@@ -52,7 +52,7 @@ El primer flujo que funciona de punta a punta es el de la capacidad publicada: `
 
 ## Convenciones compartidas entre servicios
 
-Agregado el 22/10/2026, por decisión de Athina a partir de la revisión del código.
+Agregado el 22/10/2026, a partir de la revisión del código.
 
 Como un servicio no importa código de otro (AGENTS.md), el código de logs, trazas y métricas está **copiado** en cada servicio. Las copias pueden diferir en su forma interna, pero tienen que respetar este contrato, porque el tablero, las alertas y la correlación de logs dependen de que todos los servicios lo cumplan igual:
 

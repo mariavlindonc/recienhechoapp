@@ -3,7 +3,7 @@
 ## Estado
 
 - **Aceptado** para la comunicación síncrona del api-gateway, Entrega 2 (validado con el proxy de `/notificaciones*`).
-- **Aceptado** para el resto (llamadas de `pedidos` y mensajería con RabbitMQ) por Agustín el 26/10/2026; implementado con `pedidos`.
+- **Aceptado** para el resto (llamadas de `pedidos` y mensajería con RabbitMQ) el 26/10/2026; implementado con `pedidos`.
 
 ## Contexto
 

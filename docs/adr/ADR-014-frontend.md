@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto. React 19.3, material-esm y Bun fueron elegidos por Agustín Di Mario el 23/10/2026, TypeScript el 26/10/2026, y el tema "Etiqueta kraft" con su plan de animaciones el 28/10/2026.
+Propuesto. React 19.3, material-esm y Bun fueron elegidos el 23/10/2026, TypeScript el 26/10/2026, y el tema "Etiqueta kraft" con su plan de animaciones el 28/10/2026.
 
 ## Contexto
 

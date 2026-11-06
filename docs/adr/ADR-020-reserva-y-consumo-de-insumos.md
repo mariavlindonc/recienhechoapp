@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado por María el 06/11/2026 ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)). Reemplaza a [ADR-010](ADR-010-consumo-de-inventario.md). Queda **pendiente de decisión** de dónde salen los `productId` del proveedor (ver [Pendientes](#pendientes)).
+Aceptado el 06/11/2026 ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)). Reemplaza a [ADR-010](ADR-010-consumo-de-inventario.md). Queda **pendiente de decisión** de dónde salen los `productId` del proveedor (ver [Pendientes](#pendientes)).
 
 ## Contexto
 

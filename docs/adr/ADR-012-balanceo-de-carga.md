@@ -20,7 +20,7 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 
 **Quién balancea:** el **api-gateway**, que va a ser el proxy de `/notificaciones*`. Recibe la lista de instancias por variable de entorno (`NOTIFICACIONES_URLS=http://notificaciones-1:8084,http://notificaciones-2:8084`).
 
-**Estrategia:** round-robin entre las instancias sanas. Decisión del grupo (María, Athina y Agustín, 22/10/2026), después de comparar las estrategias de reparto (ver "Estrategias de reparto consideradas"): round-robin es simple y alcanza para el sistema actual y su alcance. Hay dos instancias iguales, las solicitudes son cortas y parecidas (p95 de ~5 ms en notificaciones) y no hay estado entre solicitudes. Además, reparte parejo y predecible, que es la evidencia más clara de distribución en el tablero. **Se considera pasar a "menos conexiones"** si los tests de carga ([ADR-013](ADR-013-capacidad-y-costos.md)) muestran que una instancia se pone lenta bajo carga: es la situación en la que round-robin le sigue mandando la mitad del tráfico y "menos conexiones" se adapta sola.
+**Estrategia:** round-robin entre las instancias sanas. Elegida el 22/10/2026, después de comparar las estrategias de reparto (ver "Estrategias de reparto consideradas"): round-robin es simple y alcanza para el sistema actual y su alcance. Hay dos instancias iguales, las solicitudes son cortas y parecidas (p95 de ~5 ms en notificaciones) y no hay estado entre solicitudes. Además, reparte parejo y predecible, que es la evidencia más clara de distribución en el tablero. **Se considera pasar a "menos conexiones"** si los tests de carga ([ADR-013](ADR-013-capacidad-y-costos.md)) muestran que una instancia se pone lenta bajo carga: es la situación en la que round-robin le sigue mandando la mitad del tráfico y "menos conexiones" se adapta sola.
 
 **Verificación de disponibilidad:**
 
@@ -29,7 +29,7 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 - Pasiva: si una solicitud a una instancia falla por conexión o timeout, se marca como caída sin esperar al próximo chequeo. El gateway no reintenta ([ADR-003](ADR-003-comunicacion-entre-servicios.md)): esa solicitud responde `503` y el consumidor reintenta con la misma `Idempotency-Key`, como indica el contrato, y el reintento ya va a la otra instancia.
 - Sin instancias sanas: `503 no_disponible`.
 
-**Detalles de los chequeos** (decididos por María y Athina, 30/10/2026, [#79](https://github.com/mariavlindonc/recienhechoapp/issues/79)):
+**Detalles de los chequeos** (30/10/2026, [#79](https://github.com/mariavlindonc/recienhechoapp/issues/79)):
 
 1. **El chequeo pasivo solo saca una instancia si el servicio tiene dos o más.** Con una sola no hay otra a la cual mandar el tráfico, y como esa instancia no tiene chequeo activo, una vez afuera no volvería a entrar aunque el servicio se recupere. Con una sola instancia caída, las solicitudes esperan el timeout de 3 s y responden `503`, y cuando el servicio vuelve se atiende solo. Se descartó sumar chequeo activo a todos los servicios: con una sola instancia, la ganancia es fallar 3 s antes.
 2. **El chequeo activo corre solo para los servicios con dos o más instancias:** hoy, `notificaciones`. **Regla:** el servicio que pase a tener dos o más instancias tiene que exponer `/vivo` y entrar al chequeo activo.
