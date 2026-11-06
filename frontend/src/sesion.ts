@@ -1,10 +1,11 @@
-// Sesión del usuario: el token va en el header Authorization de cada solicitud (ADR-016).
-// Se guarda en sessionStorage: sobrevive a recargar la página y se borra al cerrar la pestaña.
+// Datos del usuario para las pantallas. La sesión de verdad es la cookie HttpOnly, que JavaScript
+// no puede leer (ADR-019): acá nunca se guarda el token. Se guarda en sessionStorage: sobrevive a
+// recargar la página y se borra al cerrar la pestaña.
 import type { Usuario } from './tipos.ts'
 
 const CLAVE = 'sesion'
 
-export type Sesion = { token: string; usuario: Usuario }
+export type Sesion = { usuario: Usuario }
 
 export function leerSesion(): Sesion | null {
   const guardada = sessionStorage.getItem(CLAVE)

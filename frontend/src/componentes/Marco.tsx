@@ -25,8 +25,7 @@ export default function Marco() {
   const indiceActivo = Math.max(0, destinos.findIndex(destino => pathname === destino.ruta))
 
   const salir = () => {
-    cerrarSesion()
-    navegar('/ingresar')
+    cerrarSesion().then(() => navegar('/ingresar'))
   }
 
   return (

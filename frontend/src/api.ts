@@ -1,5 +1,5 @@
 // Único punto de acceso a datos del frontend (ADR-014). Todo va al api-gateway por /api,
-// con el token de la sesión (ADR-016). Acá se traducen las respuestas de los servicios a los
+// con la cookie de la sesión, que manda el navegador (ADR-019). Acá se traducen las respuestas de los servicios a los
 // tipos de las pantallas, así las pantallas no conocen la forma de cada servicio.
 import { hoyIso, sumarDias } from './formato.ts'
 import { borrarSesion, guardarSesion, leerSesion } from './sesion.ts'
@@ -45,12 +45,10 @@ export class ErrorDeApi extends Error {
 }
 
 async function pedir<Tipo>(ruta: string, { metodo = 'GET', cuerpo, headers = {} }: { metodo?: string; cuerpo?: unknown; headers?: Record<string, string> } = {}): Promise<Tipo> {
-  const sesion = leerSesion()
   const respuesta = await fetch(`/api${ruta}`, {
     method: metodo,
     headers: {
       ...(cuerpo === undefined ? {} : { 'Content-Type': 'application/json' }),
-      ...(sesion ? { Authorization: `Bearer ${sesion.token}` } : {}),
       ...headers,
     },
     body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
@@ -68,8 +66,9 @@ async function pedir<Tipo>(ruta: string, { metodo = 'GET', cuerpo, headers = {} 
 
 // Sesión (C1)
 export async function ingresar(email: string, clave: string) {
-  const respuesta = await pedir<{ token: string; usuario: Usuario }>('/usuarios/sesion', { metodo: 'POST', cuerpo: { email, clave } })
-  guardarSesion({ token: respuesta.token, usuario: respuesta.usuario })
+  // El token queda en la cookie que deja usuarios: acá solo se guardan los datos del usuario.
+  const respuesta = await pedir<{ usuario: Usuario }>('/usuarios/sesion', { metodo: 'POST', cuerpo: { email, clave } })
+  guardarSesion({ usuario: respuesta.usuario })
   return respuesta.usuario
 }
 
@@ -78,8 +77,10 @@ export async function registrarse(datos: { nombre: string; email: string; clave:
   return ingresar(datos.email, datos.clave)
 }
 
-// Cerrar sesión es borrar el token: sigue valiendo hasta que vence (ADR-016).
-export function cerrarSesion() {
+// JavaScript no puede borrar la cookie: lo hace usuarios (ADR-019). Si no responde, la pantalla
+// cierra igual, y la cookie se va al cerrar el navegador.
+export async function cerrarSesion() {
+  await pedir('/usuarios/sesion', { metodo: 'DELETE' }).catch(() => {})
   borrarSesion()
 }
 
@@ -316,11 +317,10 @@ export function seguirPedidos(alCambiar: () => void, espera = esperaParaReconect
   let terminado = false
 
   const conectar = () => {
-    const sesion = leerSesion()
-    if (terminado || sesion?.usuario.rol !== 'comprador') return
-    // El navegador no deja mandar headers en un WebSocket: el token va en la URL (ADR-018).
+    if (terminado || leerSesion()?.usuario.rol !== 'comprador') return
+    // El navegador manda la cookie de la sesión al abrir el WebSocket (ADR-019).
     const protocolo = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    socket = new WebSocket(`${protocolo}//${location.host}/api/pedidos/tiempo-real?token=${encodeURIComponent(sesion.token)}`)
+    socket = new WebSocket(`${protocolo}//${location.host}/api/pedidos/tiempo-real`)
     socket.onopen = () => {
       intentos = 0
       alCambiar()

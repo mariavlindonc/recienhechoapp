@@ -2,6 +2,8 @@
 
 ## Estado
 
+Reemplazado por [ADR-019](ADR-019-sesion-en-cookie.md) el 06/11/2026: la sesión del navegador pasó del header `Authorization` a una cookie `HttpOnly`. Lo demás sigue vigente y está repetido en ese ADR.
+
 Propuesto el 26/10/2026 con las opciones. Aceptado por Agustín el 28/10/2026: opción A, bcrypt y vendedor creado desde el `.env`. El mismo día eligió el header `Authorization` para la sesión del frontend.
 
 Revisión del 02/11/2026 (revisión del #61 y el #62, decidido por María): el gateway limita los intentos de registro e inicio de sesión por IP (opción A, frente a un freno por email en `usuarios` o dejarlo como deuda). Para el test de carga de pedidos el límite se sube en el `.env`.

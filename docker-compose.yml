@@ -13,12 +13,12 @@ services:
       PEDIDOS_URLS: http://pedidos:${PEDIDOS_PORT}
       PRODUCTOS_URLS: http://productos:${PRODUCTOS_PORT}
       USUARIOS_URLS: http://usuarios:${USUARIOS_PORT}
-      # Verifica los tokens que firma usuarios (ADR-016).
+      # Verifica los tokens que firma usuarios (ADR-019).
       JWT_SECRETO: ${JWT_SECRETO}
       # Las mismas claves que notificaciones, para contar el límite por grupo (ADR-004).
       NOTIFICACIONES_CLAVES_API: ${NOTIFICACIONES_CLAVES_API}
       NOTIFICACIONES_LIMITE_POR_MINUTO: ${NOTIFICACIONES_LIMITE_POR_MINUTO}
-      # Intentos de registro e inicio de sesión por minuto y por IP (ADR-016). Vacío, 10.
+      # Intentos de registro e inicio de sesión por minuto y por IP (ADR-019). Vacío, 10.
       USUARIOS_INTENTOS_POR_MINUTO: ${USUARIOS_INTENTOS_POR_MINUTO:-}
       # Destino de las trazas (ADR-006). Si Jaeger no está, el gateway funciona igual.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
@@ -49,9 +49,9 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       # Cada operación con MySQL se corta a los 2 s (ADR-011).
       MYSQL_DSN: ${USUARIOS_MYSQL_USUARIO}:${USUARIOS_MYSQL_CLAVE}@tcp(mysql-usuarios:3306)/usuarios?timeout=2s&readTimeout=2s&writeTimeout=2s
-      # Firma los tokens de sesión; el api-gateway los verifica con el mismo (ADR-016).
+      # Firma los tokens de sesión; el api-gateway los verifica con el mismo (ADR-019).
       JWT_SECRETO: ${JWT_SECRETO}
-      # Cuenta del vendedor: se crea al arrancar si no existe (ADR-016).
+      # Cuenta del vendedor: se crea al arrancar si no existe (ADR-019).
       VENDEDOR_EMAIL: ${VENDEDOR_EMAIL}
       VENDEDOR_CLAVE: ${VENDEDOR_CLAVE}
     # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, esperaParaReconectar, ingresar, listarEspeciales, listarMisPedidos, rechazarEspecial, responderCotizacion, seguirPedidos, TRANSICIONES } from './api.ts'
+import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, esperaParaReconectar, ingresar, listarEspeciales, listarMisPedidos, cerrarSesion, rechazarEspecial, responderCotizacion, seguirPedidos, TRANSICIONES } from './api.ts'
 
 // sessionStorage no existe en bun test: alcanza con un mapa.
 const guardado = new Map<string, string>()
@@ -57,7 +57,7 @@ test('la búsqueda manda los filtros como los espera productos (ADR-008)', async
   expect(pagina.items[0]!.nombre).toBe('Budín de limón')
 })
 
-test('con sesión manda el token y el pedido lleva Idempotency-Key', async () => {
+test('la sesión va en la cookie: JavaScript no guarda ni manda el token (ADR-019)', async () => {
   responder(200, { token: 'token-1', usuario: { id: 'u1', email: 'a@a.com', nombre: 'Ana', rol: 'comprador' } })
   await ingresar('a@a.com', 'clave-segura')
   const pedidos = responder(201, { id: 'pd1', items: [], fecha: '2026-11-02', precioCentavos: 0, tipo: 'inmediato', estado: 'pendiente_confirmacion' })
@@ -65,7 +65,8 @@ test('con sesión manda el token y el pedido lleva Idempotency-Key', async () =>
   await crearPedido({ productoId: 'p1', cantidad: 1, clave: 'clave-1' })
 
   const headers = pedidos[0]!.opciones.headers as Record<string, string>
-  expect(headers.Authorization).toBe('Bearer token-1')
+  expect(headers.Authorization).toBeUndefined()
+  expect(guardado.get('sesion')).not.toContain('token-1')
   expect(headers['Idempotency-Key']).toBeTruthy()
   expect(JSON.parse(pedidos[0]!.opciones.body as string)).toEqual({ tipo: 'inmediato', items: [{ productoId: 'p1', cantidad: 1 }] })
 })
@@ -173,14 +174,14 @@ function prepararSockets() {
   globalThis.location = { protocol: 'http:', host: 'localhost:5173' } as Location
 }
 
-test('B2: se conecta con el token, se pone al día y actualiza con cada cambio (ADR-018)', async () => {
+test('B2: se conecta, se pone al día y actualiza con cada cambio (ADR-018)', async () => {
   await conSesion()
   prepararSockets()
   let actualizaciones = 0
 
   const dejar = seguirPedidos(() => actualizaciones++, () => 0)
   const socket = SocketFalso.abiertos[0]!
-  expect(socket.url).toBe('ws://localhost:5173/api/pedidos/tiempo-real?token=token%2F1')
+  expect(socket.url).toBe('ws://localhost:5173/api/pedidos/tiempo-real')
 
   socket.onopen!()
   expect(actualizaciones).toBe(1)
@@ -229,4 +230,30 @@ test('sin sesión de comprador no se conecta', () => {
 
 test('las esperas para reconectarse crecen hasta 30 s', () => {
   expect([0, 1, 2, 3, 4, 5, 6, 20].map(esperaParaReconectar)).toEqual([1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000])
+})
+
+test('cerrar sesión le pide al servidor que borre la cookie', async () => {
+  await conSesion()
+  const pedidos = responder(204, null)
+  globalThis.fetch = (async (url: string, opciones: RequestInit) => {
+    pedidos.push({ url, opciones })
+    return new Response(null, { status: 204 })
+  }) as typeof fetch
+
+  await cerrarSesion()
+
+  expect(pedidos[0]!.url).toBe('/api/usuarios/sesion')
+  expect(pedidos[0]!.opciones.method).toBe('DELETE')
+  expect(guardado.get('sesion')).toBeUndefined()
+})
+
+test('aunque el servidor no responda, cerrar sesión limpia la pantalla', async () => {
+  await conSesion()
+  globalThis.fetch = (async () => {
+    throw new TypeError('Failed to fetch')
+  }) as unknown as typeof fetch
+
+  await cerrarSesion()
+
+  expect(guardado.get('sesion')).toBeUndefined()
 })
