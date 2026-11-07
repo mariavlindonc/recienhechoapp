@@ -6,8 +6,8 @@ Recién hecho le ofrece a otros grupos el envío de notificaciones por email a s
 |---|---|
 | Contrato | [notificaciones.yaml](notificaciones.yaml) (OpenAPI 3.1) |
 | Versión vigente | **1.0.0** |
-| URL pública | Pendiente (se publica antes de la presentación) |
-| Mock público | Pendiente, en Render (se arma con [Dockerfile.mock](Dockerfile.mock)) |
+| URL pública | https://recienhecho-api-gateway.onrender.com (Render, plan gratis: se duerme a los 15 minutos sin uso, [ADR-013](../../adr/ADR-013-capacidad-y-costos.md)) |
+| Mock público | https://recienhecho-notificaciones-mock.onrender.com (se arma con [Dockerfile.mock](Dockerfile.mock)) |
 | Estado | Implementación real disponible en `http://localhost:8080` (por el api-gateway); mock en `http://localhost:4010` |
 | Decisión | [ADR-004](../../adr/ADR-004-contrato-de-notificaciones.md) |
 
