@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { aPedido, aProducto, buscarProductos, crearPedido, ErrorDeApi, ingresar, listarEspeciales, listarMisPedidos, rechazarEspecial, responderCotizacion, TRANSICIONES } from './api.ts'
+import { aPedido, aProducto, buscarProductos, cancelarPedido, crearPedido, ErrorDeApi, esperaParaReconectar, ingresar, listarEspeciales, listarMisPedidos, cerrarSesion, rechazarEspecial, responderCotizacion, seguirPedidos, TRANSICIONES } from './api.ts'
 
 // sessionStorage no existe en bun test: alcanza con un mapa.
 const guardado = new Map<string, string>()
@@ -57,7 +57,7 @@ test('la búsqueda manda los filtros como los espera productos (ADR-008)', async
   expect(pagina.items[0]!.nombre).toBe('Budín de limón')
 })
 
-test('con sesión manda el token y el pedido lleva Idempotency-Key', async () => {
+test('la sesión va en la cookie: JavaScript no guarda ni manda el token (ADR-019)', async () => {
   responder(200, { token: 'token-1', usuario: { id: 'u1', email: 'a@a.com', nombre: 'Ana', rol: 'comprador' } })
   await ingresar('a@a.com', 'clave-segura')
   const pedidos = responder(201, { id: 'pd1', items: [], fecha: '2026-11-02', precioCentavos: 0, tipo: 'inmediato', estado: 'pendiente_confirmacion' })
@@ -65,7 +65,8 @@ test('con sesión manda el token y el pedido lleva Idempotency-Key', async () =>
   await crearPedido({ productoId: 'p1', cantidad: 1, clave: 'clave-1' })
 
   const headers = pedidos[0]!.opciones.headers as Record<string, string>
-  expect(headers.Authorization).toBe('Bearer token-1')
+  expect(headers.Authorization).toBeUndefined()
+  expect(guardado.get('sesion')).not.toContain('token-1')
   expect(headers['Idempotency-Key']).toBeTruthy()
   expect(JSON.parse(pedidos[0]!.opciones.body as string)).toEqual({ tipo: 'inmediato', items: [{ productoId: 'p1', cantidad: 1 }] })
 })
@@ -144,4 +145,125 @@ test('el comprador ve el mensaje del vendedor en sus pedidos', async () => {
 test('desde listo se puede mandar en camino o entregar directo', () => {
   expect(TRANSICIONES.listo).toEqual(['en_camino', 'entregado'])
   expect(TRANSICIONES.en_camino).toEqual(['entregado'])
+})
+
+// WebSocket falso: guarda las conexiones abiertas para que el test maneje cada una.
+class SocketFalso {
+  static abiertos: SocketFalso[] = []
+  onopen?: () => void
+  onmessage?: (evento: { data: string }) => void
+  onclose?: () => void
+  cerrado = false
+  constructor(readonly url: string) {
+    SocketFalso.abiertos.push(this)
+  }
+  close() {
+    this.cerrado = true
+    this.onclose?.()
+  }
+}
+
+async function conSesion() {
+  responder(200, { token: 'token/1', usuario: { id: 'u1', email: 'a@a.com', nombre: 'Ana', rol: 'comprador' } })
+  await ingresar('a@a.com', 'clave-segura')
+}
+
+function prepararSockets() {
+  SocketFalso.abiertos = []
+  globalThis.WebSocket = SocketFalso as unknown as typeof WebSocket
+  globalThis.location = { protocol: 'http:', host: 'localhost:5173' } as Location
+}
+
+test('B2: se conecta, se pone al día y actualiza con cada cambio (ADR-018)', async () => {
+  await conSesion()
+  prepararSockets()
+  let actualizaciones = 0
+
+  const dejar = seguirPedidos(() => actualizaciones++, () => 0)
+  const socket = SocketFalso.abiertos[0]!
+  expect(socket.url).toBe('ws://localhost:5173/api/pedidos/tiempo-real')
+
+  socket.onopen!()
+  expect(actualizaciones).toBe(1)
+  socket.onmessage!({ data: JSON.stringify({ tipo: 'estado_cambiado', idPedido: 'pd1', estadoNuevo: 'listo' }) })
+  expect(actualizaciones).toBe(2)
+  // Los tipos nuevos, como la ubicación del delivery, se ignoran hasta que la pantalla los use.
+  socket.onmessage!({ data: JSON.stringify({ tipo: 'ubicacion', idPedido: 'pd1' }) })
+  expect(actualizaciones).toBe(2)
+  dejar()
+})
+
+test('B2: si se corta se reconecta sola y, al volver, se pone al día', async () => {
+  await conSesion()
+  prepararSockets()
+  let actualizaciones = 0
+
+  const dejar = seguirPedidos(() => actualizaciones++, () => 0)
+  SocketFalso.abiertos[0]!.onclose!()
+  await Bun.sleep(5)
+
+  expect(SocketFalso.abiertos).toHaveLength(2)
+  SocketFalso.abiertos[1]!.onopen!()
+  expect(actualizaciones).toBe(1)
+  dejar()
+})
+
+test('al salir de la pantalla se cierra y no se reconecta', async () => {
+  await conSesion()
+  prepararSockets()
+
+  const dejar = seguirPedidos(() => {}, () => 0)
+  dejar()
+  await Bun.sleep(5)
+
+  expect(SocketFalso.abiertos[0]!.cerrado).toBe(true)
+  expect(SocketFalso.abiertos).toHaveLength(1)
+})
+
+test('sin sesión de comprador no se conecta', () => {
+  prepararSockets()
+
+  seguirPedidos(() => {}, () => 0)()
+
+  expect(SocketFalso.abiertos).toHaveLength(0)
+})
+
+test('las esperas para reconectarse crecen hasta 30 s', () => {
+  expect([0, 1, 2, 3, 4, 5, 6, 20].map(esperaParaReconectar)).toEqual([1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000])
+})
+
+test('cerrar sesión le pide al servidor que borre la cookie', async () => {
+  await conSesion()
+  const pedidos = responder(204, null)
+  globalThis.fetch = (async (url: string, opciones: RequestInit) => {
+    pedidos.push({ url, opciones })
+    return new Response(null, { status: 204 })
+  }) as typeof fetch
+
+  await cerrarSesion()
+
+  expect(pedidos[0]!.url).toBe('/api/usuarios/sesion')
+  expect(pedidos[0]!.opciones.method).toBe('DELETE')
+  expect(guardado.get('sesion')).toBeUndefined()
+})
+
+test('aunque el servidor no responda, cerrar sesión limpia la pantalla', async () => {
+  await conSesion()
+  globalThis.fetch = (async () => {
+    throw new TypeError('Failed to fetch')
+  }) as unknown as typeof fetch
+
+  await cerrarSesion()
+
+  expect(guardado.get('sesion')).toBeUndefined()
+})
+
+test('el comprador cancela una solicitud especial: deja de estar abierta y pasa a sus pedidos (ADR-017)', async () => {
+  const pedidos = responder(200, { id: 'e1', items: [{ productoId: '', nombreProducto: 'Torta', cantidad: 1 }], fecha: '2026-12-01', precioCentavos: 0, tipo: 'especial', estado: 'cancelado', motivoCancelacion: 'Cancelado por el comprador.' })
+
+  const cancelado = await cancelarPedido('e1')
+
+  expect(pedidos[0]!.url).toBe('/api/pedidos/e1/cancelacion')
+  expect(pedidos[0]!.opciones.method).toBe('POST')
+  expect(cancelado.estado).toBe('cancelado')
 })

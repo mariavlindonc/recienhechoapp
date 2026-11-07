@@ -3,7 +3,7 @@
 ## Estado
 
 - **Aceptado** para la comunicación síncrona del api-gateway, Entrega 2 (validado con el proxy de `/notificaciones*`).
-- **Aceptado** para el resto (llamadas de `pedidos` y mensajería con RabbitMQ) por Agustín el 26/10/2026; implementado con `pedidos`.
+- **Aceptado** para el resto (llamadas de `pedidos` y mensajería con RabbitMQ) el 26/10/2026; implementado con `pedidos`.
 
 ## Contexto
 
@@ -76,7 +76,7 @@ Que el evento se publique sí o sí después de guardar el cambio, aunque el ser
 - **Llamada a `productos`:** timeout de 1 s y 2 reintentos (100 y 200 ms) solo ante timeout, sin conexión, 502, 503 o 504; un 404 es "producto inexistente" y no se reintenta. Probado con un servidor HTTP falso (`backend/pedidos/internal/adaptadores/productos`).
 - **Mensajería:** `pedidos` publica en el exchange `pedidos` con confirmación del broker y mensajes persistentes, desde la bandeja de salida (ADR-015). `notificaciones` consume la cola `notificaciones.pedidos` y usa el `idEvento` como `Idempotency-Key`: reutiliza la idempotencia que ya tenía la capacidad publicada, así que un evento repetido no manda otro mail.
 - **Solo se publica `pedido.estado_cambiado`**, también al crear el pedido (con `estadoAnterior` vacío). `pedido.confirmado` no se publica porque nadie lo consume: es un `estado_cambiado` con `estadoNuevo: confirmado`.
-- **El evento lleva el email del comprador, los ítems (producto y cantidad) y la fecha**, así `notificaciones` arma el mail sin consultar a otro servicio. El email sale del token de sesión: el api-gateway lo pasa en `X-Email-Usuario` ([ADR-016](ADR-016-autenticacion.md)).
+- **El evento lleva el email del comprador, los ítems (producto y cantidad) y la fecha**, así `notificaciones` arma el mail sin consultar a otro servicio. El email sale del token de sesión: el api-gateway lo pasa en `X-Email-Usuario` ([ADR-019](ADR-019-sesion-en-cookie.md)).
 - **Reintentos y DLQ con colas quorum:** la cola tiene `x-delivery-limit: 3` y `x-dead-letter-exchange: notificaciones.fallidos`. Una falla transitoria devuelve el mensaje a la cola y RabbitMQ cuenta las entregas; pasado el límite, lo manda a `notificaciones.fallidos`. Un mensaje ilegible, de un tipo o versión desconocidos o con un email inválido va directo a la DLQ. Los reintentos son inmediatos, sin espera entre uno y otro.
 - **Medido en Docker:** con RabbitMQ detenido, un pedido nuevo se crea igual (`201`) y sus 2 eventos quedan en la bandeja; al volver RabbitMQ, salen en menos de 25 s y llegan los 2 mails. El consumidor de `notificaciones` se reconecta solo cada 5 s.
 - **Traza distribuida:** el `traceparent` viaja en los headers del mensaje. Un `POST /pedidos` queda en Jaeger como una sola traza: api-gateway → pedidos (transacción en MongoDB) → consumidor de notificaciones → MongoDB de notificaciones.

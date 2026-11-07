@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -168,10 +169,13 @@ func (solicitud Solicitud) Validar() error {
 }
 
 // Huella identifica el contenido de la solicitud, para la idempotencia: la misma
-// Idempotency-Key con otra huella es un conflicto.
+// Idempotency-Key con otra huella es un conflicto. Los ítems se ordenan en una
+// copia: el orden en que llegan no cambia qué se pidió.
 func (solicitud Solicitud) Huella() string {
 	partes := []string{string(solicitud.Tipo), solicitud.Fecha, solicitud.Franja}
-	for _, item := range solicitud.Items {
+	items := slices.Clone(solicitud.Items)
+	slices.SortFunc(items, func(uno, otro ItemSolicitado) int { return strings.Compare(uno.ProductoID, otro.ProductoID) })
+	for _, item := range items {
 		partes = append(partes, item.ProductoID, strconv.Itoa(item.Cantidad))
 	}
 	contenido := strings.Join(partes, "\x00")

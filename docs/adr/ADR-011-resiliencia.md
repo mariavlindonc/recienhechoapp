@@ -3,10 +3,10 @@
 ## Estado
 
 - **Aceptado** para `api-gateway` y `notificaciones`, Entrega 2.
-- **Aceptado** para `productos` con el plan que aprobó Agustín el 26/10/2026; implementado el mismo día.
+- **Aceptado** para `productos` con el plan aprobado el 26/10/2026; implementado el mismo día.
 - **Propuesto** para `pedidos`: se acepta al revisar su PR.
 
-Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementado en la issue #33: el adaptador `internal/adaptadores/disyuntor` envuelve al remitente SMTP. Con el circuito abierto devuelve `ErrCorreoNoDisponible`, y la aplicación posterga la notificación sin gastar un intento. El disyuntor vive del lado de los adaptadores, como el de `pedidos` en ADR-010, porque la aplicación no importa tecnologías ([ADR-007](ADR-007-arquitectura-interna.md)). Falta la métrica y la alerta del estado del circuito (parte de Athina en la #33).
+Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementado en la issue #33: el adaptador `internal/adaptadores/disyuntor` envuelve al remitente SMTP. Con el circuito abierto devuelve `ErrCorreoNoDisponible`, y la aplicación posterga la notificación sin gastar un intento. El disyuntor vive del lado de los adaptadores, como el de `pedidos` en ADR-010, porque la aplicación no importa tecnologías ([ADR-007](ADR-007-arquitectura-interna.md)). Falta la métrica y la alerta del estado del circuito (#33).
 
 Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB y envío en segundo plano con reintentos. El api-gateway ya tiene el proxy con timeout de 3 s, `503 no_disponible` y el límite de uso. Falta el balanceo con chequeos de `/vivo` ([ADR-012](ADR-012-balanceo-de-carga.md)).
 
@@ -31,7 +31,7 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 | productos | Redis | Se lee de MySQL, más lento | Timeout de 50 ms y sin reintentos ([ADR-009](ADR-009-cache.md)); no frena el arranque |
 | productos | Meilisearch | `GET /productos/busqueda` responde `503 busqueda_no_disponible`; el catálogo por categoría sigue. Los cambios esperan en la bandeja y se aplican solos al volver | Outbox del índice ([ADR-008](ADR-008-busqueda.md)); 2 s por búsqueda; no frena el arranque |
 | productos | MySQL | `503 no_disponible`; `/health` informa la falla | Timeout de 2 s por operación (en el DSN); el servicio no arranca sin MySQL |
-| usuarios | MySQL | Registro, inicio de sesión y perfil responden `503 no_disponible`; `/health` informa la falla. Las sesiones abiertas siguen andando hasta que vence el token, porque el gateway no consulta a `usuarios` ([ADR-016](ADR-016-autenticacion.md)) | Timeout de 2 s por operación (en el DSN); el servicio no arranca sin MySQL |
+| usuarios | MySQL | Registro, inicio de sesión y perfil responden `503 no_disponible`; `/health` informa la falla. Las sesiones abiertas siguen andando hasta que vence el token, porque el gateway no consulta a `usuarios` ([ADR-019](ADR-019-sesion-en-cookie.md)) | Timeout de 2 s por operación (en el DSN); el servicio no arranca sin MySQL |
 
 **Mecanismos:**
 

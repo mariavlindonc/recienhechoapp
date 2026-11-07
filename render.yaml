@@ -30,6 +30,9 @@ services:
       # Sin usuarios no se firma ningún token; el gateway igual exige el secreto.
       - key: JWT_SECRETO
         generateValue: true
+      # Sin frontend en Render nadie la usa, pero el gateway la exige (ADR-019).
+      - key: CLAVE_FRONTEND
+        generateValue: true
       # Las mismas claves que en notificaciones, para el límite por grupo (ADR-004).
       - key: NOTIFICACIONES_CLAVES_API
         sync: false

@@ -144,3 +144,44 @@ func TestDatosDespuesDelJSONSeRechazan(prueba *testing.T) {
 		}
 	}
 }
+
+// La sesión del navegador va en una cookie que JavaScript no puede leer (ADR-019).
+func TestIniciarSesionDejaLaCookie(prueba *testing.T) {
+	respuesta := atender(servicioFalso{usuario: ana}, http.MethodPost, "/usuarios/sesion", `{"email":"ana@ejemplo.com","clave":"clave-segura"}`, nil)
+
+	if respuesta.Code != http.StatusOK {
+		prueba.Fatalf("estado = %d: %s", respuesta.Code, respuesta.Body)
+	}
+	cookies := respuesta.Result().Cookies()
+	if len(cookies) != 1 {
+		prueba.Fatalf("cookies = %v", cookies)
+	}
+	cookie := cookies[0]
+	if cookie.Name != "sesion" || cookie.Value != "token" || cookie.Path != "/" || !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode {
+		prueba.Errorf("cookie = %+v", cookie)
+	}
+	if cookie.MaxAge != 0 || !cookie.Expires.IsZero() {
+		prueba.Errorf("la cookie se borra al cerrar el navegador: %+v", cookie)
+	}
+}
+
+func TestSiNoEntraNoHayCookie(prueba *testing.T) {
+	respuesta := atender(servicioFalso{err: modelo.ErrCredencialesInvalidas}, http.MethodPost, "/usuarios/sesion", `{"email":"ana@ejemplo.com","clave":"mal"}`, nil)
+
+	if respuesta.Code != http.StatusUnauthorized || len(respuesta.Result().Cookies()) != 0 {
+		prueba.Errorf("estado %d, cookies %v", respuesta.Code, respuesta.Result().Cookies())
+	}
+}
+
+// JavaScript no puede borrar la cookie: cerrar sesión es una ruta (ADR-019).
+func TestCerrarSesionBorraLaCookie(prueba *testing.T) {
+	respuesta := atender(servicioFalso{}, http.MethodDelete, "/usuarios/sesion", "", nil)
+
+	if respuesta.Code != http.StatusNoContent {
+		prueba.Fatalf("estado = %d", respuesta.Code)
+	}
+	cookies := respuesta.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != "sesion" || cookies[0].Value != "" || cookies[0].MaxAge >= 0 || !cookies[0].HttpOnly || !cookies[0].Secure {
+		prueba.Errorf("cookies = %+v", cookies)
+	}
+}

@@ -74,7 +74,7 @@ func ejecutar() error {
 	proxyUsuarios := limitarIntentos(limiteIntentos, nuevoProxyBalanceado("usuarios", configuracion.instanciasUsuarios, tiempoMaximoServicios, medidor.contarReenvio("usuarios")))
 	servidor := &http.Server{
 		Addr:              ":" + configuracion.puerto,
-		Handler:           nuevoRouter(configuracion.secretoJWT, proxyNotificaciones, proxyPedidos, proxyProductos, proxyUsuarios, medidor.medirSolicitudes()),
+		Handler:           nuevoRouter(configuracion.secretoJWT, proxyNotificaciones, proxyPedidos, proxyProductos, proxyUsuarios, medidor.medirSolicitudes(), leerIPDelNavegador(configuracion.claveFrontend)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -124,7 +124,7 @@ func ejecutar() error {
 // /pedidos y /capacidad van a pedidos, /productos, /categorias e /imagenes van
 // a productos, y /usuarios va a usuarios. /internos no se enruta: es solo para
 // llamadas entre servicios. Los headers de identidad salen del token, nunca del
-// cliente (ADR-016).
+// cliente (ADR-019).
 func nuevoRouter(secretoJWT []byte, notificaciones, pedidos, productos, usuarios http.Handler, extras ...gin.HandlerFunc) *gin.Engine {
 	router := gin.New()
 	// otelgin va primero: abre el span de la solicitud y así el middleware de logs
@@ -151,7 +151,8 @@ func nuevoRouter(secretoJWT []byte, notificaciones, pedidos, productos, usuarios
 
 // sinChequeosDeSalud evita trazar los chequeos de salud: los consultan máquinas,
 // cada pocos segundos y siempre igual, así que no aportan información y tapan las
-// trazas útiles (ADR-006).
+// trazas útiles (ADR-006). Tampoco se traza el WebSocket: dura minutos, y una traza
+// que tarda eso no dice nada (ADR-018).
 func sinChequeosDeSalud(pedido *http.Request) bool {
-	return pedido.URL.Path != "/health"
+	return pedido.URL.Path != "/health" && pedido.URL.Path != rutaTiempoReal
 }

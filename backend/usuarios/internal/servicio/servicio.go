@@ -1,5 +1,5 @@
 // Package servicio es la capa de reglas de usuarios (ADR-007): valida los datos,
-// hashea las contraseñas con bcrypt y firma el token de sesión (ADR-016). Solo
+// hashea las contraseñas con bcrypt y firma el token de sesión (ADR-019). Solo
 // llama a la capa de abajo, el repositorio.
 package servicio
 
@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	// VidaDelToken es cuánto dura una sesión (ADR-016): un token no se puede
+	// VidaDelToken es cuánto dura una sesión (ADR-019): un token no se puede
 	// revocar, así que la vida corta acota el daño si se filtra.
 	VidaDelToken = time.Hour
 
@@ -155,7 +155,7 @@ func (servicio *Servicio) Ping(contexto context.Context) error {
 }
 
 // Afirmaciones son los datos del token. El api-gateway los convierte en los
-// headers X-Id-Usuario, X-Email-Usuario y X-Rol-Usuario (ADR-016).
+// headers X-Id-Usuario, X-Email-Usuario y X-Rol-Usuario (ADR-019).
 type Afirmaciones struct {
 	Email string `json:"email"`
 	Rol   string `json:"rol"`

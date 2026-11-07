@@ -23,6 +23,7 @@ type casosFalsos struct {
 	solicitud    dominio.Solicitud
 	errCapacidad error
 	errResponder error
+	conectado    string
 }
 
 func (casos *casosFalsos) Crear(_ context.Context, comprador dominio.Comprador, _ string, solicitud dominio.Solicitud) (dominio.Pedido, error) {
@@ -80,7 +81,7 @@ const cuerpoPedido = `{"tipo":"programado","items":[{"productoId":"medialuna","c
 func pedir(casos *casosFalsos, metodo, ruta, cuerpo string, headers map[string]string) (*httptest.ResponseRecorder, map[string]any) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	api.Registrar(router, casos, nil)
+	api.Registrar(router, casos, nil, casos.conectar)
 	solicitud := httptest.NewRequest(metodo, ruta, strings.NewReader(cuerpo))
 	if cuerpo != "" {
 		solicitud.Header.Set("Content-Type", "application/json")
@@ -256,5 +257,24 @@ func TestCotizacionVencidaDiceElMotivo(prueba *testing.T) {
 				prueba.Errorf("estado %d, mensaje %q; se esperaba %q", respuesta.Code, datos["mensaje"], caso.mensaje)
 			}
 		})
+	}
+}
+
+func (casos *casosFalsos) conectar(escritor http.ResponseWriter, _ *http.Request, idComprador string) {
+	casos.conectado = idComprador
+	escritor.WriteHeader(http.StatusSwitchingProtocols)
+}
+
+// El seguimiento en vivo es del comprador, y el id sale de los headers del gateway (ADR-018).
+func TestTiempoRealEsSoloParaElComprador(prueba *testing.T) {
+	casos := &casosFalsos{}
+	if respuesta, _ := pedir(casos, http.MethodGet, "/pedidos/tiempo-real", "", comprador); respuesta.Code != http.StatusSwitchingProtocols || casos.conectado != "comprador-1" {
+		prueba.Errorf("estado %d, comprador %q", respuesta.Code, casos.conectado)
+	}
+	if respuesta, _ := pedir(&casosFalsos{}, http.MethodGet, "/pedidos/tiempo-real", "", vendedor); respuesta.Code != http.StatusForbidden {
+		prueba.Errorf("el vendedor no sigue pedidos: estado %d", respuesta.Code)
+	}
+	if respuesta, _ := pedir(&casosFalsos{}, http.MethodGet, "/pedidos/tiempo-real", "", nil); respuesta.Code != http.StatusUnauthorized {
+		prueba.Errorf("sin usuario: estado %d", respuesta.Code)
 	}
 }

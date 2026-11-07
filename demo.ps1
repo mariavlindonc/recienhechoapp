@@ -75,9 +75,12 @@ function Enviar([string] $metodo, [string] $ruta, $cuerpo = $null, [hashtable] $
 }
 
 # El token del vendedor se guarda: iniciar sesión en cada comando gastaría los 10
-# intentos por minuto que deja el gateway (ADR-016).
+# intentos por minuto que deja el gateway (ADR-019). El token vence a la hora: pasados
+# 50 minutos se pide otro.
 function Token {
-	if (Test-Path $archivoToken) { return Get-Content $archivoToken -Raw }
+	if ((Test-Path $archivoToken) -and (Get-Item $archivoToken).LastWriteTime -gt (Get-Date).AddMinutes(-50)) {
+		return Get-Content $archivoToken -Raw
+	}
 	$respuesta = Enviar POST /usuarios/sesion @{ email = (Valor VENDEDOR_EMAIL); clave = (Valor VENDEDOR_CLAVE) }
 	if ($respuesta.StatusCode -ne 200) { Fallar "no se pudo iniciar sesión como vendedor: HTTP $($respuesta.StatusCode)" }
 	$token = ($respuesta.Content | ConvertFrom-Json).token

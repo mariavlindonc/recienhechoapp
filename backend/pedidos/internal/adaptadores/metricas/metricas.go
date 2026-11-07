@@ -34,6 +34,8 @@ type Metricas struct {
 	inventario  *prometheus.CounterVec
 	circuito    *prometheus.GaugeVec
 	publicados  *prometheus.CounterVec
+	conexiones  prometheus.Gauge
+	mensajes    prometheus.Counter
 }
 
 // Nuevas crea las métricas, además de las del proceso y del runtime de Go.
@@ -65,9 +67,18 @@ func Nuevas() *Metricas {
 			Name: "pedidos_eventos_publicados_total",
 			Help: "Eventos de la bandeja de salida que se intentaron publicar, por resultado: publicado o error.",
 		}, []string{"resultado"}),
+		conexiones: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "pedidos_conexiones_tiempo_real",
+			Help: "Compradores conectados por WebSocket en este momento (ADR-018).",
+		}),
+		mensajes: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "pedidos_mensajes_tiempo_real_total",
+			Help: "Avisos enviados a los compradores por WebSocket (ADR-018).",
+		}),
 	}
 	metricas.registro.MustRegister(
 		metricas.solicitudes, metricas.duracion, metricas.registrados, metricas.inventario, metricas.circuito, metricas.publicados,
+		metricas.conexiones, metricas.mensajes,
 		collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 	// Las series existen desde el arranque, así las alertas funcionan aunque todavía no haya pasado nada.
@@ -111,6 +122,21 @@ func (metricas *Metricas) MarcarCircuito(actual puertos.EstadoCircuito) {
 // ContarPublicacion suma un intento de publicar un evento.
 func (metricas *Metricas) ContarPublicacion(resultado string) {
 	metricas.publicados.WithLabelValues(resultado).Inc()
+}
+
+// ConexionAbierta suma un comprador conectado por WebSocket.
+func (metricas *Metricas) ConexionAbierta() {
+	metricas.conexiones.Inc()
+}
+
+// ConexionCerrada resta un comprador conectado por WebSocket.
+func (metricas *Metricas) ConexionCerrada() {
+	metricas.conexiones.Dec()
+}
+
+// MensajeEnviado suma un aviso enviado por WebSocket.
+func (metricas *Metricas) MensajeEnviado() {
+	metricas.mensajes.Inc()
 }
 
 // Solicitudes es un middleware de Gin que cuenta y mide cada solicitud, con la

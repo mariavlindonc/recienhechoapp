@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado por Agustín el 26/10/2026. Implementado con `productos` el mismo día.
+Aceptado el 26/10/2026. Implementado con `productos` el mismo día.
 
 ## Contexto
 

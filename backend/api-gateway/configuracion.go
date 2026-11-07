@@ -16,18 +16,23 @@ type configuracion struct {
 	instanciasPedidos        []*url.URL
 	instanciasProductos      []*url.URL
 	instanciasUsuarios       []*url.URL
-	// secretoJWT es el mismo con el que usuarios firma los tokens (ADR-016).
+	// secretoJWT es el mismo con el que usuarios firma los tokens (ADR-019).
 	secretoJWT []byte
 	// clavesAPI asocia cada clave de notificaciones con su grupo (clave -> grupo),
 	// para contar el límite por grupo (ADR-004).
 	clavesAPI       map[string]string
 	limitePorMinuto int
-	// intentosPorMinuto es el límite por IP del registro y el inicio de sesión (ADR-016).
+	// intentosPorMinuto es el límite por IP del registro y el inicio de sesión (ADR-019).
 	intentosPorMinuto int
+	// claveFrontend autentica al servidor del frontend cuando informa la IP del navegador.
+	claveFrontend string
 }
 
-// largoMinimoSecreto es el mínimo de JWT_SECRETO, igual que en usuarios (ADR-016).
+// largoMinimoSecreto es el mínimo de JWT_SECRETO, igual que en usuarios (ADR-019).
 const largoMinimoSecreto = 32
+
+// largoMinimoClaveFrontend es el mínimo de CLAVE_FRONTEND.
+const largoMinimoClaveFrontend = 16
 
 // leerConfiguracion recibe la función que busca cada variable (os.Getenv en el
 // servicio, un mapa en los tests). Junta todos los problemas en un solo error para
@@ -96,6 +101,10 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 			problemas = append(problemas, fmt.Errorf("USUARIOS_URLS: %w", err))
 		}
 		leida.instanciasUsuarios = instancias
+	}
+	leida.claveFrontend = obligatoria("CLAVE_FRONTEND")
+	if leida.claveFrontend != "" && len(leida.claveFrontend) < largoMinimoClaveFrontend {
+		problemas = append(problemas, fmt.Errorf("CLAVE_FRONTEND tiene que tener al menos %d bytes", largoMinimoClaveFrontend))
 	}
 	if secreto := obligatoria("JWT_SECRETO"); secreto != "" {
 		if len(secreto) < largoMinimoSecreto {

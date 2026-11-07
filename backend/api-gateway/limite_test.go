@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestLimitePorGrupo(prueba *testing.T) {
@@ -54,7 +56,7 @@ func TestLimitePorGrupo(prueba *testing.T) {
 }
 
 // El inicio de sesión y el registro tienen un límite por IP: frena a quien prueba
-// contraseñas y protege la CPU, que bcrypt usa en cada intento (ADR-016).
+// contraseñas y protege la CPU, que bcrypt usa en cada intento (ADR-019).
 func TestLimiteDeIntentosPorIP(prueba *testing.T) {
 	reloj := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
 	limite := nuevoLimitador(2, time.Minute, func() time.Time { return reloj })
@@ -131,5 +133,86 @@ func TestLaBarraFinalNoSalteaElLimite(prueba *testing.T) {
 		if ruta != "/usuarios/sesion" && respuesta.Code != http.StatusTooManyRequests {
 			prueba.Errorf("%s: estado %d, se esperaba 429", ruta, respuesta.Code)
 		}
+	}
+}
+
+const claveFrontendDePrueba = "clave-del-frontend-de-prueba"
+
+// routerDeIntentos arma el gateway mínimo: lee la IP del navegador y limita a 1
+// intento por minuto. Devuelve también lo que le llegó al servicio.
+func routerDeIntentos() (http.Handler, *[]*http.Request) {
+	gin.SetMode(gin.TestMode)
+	recibidas := &[]*http.Request{}
+	limite := nuevoLimitador(1, time.Minute, time.Now)
+	servicio := limitarIntentos(limite, http.HandlerFunc(func(_ http.ResponseWriter, pedido *http.Request) {
+		*recibidas = append(*recibidas, pedido)
+	}))
+	router := gin.New()
+	router.Use(leerIPDelNavegador(claveFrontendDePrueba))
+	router.Any("/usuarios/*resto", gin.WrapH(servicio))
+	return router, recibidas
+}
+
+func intentar(router http.Handler, headers map[string]string) int {
+	pedido := httptest.NewRequest(http.MethodPost, "/usuarios/sesion", nil)
+	pedido.RemoteAddr = "172.18.0.5:40000" // la IP del servidor del frontend
+	for nombre, valor := range headers {
+		pedido.Header.Set(nombre, valor)
+	}
+	respuesta := httptest.NewRecorder()
+	router.ServeHTTP(respuesta, pedido)
+	return respuesta.Code
+}
+
+// Todos los navegadores llegan desde la IP del servidor del frontend: cada uno tiene
+// que contar por su propia IP, o un intento de uno frenaría a los demás (#95).
+func TestCadaNavegadorTieneSuPropioLimite(prueba *testing.T) {
+	router, _ := routerDeIntentos()
+	navegador := func(ip string) map[string]string {
+		return map[string]string{"X-IP-Navegador": ip, "X-Clave-Frontend": claveFrontendDePrueba}
+	}
+
+	if estado := intentar(router, navegador("203.0.113.1")); estado != http.StatusOK {
+		prueba.Fatalf("primer navegador: %d", estado)
+	}
+	if estado := intentar(router, navegador("203.0.113.2")); estado != http.StatusOK {
+		prueba.Errorf("otro navegador no tiene que quedar frenado: %d", estado)
+	}
+	if estado := intentar(router, navegador("203.0.113.1")); estado != http.StatusTooManyRequests {
+		prueba.Errorf("el primero ya usó su intento: %d", estado)
+	}
+}
+
+// El gateway publica su puerto: sin la clave, una IP inventada no cambia nada.
+func TestLaIPDelNavegadorNoSePuedeInventar(prueba *testing.T) {
+	casos := map[string]func(ip string) map[string]string{
+		"sin clave": func(ip string) map[string]string { return map[string]string{"X-IP-Navegador": ip} },
+		"clave errónea": func(ip string) map[string]string {
+			return map[string]string{"X-IP-Navegador": ip, "X-Clave-Frontend": "otra"}
+		},
+	}
+	for nombre, armar := range casos {
+		prueba.Run(nombre, func(prueba *testing.T) {
+			router, _ := routerDeIntentos()
+			intentar(router, armar("198.51.100.1"))
+			if estado := intentar(router, armar("198.51.100.2")); estado != http.StatusTooManyRequests {
+				prueba.Errorf("estado %d: cuenta la IP de la conexión, no la inventada", estado)
+			}
+		})
+	}
+}
+
+// Los servicios no necesitan esos headers, y la clave no tiene que llegarles.
+func TestLosHeadersDelFrontendNoSiguenViaje(prueba *testing.T) {
+	router, recibidas := routerDeIntentos()
+
+	intentar(router, map[string]string{"X-IP-Navegador": "203.0.113.1", "X-Clave-Frontend": claveFrontendDePrueba})
+
+	if len(*recibidas) != 1 {
+		prueba.Fatalf("llegaron %d solicitudes", len(*recibidas))
+	}
+	cabeceras := (*recibidas)[0].Header
+	if cabeceras.Get("X-IP-Navegador") != "" || cabeceras.Get("X-Clave-Frontend") != "" {
+		prueba.Errorf("headers = %v", cabeceras)
 	}
 }
