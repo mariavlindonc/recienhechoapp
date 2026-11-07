@@ -1,5 +1,5 @@
 # Blueprint de Render: la capacidad de notificaciones en el plan gratis (ADR-013).
-# Sube el api-gateway, una instancia de notificaciones y un Key Value. El resto del
+# Sube el api-gateway, una instancia de notificaciones, el mock del contrato y un Key Value. El resto del
 # sistema corre en el compose local. Las variables con sync: false se cargan a mano
 # en Render la primera vez: son secretos o dependen de la URL que asigne Render.
 
@@ -68,6 +68,17 @@ services:
       # Tiene que ser un remitente verificado en Brevo.
       - key: SMTP_REMITENTE
         sync: false
+
+  # Mock del contrato (Prism) para que el grupo consumidor pruebe sin pegarle al
+  # servicio real (ADR-004). Se duerme igual que los otros y solo gasta horas si se usa.
+  - type: web
+    name: recienhecho-notificaciones-mock
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: feature/notificaciones-render
+    dockerfilePath: ./docs/contracts/notificaciones/Dockerfile.mock
+    dockerContext: ./docs/contracts/notificaciones
 
   - type: keyvalue
     name: recienhecho-notificaciones-datos

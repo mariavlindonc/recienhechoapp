@@ -7,6 +7,7 @@ Recién hecho le ofrece a otros grupos el envío de notificaciones por email a s
 | Contrato | [notificaciones.yaml](notificaciones.yaml) (OpenAPI 3.1) |
 | Versión vigente | **1.0.0** |
 | URL pública | Pendiente (se publica antes de la presentación) |
+| Mock público | Pendiente, en Render (se arma con [Dockerfile.mock](Dockerfile.mock)) |
 | Estado | Implementación real disponible en `http://localhost:8080` (por el api-gateway); mock en `http://localhost:4010` |
 | Decisión | [ADR-004](../../adr/ADR-004-contrato-de-notificaciones.md) |
 
