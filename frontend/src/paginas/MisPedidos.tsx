@@ -59,6 +59,10 @@ export default function MisPedidos() {
                   <md-button color="text" onClick={() => responder(especial.id, false)}>Rechazar</md-button>
                 </div>
               )}
+              {/* Sin cotizar se retira; ya cotizado se rechaza (ADR-017). */}
+              {especial.estado === 'solicitado' && (
+                <md-button color="text" onClick={() => cancelar(especial.id)}>Cancelar solicitud</md-button>
+              )}
             </div>
           </md-card>
         ))}
