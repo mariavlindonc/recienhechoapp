@@ -77,6 +77,8 @@ Lo que cambió respecto de lo escrito antes:
 
 Cada operación contra MongoDB se corta a los 2 s ([ADR-011](ADR-011-resiliencia.md)); sin ese límite el driver esperaba 30 s. MongoDB ya corre en el compose (`mongo-notificaciones`), y las decisiones de `usuarios`, `productos` y `pedidos` siguen propuestas hasta implementar cada servicio.
 
+**En Render** ([ADR-013](ADR-013-capacidad-y-costos.md)), `notificaciones` guarda en el Key Value gratis (Redis) porque Render no tiene MongoDB gratis. Con `REDIS_URL` en lugar de `MONGO_URI` se usa el adaptador de Redis, que cumple el mismo puerto `Repositorio`: cada notificación en JSON, las pendientes en un conjunto ordenado por próximo intento y las claves de idempotencia con vencimiento de 24 h. Tomar una pendiente y actualizarla se hacen con scripts de Lua, así que son atómicos como en MongoDB. Ese Key Value no persiste: si Render lo reinicia, se pierde todo. Alcanza porque la capacidad solo tiene que funcionar el día de la evaluación.
+
 ## Validación (implementación de productos, 26/10/2026)
 
 MySQL 8.4 con GORM para `productos`, en el compose como `mysql-productos`:

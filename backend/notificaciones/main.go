@@ -24,8 +24,10 @@ import (
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/metricas"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/mongodb"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/rabbitmq"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/redis"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/smtp"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/aplicacion"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/puertos"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/registro"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/trazas"
 )
@@ -70,18 +72,11 @@ func ejecutar() error {
 		apagarTrazas(contextoTrazas)
 	}()
 
-	clienteMongo, err := mongo.Connect(options.Client().ApplyURI(configuracion.direccionMongo).SetMonitor(trazas.MonitorMongo()))
+	repositorio, chequearAlmacenamiento, cerrarAlmacenamiento, err := abrirAlmacenamiento(contexto, configuracion)
 	if err != nil {
-		return fmt.Errorf("configurar la conexión a MongoDB: %w", err)
+		return err
 	}
-	defer clienteMongo.Disconnect(context.Background())
-
-	repositorio := mongodb.NuevoRepositorio(clienteMongo.Database(configuracion.baseMongo))
-	contextoArranque, cancelarArranque := context.WithTimeout(contexto, esperaAlArrancar)
-	defer cancelarArranque()
-	if err := repositorio.PrepararIndices(contextoArranque); err != nil {
-		return fmt.Errorf("preparar MongoDB: %w", err)
-	}
+	defer cerrarAlmacenamiento()
 
 	remitenteSMTP, err := smtp.NuevoRemitente(configuracion.smtp)
 	if err != nil {
@@ -102,7 +97,7 @@ func ejecutar() error {
 		ChequearSalud: func(contextoSalud context.Context) error {
 			contextoSalud, cancelarSalud := context.WithTimeout(contextoSalud, esperaSalud)
 			defer cancelarSalud()
-			return clienteMongo.Ping(contextoSalud, nil)
+			return chequearAlmacenamiento(contextoSalud)
 		},
 	})
 	servidor := &http.Server{
@@ -113,7 +108,11 @@ func ejecutar() error {
 
 	var procesos sync.WaitGroup
 	procesos.Add(2)
-	procesos.Go(func() { rabbitmq.Consumir(contexto, configuracion.direccionRabbit, servicio) })
+	if configuracion.direccionRabbit != "" {
+		procesos.Go(func() { rabbitmq.Consumir(contexto, configuracion.direccionRabbit, servicio) })
+	} else {
+		slog.Info("sin RABBITMQ_URL: no se consumen eventos de pedidos")
+	}
 	go func() {
 		defer procesos.Done()
 		enviarPendientes(contexto, servicio, configuracion.intervaloDeEnvio)
@@ -151,6 +150,34 @@ func ejecutar() error {
 	}
 	procesos.Wait()
 	return nil
+}
+
+// abrirAlmacenamiento conecta con MongoDB o, si se configuró REDIS_URL, con Redis
+// (el Key Value gratis de Render, ADR-013). Devuelve también el chequeo de salud
+// y cómo cerrar la conexión.
+func abrirAlmacenamiento(contexto context.Context, configuracion configuracion) (puertos.Repositorio, func(context.Context) error, func(), error) {
+	if configuracion.direccionRedis != "" {
+		repositorio, err := redis.NuevoRepositorio(configuracion.direccionRedis)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return repositorio, repositorio.Ping, func() { repositorio.Cerrar() }, nil
+	}
+
+	clienteMongo, err := mongo.Connect(options.Client().ApplyURI(configuracion.direccionMongo).SetMonitor(trazas.MonitorMongo()))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("configurar la conexión a MongoDB: %w", err)
+	}
+	cerrar := func() { clienteMongo.Disconnect(context.Background()) }
+	repositorio := mongodb.NuevoRepositorio(clienteMongo.Database(configuracion.baseMongo))
+	contextoArranque, cancelarArranque := context.WithTimeout(contexto, esperaAlArrancar)
+	defer cancelarArranque()
+	if err := repositorio.PrepararIndices(contextoArranque); err != nil {
+		cerrar()
+		return nil, nil, nil, fmt.Errorf("preparar MongoDB: %w", err)
+	}
+	chequear := func(contextoSalud context.Context) error { return clienteMongo.Ping(contextoSalud, nil) }
+	return repositorio, chequear, cerrar, nil
 }
 
 // enviarPendientes es el proceso en segundo plano: cada intervalo manda las
