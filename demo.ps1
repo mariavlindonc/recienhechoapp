@@ -196,11 +196,11 @@ function Pedir([string] $metodo, [string] $ruta, [string] $cuerpo) {
 
 # notificar correo@ejemplo.com: crea una notificación y sigue su estado hasta que
 # sale. Con $env:IDEMPOTENCIA se repite la misma clave, para mostrar la idempotencia.
-function Notificar([string] $destinatario) {
+function Notificar([string] $destinatario, [string] $asunto, [string] $cuerpo) {
 	if (-not $destinatario) { Fallar 'uso: ./demo.ps1 notificar correo@ejemplo.com' }
 	$clave = ClaveApi
 	$idempotencia = $env:IDEMPOTENCIA ?? "demo-$([guid]::NewGuid())"
-	$respuesta = Enviar POST /notificaciones @{ canal = 'email'; destinatario = $destinatario; asunto = 'Tu budín está listo'; cuerpo = 'Ya podés retirarlo.' } @{ 'X-API-Key' = $clave; 'Idempotency-Key' = $idempotencia }
+	$respuesta = Enviar POST /notificaciones @{ canal = 'email'; destinatario = $destinatario; asunto = ($asunto ? $asunto : 'Notificación de prueba'); cuerpo = ($cuerpo ? $cuerpo : 'Mensaje de prueba del servicio de notificaciones.') } @{ 'X-API-Key' = $clave; 'Idempotency-Key' = $idempotencia }
 	Write-Host $respuesta.Content
 	Write-Host "HTTP $($respuesta.StatusCode)" -ForegroundColor Cyan
 	if ($respuesta.StatusCode -ne 202) { return }
@@ -241,7 +241,7 @@ Uso: ./demo.ps1 <comando>
   carga                                  30 s de carga sobre el catálogo (para comparar con y sin caché)
 
   pedir METODO /ruta ['{json}']          una solicitud al gateway como vendedor ($env:SIN_SESION='1': sin token)
-  notificar correo@ejemplo.com           crea una notificación y sigue su estado
+  notificar correo [asunto] [cuerpo]     crea una notificación (con el texto que quieras) y sigue su estado
   rafaga [cantidad]                      muchas notificaciones seguidas: muestra el límite por minuto
 
 Para Render:  $env:GATEWAY='https://...'; $env:CLAVE_API='...'; ./demo.ps1 notificar correo@ejemplo.com
@@ -279,7 +279,7 @@ Meilisearch   http://localhost:7700
 		Compose --profile carga run --rm k6 run --vus 20 --duration 30s --tag "testid=catalogo-cache-$estadoCache-$(Get-Date -Format HHmmss)" /carga/catalogo.js
 	}
 	'pedir' { Pedir ($Argumentos[0] ?? '') ($Argumentos[1] ?? '') ($Argumentos[2] ?? '') }
-	'notificar' { Notificar ($Argumentos[0] ?? '') }
+	'notificar' { Notificar ($Argumentos[0] ?? '') ($Argumentos[1] ?? '') ($Argumentos[2] ?? '') }
 	'rafaga' { Rafaga ($Argumentos[0] ? [int] $Argumentos[0] : 70) }
 	{ $_ -in 'ayuda', '-h', '--help' } { Ayuda }
 	default { Ayuda; exit 2 }
