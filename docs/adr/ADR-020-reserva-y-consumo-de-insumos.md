@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado el 06/11/2026 ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)). Reemplaza a [ADR-010](ADR-010-consumo-de-inventario.md). Queda **pendiente de decisión** de dónde salen los `productId` del proveedor (ver [Pendientes](#pendientes)).
+Aceptado el 06/11/2026 ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)). Reemplaza a [ADR-010](ADR-010-consumo-de-inventario.md). Los `productId` del proveedor salen de productos suyos usados como casilleros (ver [De dónde salen los `productId`](#de-dónde-salen-los-productid)).
 
 ## Contexto
 
@@ -102,10 +102,23 @@ El vendedor tiene una pantalla simple: elige un ingrediente y una cantidad, y es
 | El vendedor rechaza | `cancelado`, con el motivo | |
 | El proveedor falla al consumir | No ve nada: el pedido sigue en producción | Si no se resuelve solo, lo ve marcado |
 
+### De dónde salen los `productId`
+
+El proveedor exige un producto que ya exista en su base: no deja crearlos y un id desconocido da `404`. Cada ingrediente nuestro guarda el `productId` de un producto suyo ya cargado, que usamos como casillero, ignorando su nombre. Mientras un ingrediente no tiene `productId`, no se llama al proveedor y el pedido queda marcado para el vendedor.
+
+Por qué casilleros:
+- **Anda hoy.** Depende solo de lo que el proveedor ya tiene cargado, y sirve igual contra su servicio real y contra el mock.
+- **No depende de que el otro grupo haga algo.** Pedirles que carguen nuestros ingredientes exige que respondan, y su servicio no respondía el 06/11 ni el 08/11, con la entrega cerrando el miércoles 11/11 a las 23:59.
+- **El nombre no hace falta.** `quantity` va en nuestras unidades y esa base la usa solo nuestro grupo ([Traducción al proveedor](#traducción-al-proveedor)), así que lo único que importa del producto es que exista y que su stock sea nuestro.
+- **El diseño no cambia si después se carga lo nuestro.** Es el mismo `productId` por ingrediente: pasar a ingredientes cargados es cambiar esos valores.
+
+Qué cuesta:
+- El nombre que devuelve el proveedor (por ejemplo "Harina 000") no tiene por qué coincidir con el ingrediente. Los datos de esa base no se pueden leer como stock real de la pastelería.
+- Hay tantos ingredientes distintos como productos tenga cargados el proveedor: si no alcanzan, los que sobran quedan sin `productId` y marcados para el vendedor.
+
 ## Pendientes
 
-1. **De dónde salen los `productId`.** El proveedor exige un producto que ya exista en esa base. Las opciones son pedirle al grupo proveedor que cargue nuestros ingredientes, o usar productos suyos ya cargados como casilleros, ignorando los nombres. El diseño es el mismo: cada ingrediente guarda un `productId`, y mientras no lo tenga no se llama al proveedor y el pedido queda marcado para el vendedor.
-2. **El servicio del proveedor no responde.** El 06/11 y el 08/11/2026, la URL del contrato devolvía `404` con `x-render-routing: no-server`: Render no tiene ningún servicio en esa dirección. Hasta que esté disponible no se puede medir el tiempo de respuesta, y falta probar que 1,5 s alcance si el servicio tarda en despertar.
+1. **El servicio del proveedor no responde.** El 06/11 y el 08/11/2026, la URL del contrato devolvía `404` con `x-render-routing: no-server`: Render no tiene ningún servicio en esa dirección. Hasta que esté disponible no se puede medir el tiempo de respuesta, y falta probar que 1,5 s alcance si el servicio tarda en despertar.
 
 ## Alternativas consideradas
 
