@@ -67,8 +67,10 @@ token_del_vendedor() {
 	local email clave
 	email=$(grep '^VENDEDOR_EMAIL=' "$temporal/env" | cut -d= -f2-)
 	clave=$(grep '^VENDEDOR_CLAVE=' "$temporal/env" | cut -d= -f2-)
-	curl -s -X POST "$gateway/usuarios/sesion" -H 'Content-Type: application/json' \
-		-d "{\"email\":\"$email\",\"clave\":\"$clave\"}" | sed -nE 's/.*"token":"([^"]+)".*/\1/p'
+	# Por un pipe, igual que en cargar: una clave con tilde o ñ llegaría rota como argumento (#89).
+	printf '%s' "{\"email\":\"$email\",\"clave\":\"$clave\"}" |
+		curl -s -X POST "$gateway/usuarios/sesion" -H 'Content-Type: application/json' --data-binary @- |
+		sed -nE 's/.*"token":"([^"]+)".*/\1/p'
 }
 
 cargar() {
