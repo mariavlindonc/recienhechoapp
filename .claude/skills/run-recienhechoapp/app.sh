@@ -78,12 +78,14 @@ cargar() {
 	[ -n "$token" ] || fallar "no se pudo iniciar sesión como vendedor"
 	local autorizado=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
 	id_de_categoria() { curl -s "$gateway/categorias" | grep -o "{[^}]*\"nombre\":\"$1\"[^}]*}" | sed -E 's/.*"id":"([^"]+)".*/\1/' | head -1; }
+	# El JSON va por un pipe: en Git Bash, los argumentos de curl.exe pierden las tildes (#89).
 	for nombre in Zanahoria Cítricos "Sin harina de trigo"; do
-		[ -n "$(id_de_categoria "$nombre")" ] || curl -s -o /dev/null -X POST "$gateway/categorias" "${autorizado[@]}" -d "{\"nombre\":\"$nombre\"}"
+		[ -n "$(id_de_categoria "$nombre")" ] || printf '%s' "{\"nombre\":\"$nombre\"}" |
+			curl -s -o /dev/null -X POST "$gateway/categorias" "${autorizado[@]}" --data-binary @-
 	done
 	producto() {
-		curl -s -o /dev/null -w "  $1: %{http_code}\n" -X POST "$gateway/productos" "${autorizado[@]}" \
-			-d "{\"nombre\":\"$1\",\"descripcion\":\"$2\",\"categoriaId\":\"$(id_de_categoria "$3")\",\"precioCentavos\":$4,\"anticipacionMinimaDias\":1,\"aptoCeliacos\":$5,\"disponible\":true}"
+		printf '%s' "{\"nombre\":\"$1\",\"descripcion\":\"$2\",\"categoriaId\":\"$(id_de_categoria "$3")\",\"precioCentavos\":$4,\"anticipacionMinimaDias\":1,\"aptoCeliacos\":$5,\"disponible\":true}" |
+			curl -s -o /dev/null -w "  $1: %{http_code}\n" -X POST "$gateway/productos" "${autorizado[@]}" --data-binary @-
 	}
 	if curl -s "$gateway/productos" | grep -q 'Budín de limón'; then
 		echo "los budines ya estaban"
