@@ -67,8 +67,10 @@ token_del_vendedor() {
 	local email clave
 	email=$(grep '^VENDEDOR_EMAIL=' "$temporal/env" | cut -d= -f2-)
 	clave=$(grep '^VENDEDOR_CLAVE=' "$temporal/env" | cut -d= -f2-)
-	curl -s -X POST "$gateway/usuarios/sesion" -H 'Content-Type: application/json' \
-		-d "{\"email\":\"$email\",\"clave\":\"$clave\"}" | sed -nE 's/.*"token":"([^"]+)".*/\1/p'
+	# Por un pipe, igual que en cargar: una clave con tilde o ñ llegaría rota como argumento (#89).
+	printf '%s' "{\"email\":\"$email\",\"clave\":\"$clave\"}" |
+		curl -s -X POST "$gateway/usuarios/sesion" -H 'Content-Type: application/json' --data-binary @- |
+		sed -nE 's/.*"token":"([^"]+)".*/\1/p'
 }
 
 cargar() {
@@ -78,12 +80,14 @@ cargar() {
 	[ -n "$token" ] || fallar "no se pudo iniciar sesión como vendedor"
 	local autorizado=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
 	id_de_categoria() { curl -s "$gateway/categorias" | grep -o "{[^}]*\"nombre\":\"$1\"[^}]*}" | sed -E 's/.*"id":"([^"]+)".*/\1/' | head -1; }
+	# El JSON va por un pipe: en Git Bash, los argumentos de curl.exe pierden las tildes (#89).
 	for nombre in Zanahoria Cítricos "Sin harina de trigo"; do
-		[ -n "$(id_de_categoria "$nombre")" ] || curl -s -o /dev/null -X POST "$gateway/categorias" "${autorizado[@]}" -d "{\"nombre\":\"$nombre\"}"
+		[ -n "$(id_de_categoria "$nombre")" ] || printf '%s' "{\"nombre\":\"$nombre\"}" |
+			curl -s -o /dev/null -X POST "$gateway/categorias" "${autorizado[@]}" --data-binary @-
 	done
 	producto() {
-		curl -s -o /dev/null -w "  $1: %{http_code}\n" -X POST "$gateway/productos" "${autorizado[@]}" \
-			-d "{\"nombre\":\"$1\",\"descripcion\":\"$2\",\"categoriaId\":\"$(id_de_categoria "$3")\",\"precioCentavos\":$4,\"anticipacionMinimaDias\":1,\"aptoCeliacos\":$5,\"disponible\":true}"
+		printf '%s' "{\"nombre\":\"$1\",\"descripcion\":\"$2\",\"categoriaId\":\"$(id_de_categoria "$3")\",\"precioCentavos\":$4,\"anticipacionMinimaDias\":1,\"aptoCeliacos\":$5,\"disponible\":true}" |
+			curl -s -o /dev/null -w "  $1: %{http_code}\n" -X POST "$gateway/productos" "${autorizado[@]}" --data-binary @-
 	}
 	if curl -s "$gateway/productos" | grep -q 'Budín de limón'; then
 		echo "los budines ya estaban"
