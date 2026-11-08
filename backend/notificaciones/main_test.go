@@ -44,10 +44,37 @@ func TestLeerConfiguracionInformaTodosLosProblemas(prueba *testing.T) {
 	if err == nil {
 		prueba.Fatal("se esperaba un error")
 	}
-	for _, problema := range []string{"MONGO_URI", "RABBITMQ_URL", "SMTP_HOST", "SMTP_REMITENTE", "NOTIFICACIONES_CLAVES_API", "SMTP_PUERTO", "NOTIFICACIONES_INTERVALO_DE_ENVIO"} {
+	for _, problema := range []string{"MONGO_URI o REDIS_URL", "SMTP_HOST", "SMTP_REMITENTE", "NOTIFICACIONES_CLAVES_API", "SMTP_PUERTO", "NOTIFICACIONES_INTERVALO_DE_ENVIO"} {
 		if !strings.Contains(err.Error(), problema) {
 			prueba.Errorf("el error no menciona %s: %v", problema, err)
 		}
+	}
+}
+
+func TestLeerConfiguracionSinRabbitMQYConRedis(prueba *testing.T) {
+	variables := variablesMinimas()
+	delete(variables, "MONGO_URI")
+	delete(variables, "RABBITMQ_URL")
+	variables["REDIS_URL"] = "redis://localhost:6379/0"
+
+	leida, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
+
+	if err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+	if leida.direccionRedis == "" || leida.direccionRabbit != "" {
+		prueba.Errorf("configuración leída: %+v", leida)
+	}
+}
+
+func TestLeerConfiguracionNoAceptaMongoYRedisALaVez(prueba *testing.T) {
+	variables := variablesMinimas()
+	variables["REDIS_URL"] = "redis://localhost:6379/0"
+
+	_, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
+
+	if err == nil || !strings.Contains(err.Error(), "una sola de las dos") {
+		prueba.Errorf("se esperaba el error de almacenamiento doble, dio: %v", err)
 	}
 }
 

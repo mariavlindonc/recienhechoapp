@@ -91,7 +91,7 @@ Con `smoke.sh arrancar` corriendo, la integración de notificaciones: `(cd backe
 Escenarios en `tests/carga/` ([README](../../../tests/carga/README.md)). Con la app levantada y `app.sh cargar` hecho, k6 corre en el compose con el perfil `carga`. Antes hay que subir `NOTIFICACIONES_LIMITE_POR_MINUTO` en el env que usa el compose y recrear el gateway; si no, notificaciones da `429`. Un escenario completo tarda 10 minutos; para probar que el script anda, `--vus 1 --iterations 1`:
 
 ```bash
-MSYS_NO_PATHCONV=1 wsl -e bash -c "cd '<raíz en /mnt/c/...>' && docker compose --env-file .claude/skills/run-recienhechoapp/.tmp/env -p recienhechoapp --profile carga run --rm k6 run --vus 1 --iterations 1 /carga/catalogo.js"
+MSYS_NO_PATHCONV=1 wsl -e bash -c "cd '<raíz en /mnt/c/...>' && docker compose --env-file .claude/skills/run-recienhechoapp/.tmp/env --profile carga run --rm k6 run --vus 1 --iterations 1 /carga/catalogo.js"
 ```
 
 Los resultados también van a Prometheus (`k6_http_req_duration_p95`, `k6_http_reqs_total`), etiquetados con `testid` si se pasa `--tag testid=<nombre>`.

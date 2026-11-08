@@ -2,7 +2,7 @@
 
 ## Estado
 
-Propuesto (Entrega 2: plan de medición y límites esperados). Los tests de carga se corrieron el 29/10/2026 con la Decisión tal como está escrita; los resultados están en [Resultados](#resultados). La demo se despliega en un servidor propio con Cloudflare Tunnel: se consultó con la cátedra, que lo aprobó, el 29/10/2026.
+Propuesto (Entrega 2: plan de medición y límites esperados). Los tests de carga se corrieron el 29/10/2026 con la Decisión tal como está escrita; los resultados están en [Resultados](#resultados). La capacidad de notificaciones se despliega en Render, con su plan gratis, desde el 06/11/2026. Reemplaza al servidor propio con Cloudflare Tunnel, que la cátedra había aprobado el 29/10/2026.
 
 ## Contexto
 
@@ -47,7 +47,7 @@ En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de error
 - MongoDB: réplica de 3 nodos para disponibilidad; sharding no hace falta con este volumen.
 - `productos`: la caché absorbe las lecturas; si no alcanza, más instancias.
 
-**Estimación de costos en la nube** (orden de magnitud, en dólares por mes). Los números no salen de precios publicados de ningún proveedor. La demo va en un servidor propio y no tiene costo de nube; la tabla sirve para comparar con una VM.
+**Estimación de costos en la nube** (orden de magnitud, en dólares por mes). Los números no salen de precios publicados de ningún proveedor. La capacidad va en el plan gratis de Render y no tiene costo de nube; la tabla sirve para comparar con una VM.
 
 | Escenario | Qué incluye | Costo estimado |
 |---|---|---|
@@ -56,10 +56,25 @@ En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de error
 
 El costo crece por el envío de mails y por la base administrada; el cómputo de los servicios en Go es lo más barato.
 
-**Dónde desplegar la demo:** en un servidor propio con Cloudflare Tunnel, gratis. La cátedra aceptó que cuente como nube. Las otras opciones eran:
+**Dónde desplegar:** en [Render](https://render.com/docs/free), con su plan gratis. El enunciado pide la capacidad propia en la nube con una URL pública, así que sube `notificaciones` con lo que necesita para arrancar; el resto del sistema sigue en el compose local. Límites del plan gratis (documentación de Render, consultada el 06/11/2026):
 
-- VM en la nube con el compose tal como está.
-- Cloudflare Containers: unos 5 USD por el mes de la demo. MongoDB tendría que ser externo.
+- Solo los web services tienen plan gratis, además de Postgres y Key Value. Los servicios privados y los workers son pagos, así que MongoDB y RabbitMQ no pueden correr gratis en Render.
+- Un web service gratis se duerme después de 15 minutos sin tráfico entrante. Mientras duerme, `notificaciones` no envía las pendientes ni consume eventos.
+- Hay 750 horas gratis por mes para todo el workspace. Un servicio prendido todo el mes usa unas 720; dos ya no entran.
+
+La cátedra permitió reducir `notificaciones` a lo mínimo para que entre en el plan gratis, y alcanza con que funcione el día de la evaluación (06/11/2026). La versión en Render queda así:
+
+- Dos web services gratis: el api-gateway adelante, como pide [ADR-004](ADR-004-contrato-de-notificaciones.md) (aplica el límite de 60 por minuto del contrato), y una sola instancia de `notificaciones`. El balanceo sobre dos instancias ([ADR-012](ADR-012-balanceo-de-carga.md)) se muestra en el compose local.
+- Las notificaciones y las claves de idempotencia se guardan en el Key Value gratis de Render (`REDIS_URL` en lugar de `MONGO_URI`). Si Render lo reinicia, se pierden ([ADR-002](ADR-002-persistencia.md)).
+- Sin RabbitMQ: sin `RABBITMQ_URL`, `notificaciones` atiende solo la API pública y no consume eventos de `pedidos`.
+- El correo sale por Brevo en el puerto 2525, porque Render bloquea el SMTP en los puertos 25, 465 y 587 ([ADR-005](ADR-005-envio-de-email.md)).
+- El gateway exige las URLs de `pedidos`, `productos` y `usuarios`. En Render apuntan a direcciones sin servicio y esas rutas responden `503`.
+- Un web service gratis no recibe tráfico por la red privada de Render, así que el gateway llega a `notificaciones` por su URL pública. Esa URL también se puede llamar directo, sin pasar por el límite por minuto del gateway; igual pide `X-API-Key`.
+- Los dos web services se despiertan juntos y gastan las 750 horas a la par: alcanzan si no quedan despiertos más de la mitad del mes. El chequeo de `/vivo` del gateway mantiene despierta a `notificaciones` solo mientras el gateway está despierto. Si los dos duermen, la primera solicitud despierta al gateway, que todavía no llega a `notificaciones` y responde `503` hasta que arranca; el consumidor reintenta con la misma `Idempotency-Key`. El día de la evaluación conviene despertarlos antes.
+- El mock del contrato ([ADR-004](ADR-004-contrato-de-notificaciones.md)) también sube, como tercer web service gratis, para que el grupo consumidor pruebe sin pegarle al servicio real. Se arma con el contrato de la rama desplegada, así que no se desincroniza. Solo gasta horas cuando alguien lo usa.
+- La configuración de Render está en [`render.yaml`](../../render.yaml) (Blueprint).
+
+Las opciones anteriores eran un servidor propio con Cloudflare Tunnel (la elegida hasta el 06/11/2026), una VM en la nube con el compose tal como está y Cloudflare Containers (unos 5 USD por el mes de la demo, con MongoDB externo).
 
 Sea cual sea el lugar, Grafana se publica por HTTPS, sin acceso anónimo y con una cuenta por persona: el equipo como Admin o Editor, la cátedra y el cliente como Viewer ([ADR-006](ADR-006-observabilidad.md)).
 

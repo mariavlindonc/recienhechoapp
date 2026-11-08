@@ -1,0 +1,9 @@
+# Mock público del contrato para el grupo consumidor, en Render (ADR-004, ADR-013).
+# Copia el contrato de la rama desplegada: el mock no se desincroniza del archivo.
+FROM stoplight/prism:5
+
+COPY notificaciones.yaml /contrato/notificaciones.yaml
+
+# Render manda el tráfico al puerto 10000 (su PORT por defecto). -m false porque la
+# versión 5 falla al arrancar con varios procesos (ADR-004).
+CMD ["mock", "-m", "false", "-h", "0.0.0.0", "-p", "10000", "/contrato/notificaciones.yaml"]

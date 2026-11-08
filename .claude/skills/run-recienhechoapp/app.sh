@@ -17,12 +17,12 @@ fallar() { echo "FALLA: $*" >&2; exit 1; }
 
 # En Windows Docker vive dentro de WSL: los comandos corren ahí y las rutas pasan a /mnt/c/...
 if command -v docker >/dev/null 2>&1; then
-	compose() { (cd "$raiz" && docker compose --env-file "$temporal/env" -p recienhechoapp "$@"); }
+	compose() { (cd "$raiz" && docker compose --env-file "$temporal/env" "$@"); }
 else
 	# git rev-parse devuelve C:/Users/... en Git Bash; WSL lo ve en /mnt/c/Users/...
 	en_wsl() { echo "$1" | sed -E 's#^([a-zA-Z]):/#/mnt/\L\1/#; s#^/([a-zA-Z])/#/mnt/\L\1/#'; }
 	compose() {
-		MSYS_NO_PATHCONV=1 wsl -e bash -c "cd '$(en_wsl "$raiz")' && docker compose --env-file '$(en_wsl "$temporal/env")' -p recienhechoapp $*"
+		MSYS_NO_PATHCONV=1 wsl -e bash -c "cd '$(en_wsl "$raiz")' && docker compose --env-file '$(en_wsl "$temporal/env")' $*"
 	}
 fi
 

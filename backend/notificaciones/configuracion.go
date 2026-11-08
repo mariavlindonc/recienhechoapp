@@ -15,7 +15,8 @@ type configuracion struct {
 	puerto           string
 	puertoMetricas   string
 	direccionMongo   string
-	direccionRabbit  string
+	direccionRedis   string // en lugar de MongoDB, para el plan gratis de Render (ADR-013)
+	direccionRabbit  string // vacía: no consume eventos de pedidos (ADR-013)
 	baseMongo        string
 	clavesAPI        map[string]string
 	intervaloDeEnvio time.Duration
@@ -58,9 +59,10 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 	leida := configuracion{
 		puerto:           conValorPorDefecto("PORT", "8084"),
 		puertoMetricas:   conValorPorDefecto("METRICAS_PORT", "9464"),
-		direccionMongo:   obligatoria("MONGO_URI"),
+		direccionMongo:   buscar("MONGO_URI"),
+		direccionRedis:   buscar("REDIS_URL"),
 		baseMongo:        conValorPorDefecto("MONGO_BASE", "notificaciones"),
-		direccionRabbit:  obligatoria("RABBITMQ_URL"),
+		direccionRabbit:  buscar("RABBITMQ_URL"),
 		intervaloDeEnvio: duracion("NOTIFICACIONES_INTERVALO_DE_ENVIO", "5s"),
 		smtp: smtp.Configuracion{
 			Host:                 obligatoria("SMTP_HOST"),
@@ -71,6 +73,10 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 			TiempoMaximo:         duracion("SMTP_TIEMPO_MAXIMO", "10s"),
 			TiempoMaximoConexion: duracion("SMTP_TIEMPO_MAXIMO_CONEXION", "2s"),
 		},
+	}
+
+	if (leida.direccionMongo == "") == (leida.direccionRedis == "") {
+		problemas = append(problemas, errors.New("hay que definir MONGO_URI o REDIS_URL, una sola de las dos"))
 	}
 
 	if textoClaves := obligatoria("NOTIFICACIONES_CLAVES_API"); textoClaves != "" {
