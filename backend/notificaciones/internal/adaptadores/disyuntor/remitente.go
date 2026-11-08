@@ -65,11 +65,18 @@ func NuevoRemitente(interno puertos.Remitente, eventos puertos.Eventos, configur
 
 // Enviar pasa el mensaje al remitente interno si el circuito lo permite.
 func (remitente *Remitente) Enviar(contexto context.Context, mensaje puertos.Mensaje) error {
+	// Se mira antes: State() es lo que pasa el circuito a semiabierto cuando se cumple la espera.
+	eraPrueba := remitente.circuito.State() == gobreaker.StateHalfOpen
 	_, err := remitente.circuito.Execute(func() (struct{}, error) {
 		return struct{}{}, remitente.interno.Enviar(contexto, mensaje)
 	})
 	if errors.Is(err, gobreaker.ErrOpenState) || errors.Is(err, gobreaker.ErrTooManyRequests) {
 		return fmt.Errorf("%w: el disyuntor está %s", puertos.ErrCorreoNoDisponible, aEstado(remitente.circuito.State()))
+	}
+	// Si falló el envío de prueba, el culpable es el servidor y no la notificación que
+	// hizo de prueba: se posterga sin gastarle un reintento (ADR-011).
+	if eraPrueba && err != nil && !errors.Is(err, puertos.ErrEnvioRechazado) && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("%w: falló el envío de prueba: %w", puertos.ErrCorreoNoDisponible, err)
 	}
 	return err
 }

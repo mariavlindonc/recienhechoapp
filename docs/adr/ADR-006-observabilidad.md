@@ -50,6 +50,8 @@ El primer flujo que funciona de punta a punta es el de la capacidad publicada: `
 
 **Alerta inicial:** más de 5 notificaciones pasan a `fallida` en 10 minutos (el servidor de correo está caído o rechazando envíos).
 
+**Alerta del correo caído:** `CorreoNoDisponible`, cuando el disyuntor del servidor de correo ([ADR-011](ADR-011-resiliencia.md)) no está cerrado durante 1 minuto en alguna instancia (`max(notificaciones_correo_circuito) > 0`, con 0 cerrado, 1 semiabierto y 2 abierto). El disyuntor cambia de estado solo cuando se intenta un envío: se abre con 5 fallos seguidos y se cierra con el primer envío que sale bien después de que vuelve el correo. Si una instancia no tiene nada que mandar, sigue abierta y la alerta sigue disparada hasta la próxima notificación.
+
 ## Convenciones compartidas entre servicios
 
 Agregado el 22/10/2026, a partir de la revisión del código.

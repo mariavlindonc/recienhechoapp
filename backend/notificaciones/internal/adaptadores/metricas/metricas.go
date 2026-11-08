@@ -29,6 +29,15 @@ type Metricas struct {
 	solicitudes *prometheus.CounterVec
 	duracion    *prometheus.HistogramVec
 	envios      *prometheus.CounterVec
+	// circuitoDelCorreo arranca en 0 (cerrado), así la alerta tiene serie desde el inicio.
+	circuitoDelCorreo prometheus.Gauge
+}
+
+// valorDelCircuito es el número que publica el gauge por cada estado del disyuntor.
+var valorDelCircuito = map[puertos.EstadoCircuito]float64{
+	puertos.CircuitoCerrado:     0,
+	puertos.CircuitoSemiabierto: 1,
+	puertos.CircuitoAbierto:     2,
 }
 
 // Nuevas crea las métricas, además de las del proceso y del runtime de Go
@@ -49,9 +58,13 @@ func Nuevas() *Metricas {
 			Name: "notificaciones_envios_total",
 			Help: "Intentos de envío terminados, por resultado: enviada, reintento o fallida.",
 		}, []string{"resultado"}),
+		circuitoDelCorreo: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "notificaciones_correo_circuito",
+			Help: "Estado del disyuntor del servidor de correo: 0 cerrado, 1 semiabierto, 2 abierto.",
+		}),
 	}
 	metricas.registro.MustRegister(
-		metricas.solicitudes, metricas.duracion, metricas.envios,
+		metricas.solicitudes, metricas.duracion, metricas.envios, metricas.circuitoDelCorreo,
 		collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 	// Se crean en cero para que la serie exista desde el arranque: así una alerta
@@ -65,6 +78,11 @@ func Nuevas() *Metricas {
 // ContarEnvio suma un intento de envío terminado con ese resultado.
 func (metricas *Metricas) ContarEnvio(resultado puertos.ResultadoEnvio) {
 	metricas.envios.WithLabelValues(string(resultado)).Inc()
+}
+
+// MarcarCircuitoDelCorreo publica el estado actual del disyuntor del correo.
+func (metricas *Metricas) MarcarCircuitoDelCorreo(estado puertos.EstadoCircuito) {
+	metricas.circuitoDelCorreo.Set(valorDelCircuito[estado])
 }
 
 // Solicitudes es un middleware de Gin que cuenta y mide cada solicitud. Usa la

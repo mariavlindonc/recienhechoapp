@@ -164,6 +164,25 @@ func TestUnaPruebaFallidaLoVuelveAAbrir(prueba *testing.T) {
 	}
 }
 
+func TestUnaPruebaFallidaNoGastaUnIntentoDeLaNotificacion(prueba *testing.T) {
+	remitente, interno, _ := nuevoEntorno()
+	interno.programar(errors.New("servidor de correo caído"))
+	enviar(remitente, 5)
+
+	time.Sleep(espera + 20*time.Millisecond)
+	err := enviar(remitente, 1)
+
+	if !errors.Is(err, puertos.ErrCorreoNoDisponible) {
+		prueba.Errorf("la prueba fallida tiene que postergarse como correo no disponible, dio: %v", err)
+	}
+	// Un envío común fallido sí es un intento: antes de abrirse, el error pasa tal cual.
+	remitente, interno, _ = nuevoEntorno()
+	interno.programar(errors.New("timeout"))
+	if err := enviar(remitente, 1); errors.Is(err, puertos.ErrCorreoNoDisponible) {
+		prueba.Errorf("con el circuito cerrado un fallo es un intento normal, dio: %v", err)
+	}
+}
+
 func TestUnEnvioCortadoPorElApagadoNoCuenta(prueba *testing.T) {
 	remitente, interno, eventos := nuevoEntorno()
 	interno.programar(context.Canceled)

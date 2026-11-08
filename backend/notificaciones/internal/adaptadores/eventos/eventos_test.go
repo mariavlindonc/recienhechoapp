@@ -16,10 +16,15 @@ import (
 // contadorFalso cumple lo que el adaptador necesita de las métricas.
 type contadorFalso struct {
 	resultados []puertos.ResultadoEnvio
+	circuito   []puertos.EstadoCircuito
 }
 
 func (contador *contadorFalso) ContarEnvio(resultado puertos.ResultadoEnvio) {
 	contador.resultados = append(contador.resultados, resultado)
+}
+
+func (contador *contadorFalso) MarcarCircuitoDelCorreo(estado puertos.EstadoCircuito) {
+	contador.circuito = append(contador.circuito, estado)
 }
 
 func nuevoAdaptador() (*eventos.Eventos, *contadorFalso, *bytes.Buffer) {
@@ -80,11 +85,15 @@ func TestElLogTapaLosEmailsDelError(prueba *testing.T) {
 	}
 }
 
-func TestLosCambiosDelCircuitoQuedanEnElLog(prueba *testing.T) {
-	adaptador, _, salida := nuevoAdaptador()
+func TestLosCambiosDelCircuitoQuedanEnElLogYEnLasMetricas(prueba *testing.T) {
+	adaptador, contador, salida := nuevoAdaptador()
 
 	adaptador.CircuitoDelCorreoCambio(context.Background(), puertos.CircuitoCerrado, puertos.CircuitoAbierto)
 	adaptador.CircuitoDelCorreoCambio(context.Background(), puertos.CircuitoSemiabierto, puertos.CircuitoCerrado)
+
+	if len(contador.circuito) != 2 || contador.circuito[0] != puertos.CircuitoAbierto || contador.circuito[1] != puertos.CircuitoCerrado {
+		prueba.Errorf("estados publicados = %v", contador.circuito)
+	}
 
 	lineas := strings.Split(strings.TrimSpace(salida.String()), "\n")
 	if len(lineas) != 2 {
