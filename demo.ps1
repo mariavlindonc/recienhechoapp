@@ -1,7 +1,8 @@
 #requires -Version 7
 <#
-Panel de comandos para la presentación (docs/DEMO.md). Se corre desde la raíz del
-repo, en PowerShell 7 con Docker Desktop:
+Atajos para la presentación: solo lo que es largo de tipear a mano. Todo lo demás
+está como comando crudo en docs/DEMO.md. Cada atajo imprime en gris lo que corre.
+Se usa desde la raíz del repo, en PowerShell 7 con Docker Desktop:
 
     ./demo.ps1 ayuda
 #>
@@ -12,11 +13,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $raiz = $PSScriptRoot
-# Relativo a la raíz, con barras normales: lo entienden Docker y el sistema de archivos.
-$entornoRelativo = '.claude/skills/run-recienhechoapp/.tmp/env'
-$entorno = Join-Path $raiz $entornoRelativo
-$archivoToken = Join-Path $raiz '.claude/skills/run-recienhechoapp/.tmp/token'
-# GATEWAY y CLAVE_API se pueden cambiar para pegarle a Render.
+$archivoEnv = Join-Path $raiz '.env'
+# GATEWAY se puede cambiar para pegarle a Render.
 $gateway = $env:GATEWAY ?? 'http://localhost:8080'
 $frontend = 'http://localhost:5173'
 
@@ -25,30 +23,44 @@ function Fallar([string] $mensaje) {
 	exit 1
 }
 
+function Mostrar([string] $texto) { Write-Host "> $texto" -ForegroundColor DarkGray }
+
 function Compose {
-	if (-not (Test-Path $entorno)) { Fallar 'primero: ./demo.ps1 levantar' }
+	Mostrar "docker compose $($args -join ' ')"
 	Push-Location $raiz
-	try { docker compose --env-file $entornoRelativo @args } finally { Pop-Location }
+	try { docker compose @args } finally { Pop-Location }
 	if ($LASTEXITCODE -ne 0) { Fallar "docker compose $($args -join ' ') terminó con error" }
 }
 
+# No se puede llamar Docker: PowerShell no distingue mayúsculas y taparía al comando docker.
+function Correr-Docker {
+	Mostrar "docker $($args -join ' ')"
+	docker @args
+	if ($LASTEXITCODE -ne 0) { Fallar "docker $($args -join ' ') terminó con error" }
+}
+
 function Valor([string] $nombre) {
-	$linea = Get-Content $entorno -ErrorAction SilentlyContinue | Where-Object { $_ -like "$nombre=*" } | Select-Object -First 1
+	$linea = Get-Content $archivoEnv -ErrorAction SilentlyContinue | Where-Object { $_ -like "$nombre=*" } | Select-Object -First 1
 	if ($linea) { return $linea.Substring($nombre.Length + 1) }
 	return ''
 }
 
-# El .env no se toca: se copia y se le agrega lo que falte de .env.example.
-function Armar-Entorno {
-	New-Item -ItemType Directory -Force (Split-Path $entorno) | Out-Null
-	$lineas = [System.Collections.Generic.List[string]]::new()
-	$archivoPropio = Join-Path $raiz '.env'
-	if (Test-Path $archivoPropio) { $lineas.AddRange([string[]](Get-Content $archivoPropio)) }
-	$definidas = $lineas | ForEach-Object { if ($_ -match '^([A-Z_]+)=') { $Matches[1] } }
-	foreach ($linea in Get-Content (Join-Path $raiz '.env.example')) {
-		if ($linea -match '^([A-Z_]+)=' -and $Matches[1] -notin $definidas) { $lineas.Add($linea) }
+# Sin .env, lo copia de .env.example. Con .env, le agrega al final las variables que
+# falten, con el valor de ejemplo: lo que ya tiene no se toca. Así `docker compose`
+# a secas funciona igual que este script.
+function Completar-Env {
+	$ejemplo = Join-Path $raiz '.env.example'
+	if (-not (Test-Path $archivoEnv)) {
+		Mostrar 'Copy-Item .env.example .env'
+		Copy-Item $ejemplo $archivoEnv
+		return
 	}
-	Set-Content -Path $entorno -Value $lineas
+	$definidas = Get-Content $archivoEnv | ForEach-Object { if ($_ -match '^([A-Z_]+)=') { $Matches[1] } }
+	$faltantes = Get-Content $ejemplo | Where-Object { $_ -match '^([A-Z_]+)=' -and $Matches[1] -notin $definidas }
+	if ($faltantes) {
+		Add-Content -Path $archivoEnv -Value $faltantes
+		Write-Host "Agregué a .env, con el valor de .env.example: $(($faltantes | ForEach-Object { ($_ -split '=')[0] }) -join ', ')" -ForegroundColor Yellow
+	}
 }
 
 function Responde([string] $url) {
@@ -60,46 +72,38 @@ function Esperar([string] $url, [int] $intentos = 60) {
 		if (Responde $url) { return }
 		Start-Sleep -Seconds 2
 	}
-	Fallar "no responde $url (ver: ./demo.ps1 estado)"
+	Fallar "no responde $url (ver: docker compose ps -a)"
 }
 
-# Cuerpo en UTF-8 explícito, para que los acentos lleguen bien.
+# Cuerpo en UTF-8 explícito, para que las tildes lleguen bien.
 function Enviar([string] $metodo, [string] $ruta, $cuerpo = $null, [hashtable] $encabezados = @{}) {
 	$opciones = @{ Method = $metodo; Uri = "$gateway$ruta"; Headers = $encabezados; SkipHttpErrorCheck = $true }
+	$texto = ''
 	if ($null -ne $cuerpo) {
 		$texto = $cuerpo -is [string] ? $cuerpo : ($cuerpo | ConvertTo-Json -Compress -Depth 5)
 		$opciones.Body = [System.Text.Encoding]::UTF8.GetBytes($texto)
 		$opciones.ContentType = 'application/json; charset=utf-8'
 	}
+	Mostrar "$metodo $ruta $texto"
 	return Invoke-WebRequest @opciones
 }
 
-# El token del vendedor se guarda: iniciar sesión en cada comando gastaría los 10
-# intentos por minuto que deja el gateway (ADR-019). El token vence a la hora: pasados
-# 50 minutos se pide otro.
-function Token {
-	if ((Test-Path $archivoToken) -and (Get-Item $archivoToken).LastWriteTime -gt (Get-Date).AddMinutes(-50)) {
-		return Get-Content $archivoToken -Raw
-	}
-	$respuesta = Enviar POST /usuarios/sesion @{ email = (Valor VENDEDOR_EMAIL); clave = (Valor VENDEDOR_CLAVE) }
-	if ($respuesta.StatusCode -ne 200) { Fallar "no se pudo iniciar sesión como vendedor: HTTP $($respuesta.StatusCode)" }
-	$token = ($respuesta.Content | ConvertFrom-Json).token
-	Set-Content -Path $archivoToken -Value $token -NoNewline
-	return $token
+function Sesion([string] $email, [string] $clave) {
+	$respuesta = Enviar POST /usuarios/sesion @{ email = $email; clave = $clave }
+	if ($respuesta.StatusCode -ne 200) { Fallar "no se pudo iniciar sesión como ${email}: HTTP $($respuesta.StatusCode) (el gateway deja 10 intentos por minuto)" }
+	return @{ Authorization = "Bearer $(($respuesta.Content | ConvertFrom-Json).token)" }
 }
 
-function ConSesion { return @{ Authorization = "Bearer $(Token)" } }
+function Vendedor { return Sesion (Valor VENDEDOR_EMAIL) (Valor VENDEDOR_CLAVE) }
 
-# La primera clave de NOTIFICACIONES_CLAVES_API (grupo:clave,...), o CLAVE_API.
-function ClaveApi {
-	$clave = $env:CLAVE_API ?? ((Valor NOTIFICACIONES_CLAVES_API) -split ',')[0] -replace '^[^:]*:', ''
-	if (-not $clave) { Fallar 'no hay clave de API: definí $env:CLAVE_API' }
-	return $clave
+# Registra al comprador si no existe (409 si ya estaba) y entra.
+function Comprador([string] $email) {
+	Enviar POST /usuarios @{ email = $email; nombre = 'Comprador de prueba'; clave = 'comprador-demo' } | Out-Null
+	return Sesion $email 'comprador-demo'
 }
 
 function Levantar {
-	Armar-Entorno
-	Remove-Item $archivoToken -ErrorAction SilentlyContinue
+	Completar-Env
 	Compose up --build -d
 	Esperar "$gateway/categorias"
 	Esperar "$frontend/"
@@ -111,7 +115,7 @@ function Levantar {
 }
 
 function Cargar {
-	$encabezados = ConSesion
+	$encabezados = Vendedor
 	$categorias = (Enviar GET /categorias).Content | ConvertFrom-Json
 	foreach ($nombre in 'Zanahoria', 'Cítricos', 'Sin harina de trigo') {
 		if ($nombre -notin $categorias.nombre) { Enviar POST /categorias @{ nombre = $nombre } $encabezados | Out-Null }
@@ -133,7 +137,7 @@ function Cargar {
 				nombre = $budin[0]; descripcion = $budin[1]; categoriaId = (& $idDe $budin[2])
 				precioCentavos = $budin[3]; anticipacionMinimaDias = 1; aptoCeliacos = $budin[4]; disponible = $true
 			} $encabezados
-			Write-Host "  $($budin[0]): $($respuesta.StatusCode)"
+			Write-Host "  $($budin[0]): HTTP $($respuesta.StatusCode)"
 		}
 	}
 	# Cupo para hoy y los próximos 7 días, así se puede encargar enseguida.
@@ -143,147 +147,127 @@ function Cargar {
 	Write-Host 'OK budines y cupo cargados (la búsqueda los ve a los ~3 s)' -ForegroundColor Green
 }
 
-# Reinicia un servicio con una variable cambiada. La variable del proceso le gana
-# al archivo de entorno: el .env no se toca.
-function Reiniciar-Con([string] $servicio, [string] $variable, [string] $valor) {
-	[Environment]::SetEnvironmentVariable($variable, $valor)
-	try { Compose up -d $servicio } finally { [Environment]::SetEnvironmentVariable($variable, $null) }
-	Esperar "$gateway/categorias" 30
+# concurrencia 10 3: pone cupo 3 en un día libre y manda 10 pedidos al mismo tiempo
+# para ese día. Tienen que entrar 3 y el resto dar 409 sin_cupo (R1, ADR-015).
+function Concurrencia([int] $cantidad, [int] $cupo) {
+	$vendedor = Vendedor
+	$comprador = Comprador 'comprador-concurrencia@recienhecho.test'
+	# Un día lejano y al azar, para no chocar con pedidos de corridas anteriores.
+	$fecha = (Get-Date).AddDays(100 + (Get-Random -Maximum 500)).ToString('yyyy-MM-dd')
+	Enviar PUT "/capacidad/$fecha" @{ capacidad = $cupo } $vendedor | Out-Null
+	$producto = (((Enviar GET /productos).Content | ConvertFrom-Json).productos | Select-Object -First 1)
+	if (-not $producto) { Fallar 'no hay productos: ./demo.ps1 cargar' }
+	$cuerpo = @{ tipo = 'programado'; fecha = $fecha; items = @(@{ productoId = $producto.id; cantidad = 1 }) } | ConvertTo-Json -Compress -Depth 5
+	$url = "$gateway/pedidos"
+	Mostrar "$cantidad x POST /pedidos $cuerpo   (todos a la vez, cada uno con su Idempotency-Key)"
+	$codigos = 1..$cantidad | ForEach-Object -ThrottleLimit $cantidad -Parallel {
+		$encabezados = $using:comprador + @{ 'Idempotency-Key' = [guid]::NewGuid().ToString() }
+		(Invoke-WebRequest -Method Post $using:url -Headers $encabezados -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($using:cuerpo)) -SkipHttpErrorCheck).StatusCode
+	}
+	Write-Host "Cupo $cupo para el $fecha, $cantidad pedidos a la vez:"
+	$codigos | Group-Object | ForEach-Object {
+		$significado = @{ '201' = 'aceptados'; '409' = 'rechazados por falta de cupo' }[$_.Name] ?? 'otro resultado'
+		Write-Host "  $($_.Count) x HTTP $($_.Name) ($significado)"
+	}
+	$aceptados = @($codigos | Where-Object { $_ -eq 201 }).Count
+	Write-Host ($aceptados -eq [Math]::Min($cupo, $cantidad) ? 'OK: no se vendió de más' : 'ATENCIÓN: entraron más o menos pedidos que el cupo') -ForegroundColor ($aceptados -eq [Math]::Min($cupo, $cantidad) ? 'Green' : 'Red')
 }
 
-function Cache([string] $accion) {
-	switch ($accion) {
-		'estado' {
-			# Contadores desde que arrancó productos, leídos de Prometheus.
-			foreach ($metrica in 'cache_aciertos_total', 'cache_fallos_total') {
-				Write-Host "${metrica}:"
-				$consulta = [uri]::EscapeDataString("sum by (tipo) ($metrica)")
-				foreach ($serie in (Invoke-RestMethod "http://localhost:9090/api/v1/query?query=$consulta").data.result) {
-					Write-Host "  $($serie.metric.tipo): $($serie.value[1])"
-				}
-			}
-			return
+$servicios = 'api-gateway', 'usuarios', 'productos', 'pedidos', 'notificaciones'
+
+function Tests-Unitarios([string] $servicio) {
+	foreach ($nombre in ($servicio ? @($servicio) : $servicios)) {
+		Write-Host "=== $nombre" -ForegroundColor Cyan
+		Push-Location (Join-Path $raiz "backend/$nombre")
+		Mostrar "cd backend/$nombre; go test -count=1 ./..."
+		try { go test -count=1 ./... } finally { Pop-Location }
+	}
+	if (-not $servicio) {
+		Write-Host '=== frontend' -ForegroundColor Cyan
+		Push-Location (Join-Path $raiz 'frontend')
+		Mostrar 'cd frontend; bun test'
+		try { bun test } finally { Pop-Location }
+	}
+}
+
+# Levanta las bases en contenedores aparte (otros puertos que el compose, así no se
+# pisan), corre los tests de integración de cada servicio contra ellas y las borra.
+function Tests-Integracion {
+	$contenedores = 'prueba-mysql', 'prueba-mongo', 'prueba-redis', 'prueba-meili', 'prueba-rabbit'
+	docker rm -f @contenedores 2>$null | Out-Null
+	try {
+		Correr-Docker run -d --name prueba-mysql -p 127.0.0.1:13307:3306 -e MYSQL_ROOT_PASSWORD=prueba -e MYSQL_DATABASE=pruebas mysql:8.4.10
+		Correr-Docker run -d --name prueba-mongo -p 127.0.0.1:27031:27017 mongo:8 --replSet rs0 --bind_ip_all
+		Correr-Docker run -d --name prueba-redis -p 127.0.0.1:16381:6379 redis:7.4.11
+		Correr-Docker run -d --name prueba-meili -p 127.0.0.1:17702:7700 -e MEILI_MASTER_KEY=clave-de-prueba-de-16 getmeili/meilisearch:v1.54.3
+		Correr-Docker run -d --name prueba-rabbit -p 127.0.0.1:15673:5672 -e RABBITMQ_DEFAULT_USER=prueba -e RABBITMQ_DEFAULT_PASS=prueba rabbitmq:4.3.5-management-alpine
+		Write-Host 'Esperando a que arranquen (MySQL y RabbitMQ tardan unos 20 s)...'
+		foreach ($intento in 1..60) {
+			docker exec prueba-mysql mysqladmin ping -h127.0.0.1 --protocol=tcp -uroot -pprueba --silent 2>$null | Out-Null
+			if ($LASTEXITCODE -eq 0) { break }
+			Start-Sleep -Seconds 2
 		}
-		'apagar' { $habilitada = 'false' }
-		'prender' { $habilitada = 'true' }
-		default { Fallar 'uso: ./demo.ps1 cache apagar|prender|estado' }
+		foreach ($intento in 1..30) {
+			docker exec prueba-mongo mongosh --quiet --eval "db.adminCommand('ping').ok" 2>$null | Out-Null
+			if ($LASTEXITCODE -eq 0) { break }
+			Start-Sleep -Seconds 1
+		}
+		# pedidos usa transacciones: MongoDB tiene que ser un replica set.
+		Correr-Docker exec prueba-mongo mongosh --quiet --eval 'rs.initiate()' | Out-Null
+		foreach ($intento in 1..60) {
+			docker exec prueba-rabbit rabbitmq-diagnostics -q ping 2>$null | Out-Null
+			if ($LASTEXITCODE -eq 0) { break }
+			Start-Sleep -Seconds 2
+		}
+		$variables = @{
+			'usuarios'       = @{ MYSQL_DSN_TEST = 'root:prueba@tcp(127.0.0.1:13307)/pruebas?parseTime=true' }
+			'productos'      = @{ MYSQL_DSN_TEST = 'root:prueba@tcp(127.0.0.1:13307)/pruebas?parseTime=true'; REDIS_URL_TEST = 'redis://127.0.0.1:16381/0'; MEILI_URL_TEST = 'http://127.0.0.1:17702'; MEILI_CLAVE_TEST = 'clave-de-prueba-de-16' }
+			'pedidos'        = @{ MONGO_URI_TEST = 'mongodb://127.0.0.1:27031/?directConnection=true'; RABBITMQ_URI_TEST = 'amqp://prueba:prueba@127.0.0.1:15673/' }
+			'notificaciones' = @{ MONGO_URI_TEST = 'mongodb://127.0.0.1:27031/?directConnection=true'; REDIS_URL_TEST = 'redis://127.0.0.1:16381/1' }
+		}
+		foreach ($servicio in 'usuarios', 'productos', 'pedidos', 'notificaciones') {
+			Write-Host "=== $servicio" -ForegroundColor Cyan
+			foreach ($par in $variables[$servicio].GetEnumerator()) { [Environment]::SetEnvironmentVariable($par.Key, $par.Value) }
+			Push-Location (Join-Path $raiz "backend/$servicio")
+			Mostrar "cd backend/$servicio; $(($variables[$servicio].GetEnumerator() | ForEach-Object { "`$env:$($_.Key)='$($_.Value)'" }) -join '; '); go test -count=1 -v ./... | Select-String -- '--- (PASS|FAIL|SKIP)'"
+			try {
+				go test -count=1 -v ./... | Select-String -Pattern '^\s*--- (PASS|FAIL|SKIP)|^(ok|FAIL)\s'
+			} finally {
+				Pop-Location
+				foreach ($par in $variables[$servicio].GetEnumerator()) { [Environment]::SetEnvironmentVariable($par.Key, $null) }
+			}
+		}
+	} finally {
+		Mostrar "docker rm -f $($contenedores -join ' ')"
+		docker rm -f @contenedores 2>$null | Out-Null
 	}
-	Reiniciar-Con productos CACHE_HABILITADA $habilitada
-	Start-Sleep -Seconds 1
-	$arranque = (Compose logs --tail 50 productos) | Select-String '"cache":(true|false)' | Select-Object -Last 1
-	Write-Host "productos arrancó con $($arranque.Matches[0].Value)" -ForegroundColor Green
-}
-
-function Inventario([string] $modo) {
-	if ($modo -notin 'confirma', 'sin_stock', 'lento', 'error', 'rechazo') {
-		Fallar 'uso: ./demo.ps1 inventario confirma|sin_stock|lento|error|rechazo'
-	}
-	Reiniciar-Con pedidos INVENTARIO_MODO $modo
-	Write-Host "pedidos arrancó con el inventario falso en modo $modo" -ForegroundColor Green
-}
-
-function Servicio-Valido([string] $servicio) {
-	if (-not $servicio) { Fallar 'falta el nombre del servicio: ./demo.ps1 servicios' }
-	if ($servicio -notin (Compose config --services)) { Fallar "no existe el servicio ${servicio}: ./demo.ps1 servicios" }
-}
-
-# pedir GET /productos  o  pedir POST /categorias '{"nombre":"Frutales"}'
-# Va con el token del vendedor; con $env:SIN_SESION = '1' va sin token.
-function Pedir([string] $metodo, [string] $ruta, [string] $cuerpo) {
-	if (-not $metodo -or -not $ruta) { Fallar "uso: ./demo.ps1 pedir METODO /ruta ['{json}']" }
-	$encabezados = $env:SIN_SESION -eq '1' ? @{} : (ConSesion)
-	$respuesta = Enviar $metodo $ruta ($cuerpo ? $cuerpo : $null) $encabezados
-	Write-Host $respuesta.Content
-	Write-Host "HTTP $($respuesta.StatusCode)" -ForegroundColor Cyan
-}
-
-# notificar correo@ejemplo.com: crea una notificación y sigue su estado hasta que
-# sale. Con $env:IDEMPOTENCIA se repite la misma clave, para mostrar la idempotencia.
-function Notificar([string] $destinatario, [string] $asunto, [string] $cuerpo) {
-	if (-not $destinatario) { Fallar 'uso: ./demo.ps1 notificar correo@ejemplo.com' }
-	$clave = ClaveApi
-	$idempotencia = $env:IDEMPOTENCIA ?? "demo-$([guid]::NewGuid())"
-	$respuesta = Enviar POST /notificaciones @{ canal = 'email'; destinatario = $destinatario; asunto = ($asunto ? $asunto : 'Notificación de prueba'); cuerpo = ($cuerpo ? $cuerpo : 'Mensaje de prueba del servicio de notificaciones.') } @{ 'X-API-Key' = $clave; 'Idempotency-Key' = $idempotencia }
-	Write-Host $respuesta.Content
-	Write-Host "HTTP $($respuesta.StatusCode)" -ForegroundColor Cyan
-	if ($respuesta.StatusCode -ne 202) { return }
-	$id = ($respuesta.Content | ConvertFrom-Json).id
-	foreach ($intento in 1..15) {
-		$estado = ((Enviar GET "/notificaciones/$id" $null @{ 'X-API-Key' = $clave }).Content | ConvertFrom-Json).estado
-		Write-Host "estado: $estado"
-		if ($estado -ne 'pendiente') { return }
-		Start-Sleep -Seconds 2
-	}
-}
-
-# rafaga 70: manda N notificaciones seguidas y cuenta las respuestas. Pasado el
-# límite de 60 por minuto aparecen los 429 (ADR-004); el reparto entre instancias
-# se ve en Grafana.
-function Rafaga([int] $cantidad) {
-	$clave = ClaveApi
-	$cuerpo = @{ canal = 'email'; destinatario = 'cliente@ejemplo.com'; asunto = 'Ráfaga'; cuerpo = 'Prueba de límite.' }
-	$codigos = foreach ($numero in 1..$cantidad) {
-		(Enviar POST /notificaciones $cuerpo @{ 'X-API-Key' = $clave; 'Idempotency-Key' = "rafaga-$([guid]::NewGuid())" }).StatusCode
-	}
-	$codigos | Group-Object | ForEach-Object { Write-Host "  $($_.Count) respuestas $($_.Name)" }
 }
 
 function Ayuda {
 	@'
-Uso: ./demo.ps1 <comando>
+Atajos (lo demás, como comando crudo, en docs/DEMO.md):
 
-  levantar | cargar | estado | detener   la app completa
-  abrir                                  las direcciones de cada herramienta
-
-  cache apagar | prender | estado        reinicia productos con o sin caché; estado: aciertos y fallos
-  inventario <modo>                      confirma, sin_stock, lento, error o rechazo (reinicia pedidos)
-  caer <servicio> | volver <servicio>    detiene o vuelve a levantar un contenedor
-  servicios                              los nombres que aceptan caer y volver
-  colas                                  mensajes en las colas de RabbitMQ (incluida la DLQ)
-  reindexar                              reconstruye el índice de búsqueda (ADR-008)
-  carga                                  30 s de carga sobre el catálogo (para comparar con y sin caché)
-
-  pedir METODO /ruta ['{json}']          una solicitud al gateway como vendedor ($env:SIN_SESION='1': sin token)
-  notificar correo [asunto] [cuerpo]     crea una notificación (con el texto que quieras) y sigue su estado
-  rafaga [cantidad]                      muchas notificaciones seguidas: muestra el límite por minuto
-
-Para Render:  $env:GATEWAY='https://...'; $env:CLAVE_API='...'; ./demo.ps1 notificar correo@ejemplo.com
+  ./demo.ps1 levantar                  completa .env, levanta todo y espera al gateway y al frontend
+  ./demo.ps1 cargar                    categorías, tres budines y cupo de 10 para hoy y 7 días más
+  ./demo.ps1 concurrencia [N] [cupo]   N pedidos a la vez para un día con ese cupo (por defecto 10 y 3)
+  ./demo.ps1 tests unitarios [servicio]   go test de cada servicio y bun test del frontend
+  ./demo.ps1 tests integracion         bases reales en contenedores aparte, tests y las borra
+  ./demo.ps1 detener                   baja todo (los datos quedan)
 '@ | Write-Host
 }
 
 switch ($Comando) {
 	'levantar' { Levantar }
 	'cargar' { Cargar }
-	'estado' { Compose ps -a }
-	'detener' { Compose down; Write-Host 'OK compose abajo (los volúmenes quedan)' -ForegroundColor Green }
-	'abrir' {
-		@'
-Frontend      http://localhost:5173
-Gateway       http://localhost:8080
-Grafana       http://localhost:3000   (tablero "Recién hecho")
-Jaeger        http://localhost:16686
-Prometheus    http://localhost:9090/alerts
-RabbitMQ      http://localhost:15672
-Mailpit       http://localhost:8025
-Meilisearch   http://localhost:7700
-'@ | Write-Host
+	'concurrencia' { Concurrencia ($Argumentos[0] ? [int] $Argumentos[0] : 10) ($Argumentos[1] ? [int] $Argumentos[1] : 3) }
+	'tests' {
+		switch ($Argumentos[0]) {
+			'unitarios' { Tests-Unitarios ($Argumentos[1] ?? '') }
+			'integracion' { Tests-Integracion }
+			default { Fallar 'uso: ./demo.ps1 tests unitarios [servicio] | ./demo.ps1 tests integracion' }
+		}
 	}
-	'cache' { Cache ($Argumentos[0] ?? '') }
-	'inventario' { Inventario ($Argumentos[0] ?? '') }
-	'caer' { Servicio-Valido ($Argumentos[0] ?? ''); Compose stop $Argumentos[0] }
-	'volver' { Servicio-Valido ($Argumentos[0] ?? ''); Compose start $Argumentos[0] }
-	'servicios' { Compose config --services }
-	'colas' { Compose exec rabbitmq rabbitmqctl list_queues name messages }
-	'reindexar' { Compose exec productos /servicio reindexar }
-	# 30 s del test del catálogo (la corrida completa dura 10 min). Se ve en Grafana,
-	# en los paneles "Test de carga", separada por testid.
-	'carga' {
-		$estadoCache = ((Compose logs --tail 200 productos) | Select-String '"cache":(true|false)' | Select-Object -Last 1).Matches[0].Groups[1].Value
-		Compose --profile carga run --rm k6 run --vus 20 --duration 30s --tag "testid=catalogo-cache-$estadoCache-$(Get-Date -Format HHmmss)" /carga/catalogo.js
-	}
-	'pedir' { Pedir ($Argumentos[0] ?? '') ($Argumentos[1] ?? '') ($Argumentos[2] ?? '') }
-	'notificar' { Notificar ($Argumentos[0] ?? '') ($Argumentos[1] ?? '') ($Argumentos[2] ?? '') }
-	'rafaga' { Rafaga ($Argumentos[0] ? [int] $Argumentos[0] : 70) }
+	'detener' { Compose down; Write-Host 'OK todo abajo (los datos quedan para la próxima)' -ForegroundColor Green }
 	{ $_ -in 'ayuda', '-h', '--help' } { Ayuda }
 	default { Ayuda; exit 2 }
 }
