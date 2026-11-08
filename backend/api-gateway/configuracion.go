@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // configuracion reúne todo lo que el gateway lee de las variables de entorno.
@@ -26,6 +27,9 @@ type configuracion struct {
 	intentosPorMinuto int
 	// claveFrontend autentica al servidor del frontend cuando informa la IP del navegador.
 	claveFrontend string
+	// intervaloChequeo y tiempoMaximoChequeo son los del chequeo activo de /vivo (ADR-012).
+	intervaloChequeo    time.Duration
+	tiempoMaximoChequeo time.Duration
 }
 
 // largoMinimoSecreto es el mínimo de JWT_SECRETO, igual que en usuarios (ADR-019).
@@ -52,10 +56,19 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 		}
 		return porDefecto
 	}
+	duracion := func(nombre, porDefecto string) time.Duration {
+		valor, err := time.ParseDuration(conValorPorDefecto(nombre, porDefecto))
+		if err != nil || valor <= 0 {
+			problemas = append(problemas, fmt.Errorf("%s tiene que ser una duración positiva, como 5s", nombre))
+		}
+		return valor
+	}
 
 	leida := configuracion{
-		puerto:         conValorPorDefecto("PORT", "8080"),
-		puertoMetricas: conValorPorDefecto("METRICAS_PORT", "9464"),
+		puerto:              conValorPorDefecto("PORT", "8080"),
+		puertoMetricas:      conValorPorDefecto("METRICAS_PORT", "9464"),
+		intervaloChequeo:    duracion("CHEQUEO_INTERVALO", "5s"),
+		tiempoMaximoChequeo: duracion("CHEQUEO_TIEMPO_MAXIMO", "1s"),
 	}
 	limite, err := strconv.Atoi(conValorPorDefecto("NOTIFICACIONES_LIMITE_POR_MINUTO", "60"))
 	if err != nil || limite <= 0 {
