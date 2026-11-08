@@ -19,6 +19,17 @@ groups:
           resumen: Más de 5 notificaciones fallidas en 10 minutos
           descripcion: El servidor de correo está caído o rechazando envíos. Revisar Mailpit/Gmail y los logs "envío de notificación fallido".
 
+      # ADR-011: el disyuntor se abre aunque no haya notificaciones pendientes. Hay dos
+      # instancias, por eso max.
+      - alert: CorreoNoDisponible
+        expr: max(notificaciones_correo_circuito) > 0
+        for: 1m
+        labels:
+          severidad: aviso
+        annotations:
+          resumen: El disyuntor del servidor de correo no está cerrado
+          descripcion: El servidor de correo no responde y los envíos esperan. Revisar Mailpit/Gmail y el log "cambió el estado del disyuntor del servidor de correo".
+
       - alert: ObjetivoDeLatenciaIncumplido
         expr: slo:notificaciones_post_rapidas:ratio_1h < 0.99
         for: 5m
