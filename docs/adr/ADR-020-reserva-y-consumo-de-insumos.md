@@ -89,6 +89,8 @@ El vendedor tiene una pantalla simple: elige un ingrediente y una cantidad, y es
 
 **Test de contrato:** levanta Prism con la copia del OpenAPI del proveedor y corre el adaptador real contra él. Si el proveedor cambia el contrato de forma incompatible, actualizar la copia hace fallar el test.
 
+**Mock del proveedor como respaldo:** el servicio del proveedor es de otro grupo y corre en Render, así que no controlamos si va a estar publicado, despierto y andando el día de la demo (ver [Pendientes](#pendientes), punto 2). Cada pieza ajena en el camino suma una chance de falla. Por eso el compose tiene `inventario-mock`: el mismo Prism del test de contrato, en el puerto 4011. Si el proveedor no responde, se apunta su URL al mock y el adaptador real, el timeout, los errores y el disyuntor se muestran igual. El mock no guarda estado y responde siempre los ejemplos del contrato; con `Prefer: code=409` fuerza un `409`.
+
 **Observabilidad:** métricas de llamadas al proveedor por resultado y latencia, estado del circuit breaker y pedidos con consumo pendiente. Una alerta cuando el proveedor rechaza una operación por un error de formato.
 
 ### Qué ve cada uno
@@ -103,7 +105,7 @@ El vendedor tiene una pantalla simple: elige un ingrediente y una cantidad, y es
 ## Pendientes
 
 1. **De dónde salen los `productId`.** El proveedor exige un producto que ya exista en esa base. Las opciones son pedirle al grupo proveedor que cargue nuestros ingredientes, o usar productos suyos ya cargados como casilleros, ignorando los nombres. El diseño es el mismo: cada ingrediente guarda un `productId`, y mientras no lo tenga no se llama al proveedor y el pedido queda marcado para el vendedor.
-2. **El servicio del proveedor no responde.** El 06/11/2026, la URL del contrato devolvía `404` con `x-render-routing: no-server`: Render no tiene ningún servicio en esa dirección. Hasta que esté disponible no se puede medir el tiempo de respuesta, y falta probar que 1,5 s alcance si el servicio tarda en despertar.
+2. **El servicio del proveedor no responde.** El 06/11 y el 08/11/2026, la URL del contrato devolvía `404` con `x-render-routing: no-server`: Render no tiene ningún servicio en esa dirección. Hasta que esté disponible no se puede medir el tiempo de respuesta, y falta probar que 1,5 s alcance si el servicio tarda en despertar.
 
 ## Alternativas consideradas
 

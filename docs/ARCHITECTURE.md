@@ -170,7 +170,7 @@ Decisiones en [ADR-006](adr/ADR-006-observabilidad.md) (D11).
 | Integración | Rol | Servicio responsable | Estado |
 |---|---|---|---|
 | Notificaciones | Publicamos | notificaciones (vía api-gateway) | Publicada en Render: https://recienhecho-api-gateway.onrender.com, con el mock del contrato en https://recienhecho-notificaciones-mock.onrender.com ([docs/contracts](contracts/README.md), [ADR-004](adr/ADR-004-contrato-de-notificaciones.md), [ADR-013](adr/ADR-013-capacidad-y-costos.md)) |
-| Inventario | Consumimos | pedidos | Contrato 2.1.0, con reducir y aumentar stock; falta definir el modelo de consumo ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)). Mientras tanto, `pedidos` usa un inventario falso configurable (`INVENTARIO_MODO`) detrás del disyuntor ([ADR-010](adr/ADR-010-consumo-de-inventario.md)) |
+| Inventario | Consumimos | pedidos | Contrato 2.1.0, con reducir y aumentar stock; el modelo de consumo está en [ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md), con un mock del contrato del proveedor en el compose como respaldo por si su servicio no está. Hoy `pedidos` usa un inventario falso configurable (`INVENTARIO_MODO`) detrás del disyuntor ([ADR-010](adr/ADR-010-consumo-de-inventario.md)) |
 
 ## Limitaciones conocidas y deuda técnica
 

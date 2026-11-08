@@ -419,7 +419,15 @@ docker compose up -d pedidos                                                    
 (Invoke-RestMethod $prom -Body @{ query = 'pedidos_circuito_inventario == 1' }).data.result.metric.estado   # estado del disyuntor
 ```
 
-El servicio real del otro grupo (https://stock-volcamelli-inventario.onrender.com) daba `404 no-server` el 06/11 y el 08/11: ver [Lo que todavía no está](#lo-que-todavía-no-está).
+El servicio real del otro grupo (https://stock-volcamelli-inventario.onrender.com) daba `404 no-server` el 06/11 y el 08/11. Como respaldo, por si no está el día de la demo, el compose tiene un **mock de su contrato** (`inventario-mock`, [ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md#traducción-al-proveedor)). Responde siempre el ejemplo del contrato:
+
+```powershell
+docker compose up -d inventario-mock
+Invoke-RestMethod http://localhost:4011/api/branches/1/products/1/stock -Headers @{ 'X-API-Key' = 'prueba' }
+(Invoke-WebRequest -Method Post http://localhost:4011/api/branches/1/products/1/stock/decrease -Headers @{ 'X-API-Key' = 'prueba'; 'Prefer' = 'code=409' } -ContentType $json -Body '{"quantity":2,"reason":"prueba"}' -SkipHttpErrorCheck).Content   # fuerza el 409 de stock insuficiente
+```
+
+Pedidos todavía no le habla ni al mock ni al servicio real: ver [Lo que todavía no está](#lo-que-todavía-no-está).
 
 ## Caídas
 
