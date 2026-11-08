@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func variablesValidas() map[string]string {
@@ -41,6 +42,29 @@ func TestLeerConfiguracionLeeElLimiteDeIntentos(prueba *testing.T) {
 		variables["USUARIOS_INTENTOS_POR_MINUTO"] = invalida
 		if _, err := leerConfiguracion(func(nombre string) string { return variables[nombre] }); err == nil || !strings.Contains(err.Error(), "USUARIOS_INTENTOS_POR_MINUTO") {
 			prueba.Errorf("USUARIOS_INTENTOS_POR_MINUTO=%q tenía que dar error: %v", invalida, err)
+		}
+	}
+}
+
+func TestLeerConfiguracionLeeElChequeoDeVivo(prueba *testing.T) {
+	variables := variablesValidas()
+
+	leida, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
+
+	if err != nil || leida.intervaloChequeo != 5*time.Second || leida.tiempoMaximoChequeo != time.Second {
+		prueba.Fatalf("intervalo %v, tiempo máximo %v, err %v", leida.intervaloChequeo, leida.tiempoMaximoChequeo, err)
+	}
+	variables["CHEQUEO_INTERVALO"] = "2s"
+	if leida, err := leerConfiguracion(func(nombre string) string { return variables[nombre] }); err != nil || leida.intervaloChequeo != 2*time.Second {
+		prueba.Fatalf("CHEQUEO_INTERVALO=2s dio %v, err %v", leida.intervaloChequeo, err)
+	}
+	for _, variable := range []string{"CHEQUEO_INTERVALO", "CHEQUEO_TIEMPO_MAXIMO"} {
+		for _, invalida := range []string{"0s", "-1s", "cinco"} {
+			variables := variablesValidas()
+			variables[variable] = invalida
+			if _, err := leerConfiguracion(func(nombre string) string { return variables[nombre] }); err == nil || !strings.Contains(err.Error(), variable) {
+				prueba.Errorf("%s=%q tenía que dar error: %v", variable, invalida, err)
+			}
 		}
 	}
 }

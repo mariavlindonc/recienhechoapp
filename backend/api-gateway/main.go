@@ -25,12 +25,6 @@ const tiempoMaximoServicios = 3 * time.Second
 // curso y mandar los últimos spans (igual que en notificaciones).
 const esperaAlApagar = 10 * time.Second
 
-// intervaloChequeo y tiempoMaximoChequeo son los del chequeo activo de /vivo (ADR-012).
-const (
-	intervaloChequeo    = 5 * time.Second
-	tiempoMaximoChequeo = 1 * time.Second
-)
-
 func main() {
 	// Todos los logs del gateway salen en JSON con el nombre del servicio (ADR-006).
 	slog.SetDefault(nuevoLogger(os.Stdout, nombreServicio))
@@ -82,7 +76,7 @@ func ejecutar() error {
 	procesos.Add(2)
 	go func() {
 		defer procesos.Done()
-		balanceadorNotificaciones.vigilar(contexto, intervaloChequeo, tiempoMaximoChequeo)
+		balanceadorNotificaciones.vigilar(contexto, configuracion.intervaloChequeo, configuracion.tiempoMaximoChequeo)
 	}()
 	go func() {
 		defer procesos.Done()
