@@ -130,6 +130,20 @@ type ReservadorDeInsumos interface {
 	Liberar(contexto context.Context, idPedido string) error
 }
 
+// ErrStockInsuficiente lo devuelve el ProveedorDeStock cuando reducir no alcanza
+// (409 del proveedor): el stock no cambió y no hay que reintentar (ADR-020).
+var ErrStockInsuficiente = errors.New("el stock del proveedor no alcanza")
+
+// ProveedorDeStock es la capa anticorrupción frente al stock del otro grupo
+// (ADR-020). Reducir y Aumentar devuelven el stock que queda. No son idempotentes:
+// si no llegó la respuesta, hay que Consultar antes de repetir. Cualquier error que
+// no sea ErrStockInsuficiente ni ErrInventarioRechazo es transitorio.
+type ProveedorDeStock interface {
+	Reducir(contexto context.Context, idProducto, cantidad int64, motivo string) (stock int64, err error)
+	Aumentar(contexto context.Context, idProducto, cantidad int64, motivo string) (stock int64, err error)
+	Consultar(contexto context.Context, idProducto int64) (stock int64, err error)
+}
+
 // ResultadoInventario resume cómo terminó una llamada al inventario, para las métricas.
 type ResultadoInventario string
 
