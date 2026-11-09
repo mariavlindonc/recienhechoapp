@@ -419,7 +419,15 @@ docker compose up -d pedidos                                                    
 (Invoke-RestMethod $prom -Body @{ query = 'pedidos_circuito_inventario == 1' }).data.result.metric.estado   # estado del disyuntor
 ```
 
-El servicio real del otro grupo (https://stock-volcamelli-inventario.onrender.com) daba `404 no-server` el 06/11 y el 08/11: ver [Lo que todavía no está](#lo-que-todavía-no-está).
+El servicio real del otro grupo está en https://stock-volcamelli.onrender.com (`/health` responde `{"status":"ok"}`). La dirección que figuraba en su contrato, con `-inventario` al final, daba `404 no-server` el 06/11 y el 08/11 porque ahí no hay servicio. Como respaldo, por si no está el día de la demo, el compose tiene un **mock de su contrato** (`inventario-mock`, [ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md#traducción-al-proveedor)). Responde siempre el ejemplo del contrato:
+
+```powershell
+docker compose up -d inventario-mock
+Invoke-RestMethod http://localhost:4011/api/branches/1/products/1/stock -Headers @{ 'X-API-Key' = 'prueba' }
+(Invoke-WebRequest -Method Post http://localhost:4011/api/branches/1/products/1/stock/decrease -Headers @{ 'X-API-Key' = 'prueba'; 'Prefer' = 'code=409' } -ContentType $json -Body '{"quantity":2,"reason":"prueba"}' -SkipHttpErrorCheck).Content   # fuerza el 409 de stock insuficiente
+```
+
+Pedidos todavía no le habla ni al mock ni al servicio real: ver [Lo que todavía no está](#lo-que-todavía-no-está).
 
 ## Caídas
 
@@ -532,7 +540,7 @@ Los tests que más conviene mostrar: las transiciones de estado y el cupo en `ba
 
 Para no prometer lo que no hay:
 
-- **Inventario real del otro grupo y su test de contrato** ([#77](https://github.com/mariavlindonc/recienhechoapp/issues/77)). El enunciado pide la capacidad del proveedor en el flujo principal y un test de contrato para la defensa. Hoy pedidos usa el simulador, y el servicio del otro grupo no estaba publicado (`404 no-server` el 06/11 y el 08/11).
+- **Inventario real del otro grupo y su test de contrato** ([#77](https://github.com/mariavlindonc/recienhechoapp/issues/77)). El enunciado pide la capacidad del proveedor en el flujo principal y un test de contrato para la defensa. Hoy pedidos usa el simulador. El servicio del otro grupo anda en `https://stock-volcamelli.onrender.com` (verificado el 09/11 con la API key que nos pasó el grupo: catálogo, stock y el `409` de stock insuficiente responden como dice el contrato, en menos de 0,7 s). Su stock está vacío, así que antes de la demo hay que cargarlo con un `increase` ([ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md#pendientes)).
 - **Tests de punta a punta** (bonus B1, [#76](https://github.com/mariavlindonc/recienhechoapp/issues/76)).
 
 ## Si algo falla

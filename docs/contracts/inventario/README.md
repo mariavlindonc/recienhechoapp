@@ -6,7 +6,7 @@ Le ofrecemos al otro grupo consultar el catálogo de productos y el stock dispon
 
 ## Dónde está
 
-Inventario está publicado en `https://stock-volcamelli-inventario.onrender.com`. Los pedidos van directo a esa URL, sin pasar por el resto de nuestro sistema.
+Inventario está publicado en `https://stock-volcamelli.onrender.com`. Los pedidos van directo a esa URL, sin pasar por el resto de nuestro sistema.
 
 Inventario publicado tiene su propia base, separada de la de nuestro sistema. El stock que el grupo consumidor aumenta o reduce es el de esa base: no toca el nuestro, y lo que hacemos nosotros no cambia el suyo. Arranca con los mismos productos, sucursales y stock de prueba, y después cada grupo cambia el suyo.
 
@@ -73,14 +73,14 @@ Si Inventario se está reiniciando o no anda, la respuesta no llega desde Invent
 Listar productos:
 
 ```bash
-curl "https://stock-volcamelli-inventario.onrender.com/api/products?page=1&size=20" \
+curl "https://stock-volcamelli.onrender.com/api/products?page=1&size=20" \
   -H "X-API-Key: <api-key>"
 ```
 
 Stock de un producto en una sucursal:
 
 ```bash
-curl https://stock-volcamelli-inventario.onrender.com/api/branches/1/products/1/stock \
+curl https://stock-volcamelli.onrender.com/api/branches/1/products/1/stock \
   -H "X-API-Key: <api-key>"
 ```
 
@@ -93,7 +93,7 @@ Respuesta:
 Reducir en 2 el stock de ese producto:
 
 ```bash
-curl -X POST https://stock-volcamelli-inventario.onrender.com/api/branches/1/products/1/stock/decrease \
+curl -X POST https://stock-volcamelli.onrender.com/api/branches/1/products/1/stock/decrease \
   -H "X-API-Key: <api-key>" \
   -H "Content-Type: application/json" \
   -d '{"quantity": 2, "reason": "Venta"}'

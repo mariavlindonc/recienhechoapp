@@ -41,7 +41,7 @@ for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet 
 ## Infraestructura
 
 Cada dependencia que se agregue se lista acá con su uso, puerto y URL local.
-Las herramientas de desarrollo (MongoDB, MySQL, Redis, Meilisearch, RabbitMQ, Mailpit, Jaeger, Prometheus, Grafana y el mock de Prism) publican su puerto solo en `127.0.0.1`: se usan desde la propia computadora y no quedan expuestas a la red local ([ADR-006](docs/adr/ADR-006-observabilidad.md)). Los servicios no publican puerto: se entra solo por el api-gateway, en `localhost:8080` ([ADR-001](docs/adr/ADR-001-limites-de-los-servicios.md), [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md)).
+Las herramientas de desarrollo (MongoDB, MySQL, Redis, Meilisearch, RabbitMQ, Mailpit, Jaeger, Prometheus, Grafana y los mocks de Prism) publican su puerto solo en `127.0.0.1`: se usan desde la propia computadora y no quedan expuestas a la red local ([ADR-006](docs/adr/ADR-006-observabilidad.md)). Los servicios no publican puerto: se entra solo por el api-gateway, en `localhost:8080` ([ADR-001](docs/adr/ADR-001-limites-de-los-servicios.md), [ADR-012](docs/adr/ADR-012-balanceo-de-carga.md)).
 
 | Dependencia | Uso | Puerto | URL local |
 |---|---|---|---|
@@ -58,6 +58,7 @@ Las herramientas de desarrollo (MongoDB, MySQL, Redis, Meilisearch, RabbitMQ, Ma
 | Jaeger (`jaegertracing/jaeger:2.22.0`) | Trazas de api-gateway y notificaciones por OTLP ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `JAEGER_WEB_PORT` (16686) | http://localhost:16686 |
 | k6 (`grafana/k6:2.2.0`) | Tests de carga contra el api-gateway, con el perfil `carga` del compose; manda los resultados a Prometheus ([ADR-013](docs/adr/ADR-013-capacidad-y-costos.md), [tests/carga](tests/carga/README.md)) | Sin puerto | — |
 | Prism (`stoplight/prism:5`) | Mock del contrato de notificaciones ([ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md)) | `NOTIFICACIONES_MOCK_PORT` (4010) | http://localhost:4010/notificaciones |
+| Prism (`stoplight/prism:5`) | Mock del contrato del proveedor de inventario ([ADR-020](docs/adr/ADR-020-reserva-y-consumo-de-insumos.md)) | `INVENTARIO_MOCK_PORT` (4011) | http://localhost:4011/api/products (cualquier `X-API-Key`) |
 
 ## Reglas
 

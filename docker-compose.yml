@@ -378,6 +378,19 @@ services:
       - "127.0.0.1:${NOTIFICACIONES_MOCK_PORT}:${NOTIFICACIONES_MOCK_PORT}"
     networks: [interna]
 
+  # Mock del contrato del proveedor de inventario (docs/contracts/inventario/openapi.yaml),
+  # para probar el adaptador real sin depender de su servicio (ADR-020).
+  inventario-mock:
+    image: stoplight/prism:5
+    container_name: recienhecho-inventario-mock
+    command: mock -m false -h 0.0.0.0 -p ${INVENTARIO_MOCK_PORT} /contrato/inventario/openapi.yaml
+    volumes:
+      - ./docs/contracts:/contrato:ro
+    ports:
+      # Solo desde esta compu (127.0.0.1), como las demás herramientas de desarrollo (ADR-006).
+      - "127.0.0.1:${INVENTARIO_MOCK_PORT}:${INVENTARIO_MOCK_PORT}"
+    networks: [interna]
+
 volumes:
   mongo-notificaciones-datos:
   mongo-pedidos-datos:
