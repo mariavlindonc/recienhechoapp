@@ -38,6 +38,10 @@ services:
         sync: false
       - key: NOTIFICACIONES_LIMITE_POR_MINUTO
         value: "60"
+      # Notificaciones tarda en despertar en el plan gratis: con el 1 s por defecto el
+      # chequeo la daba por caída y el gateway respondía 503 (ADR-012).
+      - key: CHEQUEO_TIEMPO_MAXIMO
+        value: 60s
 
   - type: web
     name: recienhecho-notificaciones
