@@ -9,7 +9,7 @@ info:
     Todas las operaciones requieren la API key del grupo consumidor en el header X-API-Key.
     Cada respuesta trae el header X-Track-ID, que identifica el pedido en nuestros logs.
 servers:
-  - url: https://stock-volcamelli-inventario.onrender.com
+  - url: https://stock-volcamelli.onrender.com
     description: Inventario publicado
 security:
   - apiKeyAuth: []

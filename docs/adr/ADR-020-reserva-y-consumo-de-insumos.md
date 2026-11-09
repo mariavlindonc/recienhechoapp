@@ -89,7 +89,7 @@ El vendedor tiene una pantalla simple: elige un ingrediente y una cantidad, y es
 
 **Test de contrato:** levanta Prism con la copia del OpenAPI del proveedor y corre el adaptador real contra él. Si el proveedor cambia el contrato de forma incompatible, actualizar la copia hace fallar el test.
 
-**Mock del proveedor como respaldo:** el servicio del proveedor es de otro grupo y corre en Render, así que no controlamos si va a estar publicado, despierto y andando el día de la demo (ver [Pendientes](#pendientes), punto 2). Cada pieza ajena en el camino suma una chance de falla. Por eso el compose tiene `inventario-mock`: el mismo Prism del test de contrato, en el puerto 4011. Si el proveedor no responde, se apunta su URL al mock y el adaptador real, el timeout, los errores y el disyuntor se muestran igual. El mock no guarda estado y responde siempre los ejemplos del contrato; con `Prefer: code=409` fuerza un `409`.
+**Mock del proveedor como respaldo:** el servicio del proveedor es de otro grupo y corre en Render, así que no controlamos si va a estar publicado, despierto y andando el día de la demo (ver [Pendientes](#pendientes), punto 1). Cada pieza ajena en el camino suma una chance de falla. Por eso el compose tiene `inventario-mock`: el mismo Prism del test de contrato, en el puerto 4011. Si el proveedor no responde, se apunta su URL al mock y el adaptador real, el timeout, los errores y el disyuntor se muestran igual. El mock no guarda estado y responde siempre los ejemplos del contrato; con `Prefer: code=409` fuerza un `409`.
 
 **Observabilidad:** métricas de llamadas al proveedor por resultado y latencia, estado del circuit breaker y pedidos con consumo pendiente. Una alerta cuando el proveedor rechaza una operación por un error de formato.
 
@@ -118,7 +118,22 @@ Qué cuesta:
 
 ## Pendientes
 
-1. **El servicio del proveedor no responde.** El 06/11 y el 08/11/2026, la URL del contrato devolvía `404` con `x-render-routing: no-server`: Render no tiene ningún servicio en esa dirección. Hasta que esté disponible no se puede medir el tiempo de respuesta, y falta probar que 1,5 s alcance si el servicio tarda en despertar.
+1. **El servicio del proveedor anda, en otra dirección que la del contrato.** El 06/11 y el 08/11/2026, la URL del contrato (`stock-volcamelli-inventario.onrender.com`) devolvía `404` con `x-render-routing: no-server`: Render no tiene ningún servicio con ese nombre. El 09/11 el grupo del proveedor confirmó que anda. La dirección que responde es `https://stock-volcamelli.onrender.com`, sin `-inventario`. La URL se corrigió en el contrato, en su README, en el adaptador y en [DEMO.md](../DEMO.md).
+
+   Probado el 09/11 contra el servicio real, con la API key que nos pasó el grupo (va en `X-API-Key` y no se escribe en el repositorio):
+
+   | Prueba | Resultado |
+   |---|---|
+   | `GET /health` | `200`, `{"status":"ok"}` |
+   | Cualquier ruta de `/api` sin clave | `401 UNAUTHORIZED`, con el mismo mensaje del contrato |
+   | `GET /api/products?page=1&size=5` | `200`, 10 productos en total |
+   | `GET /api/products/9999` | `404 PRODUCT_NOT_FOUND` |
+   | `GET /api/branches/1/products/1/stock` | `200`, `quantity: 0` |
+   | `POST .../stock/decrease` de 1 unidad con stock 0 | `409 INSUFFICIENT_STOCK`; el stock sigue en 0 |
+
+   Todas respondieron en 0,4 a 0,7 s con el servicio despierto, bien por debajo del timeout de 1,5 s. Queda sin probar: `increase`, que escribe en su base; el tiempo cuando el servicio tarda en despertar; y que la sucursal 4 responde `200` con lista vacía al consultar, aunque el contrato solo promete `BRANCH_NOT_FOUND` al aumentar o reducir.
+
+2. **El stock del proveedor está vacío.** La sucursal 1 no tiene stock cargado, así que cualquier reducción da `409` hasta que se haga un `increase` sobre los productos que usamos como casilleros.
 
 ## Alternativas consideradas
 

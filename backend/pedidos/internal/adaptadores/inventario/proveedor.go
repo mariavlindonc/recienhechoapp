@@ -30,7 +30,7 @@ type Proveedor struct {
 
 var _ puertos.ProveedorDeStock = (*Proveedor)(nil)
 
-// NuevoProveedor llama a la dirección dada (https://stock-volcamelli-inventario.onrender.com)
+// NuevoProveedor llama a la dirección dada (https://stock-volcamelli.onrender.com)
 // con la clave en X-API-Key y siempre sobre la misma sucursal. Cada llamada tiene el
 // timeout de ADR-010 (TiempoMaximo).
 func NuevoProveedor(direccion *url.URL, clave string, sucursal int64) *Proveedor {
