@@ -9,7 +9,7 @@ services:
     runtime: docker
     plan: free
     region: oregon
-    branch: feature/notificaciones-render
+    branch: develop
     dockerfilePath: ./backend/api-gateway/Dockerfile
     dockerContext: ./backend/api-gateway
     healthCheckPath: /health
@@ -48,7 +48,7 @@ services:
     runtime: docker
     plan: free
     region: oregon
-    branch: feature/notificaciones-render
+    branch: develop
     dockerfilePath: ./backend/notificaciones/Dockerfile
     dockerContext: ./backend/notificaciones
     healthCheckPath: /vivo
@@ -83,7 +83,7 @@ services:
     runtime: docker
     plan: free
     region: oregon
-    branch: feature/notificaciones-render
+    branch: develop
     dockerfilePath: ./docs/contracts/notificaciones/Dockerfile.mock
     dockerContext: ./docs/contracts/notificaciones
 
