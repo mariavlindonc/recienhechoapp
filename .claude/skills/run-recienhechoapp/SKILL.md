@@ -120,6 +120,7 @@ Los resultados también van a Prometheus (`k6_http_req_duration_p95`, `k6_http_r
 - **`docker compose ps --format '...'` pierde las comillas** al pasar por `wsl -e bash -c` (solo en el camino de WSL): `app.sh estado` usa `ps -a` sin formato.
 - **La búsqueda tarda unos 3 s en ver un cambio** (bandeja de Meilisearch, ADR-008). Recién cargados o borrados, los budines pueden no aparecer en el catálogo.
 - **Los budines quedan en los volúmenes** después de `detener`. `cargar` no los duplica. Los precios son de relleno a propósito: no sabemos los reales.
+- **El inventario falso pierde su stock en cada reinicio de `pedidos`** (lo guarda en memoria), pero el stock conocido queda en MongoDB. Pasado un `levantar`, la primera carga lo pisa con lo que devuelve el falso: con 800 g guardados, cargar 100 deja 100. Cargar el stock después de levantar.
 - **Los `md-text-field` no son `input`:** para llenarlos desde JS hay que poner `.value` y disparar un `InputEvent` con `composed: true`. Buscarlos por `.label` (es propiedad, no atributo).
 - **La sesión muere con cada Chrome.** Es una cookie de sesión (sin `Max-Age`) más `sessionStorage` (ADR-019), así que reusar el perfil de Chrome no alcanza: por eso `COMO=vendedor` entra en la misma corrida.
 - **El estado de un pedido no sale en `innerText`.** Es un `md-chip` con el texto en la propiedad `label`: leerlo con `[...document.querySelectorAll('.estado-pedido')].map(chip => chip.label)`.
