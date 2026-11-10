@@ -8,11 +8,13 @@ import type {
   DatosProducto,
   DiaCapacidad,
   EstadoPedido,
+  Existencia,
   FiltrosCatalogo,
   Ingrediente,
   PaginaDeProductos,
   Pedido,
   PedidoEspecial,
+  Pendiente,
   Producto,
   Usuario,
 } from './tipos.ts'
@@ -198,6 +200,8 @@ type PedidoDeApi = {
   estado: EstadoPedido
   motivoCancelacion?: string
   mensajeVendedor?: string
+  requiereRevision?: boolean
+  motivoRevision?: string
 }
 
 // Las pantallas muestran un producto por pedido; si hay varios, se juntan los nombres.
@@ -214,6 +218,8 @@ export function aPedido(pedido: PedidoDeApi): Pedido {
     estado: pedido.estado,
     motivoCancelacion: pedido.motivoCancelacion,
     mensajeVendedor: pedido.mensajeVendedor,
+    requiereRevision: pedido.requiereRevision,
+    motivoRevision: pedido.motivoRevision,
   }
 }
 
@@ -237,6 +243,22 @@ export async function cancelarPedido(id: string) {
 // Vendedor: estados (VE6)
 export async function avanzarEstado(id: string, nuevoEstado: EstadoPedido) {
   return aPedido(await pedir<PedidoDeApi>(`/pedidos/${encodeURIComponent(id)}/estado`, { metodo: 'PUT', cuerpo: { estado: nuevoEstado } }))
+}
+
+// Los pedidos que esperan al vendedor, de cualquier día, con los insumos que faltan (ADR-020).
+export async function listarPendientes(): Promise<Pendiente[]> {
+  const pendientes = await pedir<(PedidoDeApi & { faltantes: Pendiente['faltantes'] })[]>('/pedidos/pendientes')
+  return pendientes.map(pendiente => ({ ...aPedido(pendiente), faltantes: pendiente.faltantes ?? [] }))
+}
+
+// Stock propio de cada ingrediente (ADR-020).
+export function listarStock() {
+  return pedir<Existencia[]>('/pedidos/stock')
+}
+
+// Suma cantidad al stock del ingrediente: pedidos se lo pide al proveedor y devuelve lo que quedó.
+export function cargarStock(ingrediente: string, unidad: string, cantidad: number) {
+  return pedir<Existencia>('/pedidos/stock', { metodo: 'POST', cuerpo: { ingrediente, unidad, cantidad } })
 }
 
 // pedidos lista por día: se piden solo los días que tienen algo reservado.

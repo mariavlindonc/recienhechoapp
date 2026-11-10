@@ -14,6 +14,7 @@ const DESTINOS_VENDEDOR = [
   { ruta: '/vendedor/calendario', etiqueta: 'Calendario', icono: 'calendar_month' },
   { ruta: '/vendedor/especiales', etiqueta: 'Especiales', icono: 'request_quote' },
   { ruta: '/vendedor/pedidos', etiqueta: 'Pedidos', icono: 'bakery_dining' },
+  { ruta: '/vendedor/stock', etiqueta: 'Stock', icono: 'warehouse' },
 ]
 
 // La navegación depende del rol de la sesión: el vendedor ve sus pantallas y el resto, las del comprador.

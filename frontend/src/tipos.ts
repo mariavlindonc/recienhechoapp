@@ -49,7 +49,16 @@ export type Pedido = {
   motivoCancelacion?: string
   // mensajeVendedor es lo que escribió el vendedor al rechazar un especial sin cotizarlo.
   mensajeVendedor?: string
+  // El vendedor tiene que mirarlo: pedidos no pudo descontar los insumos (ADR-020).
+  requiereRevision?: boolean
+  motivoRevision?: string
 }
+
+// Un pedido que espera la confirmación del vendedor, con los insumos que hoy no alcanzan (ADR-020).
+export type Pendiente = Pedido & { faltantes: { ingrediente: string; cantidad: number; unidad: string }[] }
+
+// Stock propio de un ingrediente. disponible es negativo si lo reservado supera al stock.
+export type Existencia = { ingrediente: string; unidad: string; stock: number; reservado: number; disponible: number }
 
 // Un especial aceptado pasa a ser un Pedido más (pendiente_confirmacion en adelante, ADR-017).
 export type PedidoEspecial = {
