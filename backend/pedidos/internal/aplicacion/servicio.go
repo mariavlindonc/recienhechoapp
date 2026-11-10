@@ -514,10 +514,12 @@ func (servicio *Servicio) registrarConsumo(contexto context.Context, pedido *dom
 	})
 }
 
-// pasarARevision deja el pedido para el vendedor. No frena la producción.
+// pasarARevision deja el pedido para el vendedor y devuelve lo que no se consumió,
+// en la misma transacción. No frena la producción.
 func (servicio *Servicio) pasarARevision(contexto context.Context, pedido *dominio.Pedido, motivo string) error {
+	teniaReserva := pedido.InsumosReservados
 	pedido.MarcarParaRevision(motivo, servicio.ahora())
-	return servicio.guardar(contexto, pedido, puertos.Cambio{Pedido: *pedido, VersionAnterior: pedido.Version})
+	return servicio.guardar(contexto, pedido, puertos.Cambio{Pedido: *pedido, VersionAnterior: pedido.Version, LiberarReserva: teniaReserva})
 }
 
 // PublicarEventos manda al broker los eventos de la bandeja de salida, del más

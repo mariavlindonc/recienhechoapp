@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado el 06/11/2026 ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)). Reemplaza a [ADR-010](ADR-010-consumo-de-inventario.md). Los `productId` del proveedor salen de productos suyos usados como casilleros (ver [De dónde salen los `productId`](#de-dónde-salen-los-productid)).
+Aceptado el 06/11/2026 ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)). Reemplaza a [ADR-010](ADR-010-consumo-de-inventario.md). Los `productId` del proveedor salen de productos suyos usados como casilleros (ver [De dónde salen los `productId`](#de-dónde-salen-los-productid)). Que marcar un pedido para el vendedor devuelva su reserva lo decidió Agustín el 10/11/2026.
 
 ## Contexto
 
@@ -66,6 +66,8 @@ Pasar a `en_produccion` no espera al proveedor: se guarda el estado y el pedido 
 - Si bajó exactamente esa cantidad, se aplicó: se da por hecho y no se repite.
 - Si no cambió, no se aplicó: se repite.
 - Si dio otra cosa, no se puede saber: se marca para el vendedor.
+
+**Marcar un pedido para el vendedor devuelve lo que le quedaba reservado**, en la misma transacción. Ese consumo ya no se reintenta solo, así que nada más va a usar esa reserva; si quedara, el disponible bajaría para siempre y las notas de faltantes saldrían de más.
 
 La comparación es confiable porque esa base la usa solo nuestro grupo, `pedidos` corre con una sola instancia, y el consumo va de a un pedido por vez. Lo mismo vale para `increase`.
 

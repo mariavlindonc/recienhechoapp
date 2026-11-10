@@ -334,8 +334,8 @@ func TestMarcarParaRevisionFrenaElConsumoSinCancelar(prueba *testing.T) {
 
 	pedido.MarcarParaRevision("Falta harina.", momento)
 
-	if !pedido.RequiereRevision || pedido.ConsumoPendiente || pedido.Estado != dominio.EstadoEnProduccion {
-		prueba.Errorf("queda para el vendedor, sin consumo y sin frenar la producción: %+v", pedido)
+	if !pedido.RequiereRevision || pedido.ConsumoPendiente || pedido.InsumosReservados || pedido.Estado != dominio.EstadoEnProduccion {
+		prueba.Errorf("queda para el vendedor, sin consumo, sin reserva y sin frenar la producción: %+v", pedido)
 	}
 }
 

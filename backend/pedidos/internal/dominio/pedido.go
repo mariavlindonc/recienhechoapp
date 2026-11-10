@@ -398,11 +398,13 @@ func (pedido *Pedido) RegistrarFalloDeConsumo(enDuda bool, ahora time.Time) {
 }
 
 // MarcarParaRevision deja el pedido para que lo resuelva el vendedor y frena el
-// consumo: no se reintenta solo. No frena la producción.
+// consumo: no se reintenta solo. No frena la producción. Suelta lo que quedaba
+// reservado, porque ya nadie lo va a consumir (ADR-020).
 func (pedido *Pedido) MarcarParaRevision(motivo string, ahora time.Time) {
 	pedido.RequiereRevision = true
 	pedido.MotivoRevision = motivo
 	pedido.ConsumoPendiente = false
+	pedido.InsumosReservados = false
 	pedido.ActualizadoEn = ahora
 }
 

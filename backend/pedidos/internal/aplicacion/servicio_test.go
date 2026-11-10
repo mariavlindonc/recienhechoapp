@@ -366,7 +366,7 @@ func TestElConsumoDescuentaCadaInsumoYBajaLaReserva(prueba *testing.T) {
 }
 
 // Sin stock en el proveedor (409) el pedido sigue en producción y queda marcado
-// para el vendedor; no se reintenta.
+// para el vendedor; no se reintenta y devuelve lo que tenía reservado.
 func TestSinStockEnElProveedorMarcaElPedidoParaElVendedor(prueba *testing.T) {
 	actual := nuevoEntorno()
 	pedido := actual.pedidoEnProduccion(prueba)
@@ -378,8 +378,12 @@ func TestSinStockEnElProveedorMarcaElPedidoParaElVendedor(prueba *testing.T) {
 	if marcado.Estado != dominio.EstadoEnProduccion || !marcado.RequiereRevision || marcado.ConsumoPendiente {
 		prueba.Fatalf("sigue en producción, para revisar y sin consumo: %+v", marcado)
 	}
-	if harina := actual.existencias.de("harina", "g"); harina.Reservado != 50 {
-		prueba.Errorf("lo que no se consumió sigue reservado: %d", harina.Reservado)
+	if marcado.InsumosReservados {
+		prueba.Error("en revisión ya no tiene reserva")
+	}
+	harina, manteca := actual.existencias.de("harina", "g"), actual.existencias.de("manteca", "g")
+	if harina.Reservado != 0 || manteca.Reservado != 0 {
+		prueba.Errorf("lo que no se consumió vuelve: harina %d, manteca %d reservados", harina.Reservado, manteca.Reservado)
 	}
 	actual.servicio.ProcesarConsumos(context.Background())
 	if len(actual.proveedor.reducciones) != 1 {
