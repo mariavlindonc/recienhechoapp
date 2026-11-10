@@ -1,5 +1,6 @@
 // Escenario de pedidos (ADR-013): 50 usuarios virtuales crean pedidos para el
-// mismo día hasta agotar el cupo. Se corre con INVENTARIO_MODO=confirma y lento.
+// mismo día hasta agotar el cupo. Crear un pedido no llama al inventario (ADR-020):
+// da lo mismo el INVENTARIO_MODO con el que corre.
 // Los budines de ejemplo piden un día de anticipación, así que por defecto el
 // día es pasado mañana, lejos del cambio de fecha en UTC. Cada corrida usa otro
 // día (DIAS) para empezar con el cupo libre.
@@ -23,7 +24,7 @@ export const options = {
   },
   systemTags: etiquetas,
   thresholds: {
-    // RNF3: crear un pedido, p95 menor a 2 s, incluida la llamada a inventario.
+    // RNF3: crear un pedido, p95 menor a 2 s.
     pedido_creado_duracion: ['p(95)<2000'],
   },
 };

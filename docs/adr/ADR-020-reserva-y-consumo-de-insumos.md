@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado el 06/11/2026 ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)). Reemplaza a [ADR-010](ADR-010-consumo-de-inventario.md). Los `productId` del proveedor salen de productos suyos usados como casilleros (ver [De dónde salen los `productId`](#de-dónde-salen-los-productid)).
+Aceptado el 06/11/2026 ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)). Reemplaza a [ADR-010](ADR-010-consumo-de-inventario.md). Los `productId` del proveedor salen de productos suyos usados como casilleros (ver [De dónde salen los `productId`](#de-dónde-salen-los-productid)). Que marcar un pedido para el vendedor devuelva su reserva lo decidió Agustín el 10/11/2026.
 
 ## Contexto
 
@@ -67,6 +67,8 @@ Pasar a `en_produccion` no espera al proveedor: se guarda el estado y el pedido 
 - Si no cambió, no se aplicó: se repite.
 - Si dio otra cosa, no se puede saber: se marca para el vendedor.
 
+**Marcar un pedido para el vendedor devuelve lo que le quedaba reservado**, en la misma transacción. Ese consumo ya no se reintenta solo, así que nada más va a usar esa reserva; si quedara, el disponible bajaría para siempre y las notas de faltantes saldrían de más.
+
 La comparación es confiable porque esa base la usa solo nuestro grupo, `pedidos` corre con una sola instancia, y el consumo va de a un pedido por vez. Lo mismo vale para `increase`.
 
 Los pedidos sin insumos, como los especiales ([ADR-017](ADR-017-pedidos-especiales.md)), no llaman al proveedor, porque `quantity` tiene que ser mayor a 0.
@@ -105,6 +107,8 @@ El vendedor tiene una pantalla simple: elige un ingrediente y una cantidad, y es
 ### De dónde salen los `productId`
 
 El proveedor exige un producto que ya exista en su base: no deja crearlos y un id desconocido da `404`. Cada ingrediente nuestro guarda el `productId` de un producto suyo ya cargado, que usamos como casillero, ignorando su nombre. Mientras un ingrediente no tiene `productId`, no se llama al proveedor y el pedido queda marcado para el vendedor.
+
+Los casilleros se reparten solos, en el orden de `INVENTARIO_PRODUCTOS_IDS`, la primera vez que un ingrediente los necesita (al cargar su stock o al consumirlo): el primer producto libre es para el primer ingrediente. Un producto nunca sirve a dos ingredientes.
 
 Por qué casilleros:
 - **Anda hoy.** Depende solo de lo que el proveedor ya tiene cargado, y sirve igual contra su servicio real y contra el mock.

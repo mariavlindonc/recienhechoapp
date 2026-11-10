@@ -14,11 +14,11 @@ Lo que ya está definido:
 
 - `pedidos` es dueño de los pedidos especiales ([ADR-001](ADR-001-limites-de-los-servicios.md)) y los guarda en MongoDB, con campos libres como diseño, texto o alergias ([ADR-002](ADR-002-persistencia.md)).
 - Los estados son `solicitado` → `cotizado` → `aceptado`, `rechazado` o `vencido`. Un especial aceptado "sigue como `pendiente_confirmacion`" ([ARCHITECTURE](../ARCHITECTURE.md)).
-- Un pedido normal reserva el cupo del día al entrar en `pendiente_confirmacion` y pasa a `confirmado` cuando el inventario reserva los insumos de la receta (R1, R3).
+- Un pedido normal reserva el cupo del día y los insumos de la receta al entrar en `pendiente_confirmacion` y pasa a `confirmado` cuando lo confirma el vendedor (R1, R3, [ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)).
 
 Lo que los docs no definen:
 
-1. **Inventario al aceptar.** Un especial no tiene producto ni receta, así que no hay insumos que reservar, y el proceso que confirma pedidos no tiene qué mandarle al proveedor.
+1. **Inventario al aceptar.** Un especial no tiene producto ni receta, así que no hay insumos que reservar ni que descontar en el proveedor.
 2. **Cupo.** Cuánto cupo ocupa un especial: el cupo se cuenta en unidades de producto.
 3. **Aviso de la cotización.** Hoy `pedidos` publica solo `pedido.estado_cambiado`, y `notificaciones` arma el mail según el estado nuevo.
 
@@ -28,11 +28,10 @@ Lo que los docs no definen:
 
 - Se guarda como un pedido de tipo `especial` con un solo ítem (la descripción, cantidad 1) y sin insumos.
 - Al aceptar, reserva 1 unidad del cupo del día en la misma transacción (B1) y pasa a `pendiente_confirmacion`. Sin cupo, `409 sin_cupo` y sigue `cotizado`.
-- Lo confirma el proceso de siempre con el inventario, que recibe la lista de insumos vacía (variante de A3 sin insumos: no cambia el contrato ni el proceso).
+- Lo confirma el vendedor, como cualquier pedido (A2, [ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)). Sin insumos, no reserva nada en el stock propio y al pasar a producción no llama al proveedor.
 - Cada cambio publica `pedido.estado_cambiado` con el total (C1). `notificaciones` arma un mail propio para `solicitado`, `cotizado` (con el precio y las 48 h), `rechazado` y `vencido`, y uno con el mensaje del vendedor cuando él rechaza la solicitud.
 - Los especiales sin aceptar no aparecen en el calendario del día (`GET /pedidos?fecha=`).
 
-Pasar a A1 (confirmar sin inventario) o a A2 (confirma el vendedor) cambia solo `ResponderEspecial` en la aplicación.
 
 Rutas:
 
@@ -74,5 +73,4 @@ El vencimiento se controla cuando el comprador responde, como pide el SPEC: pasa
 ## Consecuencias
 
 - El evento suma los campos opcionales `totalCentavos` y `mensajeVendedor`; la versión sigue en 1 porque un consumidor viejo los ignora ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
-- El proveedor de inventario recibe reservas sin insumos para los especiales. Como reservar es reducir stock ([ADR-010](ADR-010-consumo-de-inventario.md)), un especial no tiene nada que descontar: cuando llegue la versión del contrato con reducir y aumentar, hay que confirmar si acepta una reducción vacía o si el adaptador no lo llama; si no se puede ninguna de las dos, se pasa a A1.
-- Con A1 o A2, los especiales no pasarían por el disyuntor del inventario ([ADR-011](ADR-011-resiliencia.md)).
+- Los especiales no pasan por el proveedor de inventario ni por su disyuntor ([ADR-011](ADR-011-resiliencia.md)): no tienen insumos que descontar, y el proveedor exige una cantidad mayor a 0.

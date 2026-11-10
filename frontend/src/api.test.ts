@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { aPedido, aProducto, buscarProductos, cancelarPedido, crearPedido, ErrorDeApi, esperaParaReconectar, ingresar, listarEspeciales, listarMisPedidos, cerrarSesion, rechazarEspecial, responderCotizacion, seguirPedidos, TRANSICIONES } from './api.ts'
+import { aPedido, aProducto, buscarProductos, cancelarPedido, cargarStock, crearPedido, ErrorDeApi, esperaParaReconectar, ingresar, listarEspeciales, listarMisPedidos, listarPendientes, cerrarSesion, rechazarEspecial, responderCotizacion, seguirPedidos, TRANSICIONES } from './api.ts'
 
 // sessionStorage no existe en bun test: alcanza con un mapa.
 const guardado = new Map<string, string>()
@@ -256,6 +256,30 @@ test('aunque el servidor no responda, cerrar sesión limpia la pantalla', async 
   await cerrarSesion()
 
   expect(guardado.get('sesion')).toBeUndefined()
+})
+
+test('el vendedor ve los pendientes con los insumos que faltan (ADR-020)', async () => {
+  const pedidos = responder(200, [
+    { id: 'p1', items: [{ productoId: 'm', nombreProducto: 'Medialuna', cantidad: 3 }], fecha: '2026-12-01', precioCentavos: 240000, tipo: 'programado', estado: 'pendiente_confirmacion', faltantes: [{ ingrediente: 'harina', cantidad: 50, unidad: 'g' }] },
+    { id: 'p2', items: [{ productoId: 't', nombreProducto: 'Torta', cantidad: 1 }], fecha: '2026-12-02', precioCentavos: 100, tipo: 'programado', estado: 'pendiente_confirmacion', faltantes: null },
+  ])
+
+  const pendientes = await listarPendientes()
+
+  expect(pedidos[0]!.url).toBe('/api/pedidos/pendientes')
+  expect(pendientes[0]!.faltantes).toEqual([{ ingrediente: 'harina', cantidad: 50, unidad: 'g' }])
+  expect(pendientes[1]!.faltantes).toEqual([])
+})
+
+test('cargar stock manda el ingrediente, la unidad y la cantidad (ADR-020)', async () => {
+  const pedidos = responder(200, { ingrediente: 'harina', unidad: 'g', stock: 1000, reservado: 0, disponible: 1000 })
+
+  const existencia = await cargarStock('harina', 'g', 1000)
+
+  expect(pedidos[0]!.url).toBe('/api/pedidos/stock')
+  expect(pedidos[0]!.opciones.method).toBe('POST')
+  expect(JSON.parse(pedidos[0]!.opciones.body as string)).toEqual({ ingrediente: 'harina', unidad: 'g', cantidad: 1000 })
+  expect(existencia.stock).toBe(1000)
 })
 
 test('el comprador cancela una solicitud especial: deja de estar abierta y pasa a sus pedidos (ADR-017)', async () => {

@@ -13,6 +13,7 @@ import VendedorCapacidad from './paginas/vendedor/Capacidad.tsx'
 import VendedorCalendario from './paginas/vendedor/Calendario.tsx'
 import VendedorEspeciales from './paginas/vendedor/Especiales.tsx'
 import VendedorPedidos from './paginas/vendedor/Pedidos.tsx'
+import VendedorStock from './paginas/vendedor/Stock.tsx'
 import NoEncontrado from './paginas/NoEncontrado.tsx'
 
 export default createBrowserRouter([
@@ -32,6 +33,7 @@ export default createBrowserRouter([
       { path: '/vendedor/calendario', element: <VendedorCalendario /> },
       { path: '/vendedor/especiales', element: <VendedorEspeciales /> },
       { path: '/vendedor/pedidos', element: <VendedorPedidos /> },
+      { path: '/vendedor/stock', element: <VendedorStock /> },
       { path: '*', element: <NoEncontrado /> },
     ],
   },

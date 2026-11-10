@@ -170,8 +170,13 @@ services:
       MONGO_URI: mongodb://${PEDIDOS_MONGO_USUARIO}:${PEDIDOS_MONGO_CLAVE}@mongo-pedidos:27017/?authSource=admin&replicaSet=rs0
       RABBITMQ_URL: amqp://${RABBITMQ_USUARIO}:${RABBITMQ_CLAVE}@rabbitmq:5672/
       PRODUCTOS_URL: http://productos:${PRODUCTOS_PORT}
-      # Inventario falso hasta tener el contrato del proveedor (ADR-010): confirma,
-      # sin_stock, lento, error o rechazo, para la demo y las caídas provocadas.
+      # Inventario del proveedor (ADR-020). Con INVENTARIO_URL se llama al servicio
+      # real (o a inventario-mock); vacía, se usa el falso en INVENTARIO_MODO:
+      # confirma, sin_stock, lento, error o rechazo, para la demo y las caídas provocadas.
+      INVENTARIO_URL: ${INVENTARIO_URL}
+      INVENTARIO_CLAVE_API: ${INVENTARIO_CLAVE_API}
+      INVENTARIO_SUCURSAL: ${INVENTARIO_SUCURSAL}
+      INVENTARIO_PRODUCTOS_IDS: ${INVENTARIO_PRODUCTOS_IDS}
       INVENTARIO_MODO: ${INVENTARIO_MODO}
     # Sin puerto publicado: se entra solo por el api-gateway (ADR-001, ADR-012).
     # No depende de RabbitMQ para arrancar: si no está, los eventos esperan en la

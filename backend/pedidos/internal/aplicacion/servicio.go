@@ -1,13 +1,15 @@
 // Package aplicacion tiene los casos de uso de pedidos: encargar (con
-// idempotencia), cancelar, avanzar estados, definir la capacidad de cada día y
-// los procesos en segundo plano (reconfirmar con el inventario, liberar insumos y
-// publicar eventos). Usa el dominio para las reglas y los puertos para todo lo demás.
+// idempotencia), cancelar, avanzar estados, definir la capacidad de cada día,
+// cargar el stock y los procesos en segundo plano (consumir los insumos en el
+// proveedor y publicar eventos). Usa el dominio para las reglas y los puertos para
+// todo lo demás.
 package aplicacion
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -32,13 +34,11 @@ const (
 	// evento se vuelve a intentar enseguida que vuelve.
 	tiempoApartadoEvento = 15 * time.Second
 
-	// esperaConfirmacionInicial es cuánto puede tardar la confirmación que se hace
-	// al crear el pedido: el inventario tiene 1,5 s (ADR-010) más el guardado.
-	esperaConfirmacionInicial = 5 * time.Second
-
-	// esperaReintentoLiberar es cada cuánto se reintenta avisarle al proveedor que
-	// libere insumos.
-	esperaReintentoLiberar = time.Minute
+	// largoMaximoIngrediente y largoMaximoUnidad acotan lo que escribe el vendedor al
+	// cargar stock.
+	largoMaximoIngrediente = 100
+	largoMaximoUnidad      = 20
+	cantidadMaximaCarga    = 1_000_000
 )
 
 // Servicio reúne los casos de uso.
@@ -47,7 +47,8 @@ type Servicio struct {
 	bandeja     puertos.BandejaDeSalida
 	publicador  puertos.Publicador
 	catalogo    puertos.Catalogo
-	inventario  puertos.ReservadorDeInsumos
+	existencias puertos.Existencias
+	inventario  puertos.ProveedorDeStock
 	eventos     puertos.Eventos
 	avisos      puertos.AvisosEnVivo
 	ahora       func() time.Time
@@ -61,7 +62,8 @@ type Dependencias struct {
 	Bandeja     puertos.BandejaDeSalida
 	Publicador  puertos.Publicador
 	Catalogo    puertos.Catalogo
-	Inventario  puertos.ReservadorDeInsumos
+	Existencias puertos.Existencias
+	Inventario  puertos.ProveedorDeStock
 	Eventos     puertos.Eventos
 	Avisos      puertos.AvisosEnVivo
 	Ahora       func() time.Time
@@ -75,6 +77,7 @@ func NuevoServicio(dependencias Dependencias) *Servicio {
 		bandeja:     dependencias.Bandeja,
 		publicador:  dependencias.Publicador,
 		catalogo:    dependencias.Catalogo,
+		existencias: dependencias.Existencias,
 		inventario:  dependencias.Inventario,
 		eventos:     dependencias.Eventos,
 		avisos:      dependencias.Avisos,
@@ -83,9 +86,10 @@ func NuevoServicio(dependencias Dependencias) *Servicio {
 	}
 }
 
-// Crear encarga un pedido: fija el precio, reserva el cupo del día y después pide
-// los insumos al inventario. Repetir el pedido con la misma clave devuelve el ya
-// creado, sin reservar el cupo otra vez (R1).
+// Crear encarga un pedido: fija el precio, reserva el cupo del día y los insumos
+// de la receta, y lo deja pendiente de confirmación hasta que el vendedor lo
+// revise (ADR-020). No llama al proveedor. Repetir el pedido con la misma clave
+// devuelve el ya creado, sin reservar nada otra vez (R1).
 func (servicio *Servicio) Crear(contexto context.Context, comprador dominio.Comprador, clave string, solicitud dominio.Solicitud) (dominio.Pedido, error) {
 	if err := validarClave(clave); err != nil {
 		return dominio.Pedido{}, err
@@ -114,29 +118,7 @@ func (servicio *Servicio) Crear(contexto context.Context, comprador dominio.Comp
 		existente, _, errExistente := servicio.pedidoYaCreado(contexto, comprador.ID, clave, solicitud)
 		return existente, errExistente
 	}
-	if err != nil {
-		return dominio.Pedido{}, err
-	}
-
-	// El pedido ya está guardado con su cupo. La confirmación sigue aunque el
-	// comprador corte la conexión; si no termina, la retoma el proceso en segundo plano.
-	contextoConfirmacion, cancelar := context.WithTimeout(context.WithoutCancel(contexto), esperaConfirmacionInicial)
-	defer cancelar()
-	// confirmar cambia el pedido en memoria antes de guardarlo: si el guardado
-	// falla, lo que está en la base es lo que se registró.
-	registrado := pedido
-	err = servicio.confirmar(contextoConfirmacion, &pedido)
-	if errors.Is(err, dominio.ErrModificadoAlMismoTiempo) {
-		// Alguien lo cambió en el medio (por ejemplo, el comprador lo canceló).
-		return servicio.repositorio.Buscar(contexto, pedido.ID)
-	}
-	if err != nil {
-		// El pedido igual existe y queda pendiente_confirmacion hasta que lo retome
-		// el proceso en segundo plano.
-		servicio.eventos.ConfirmacionNoGuardada(contexto, pedido.ID, err)
-		return registrado, nil
-	}
-	return pedido, nil
+	return pedido, err
 }
 
 // pedidoYaCreado busca el pedido de un intento anterior con la misma clave.
@@ -173,9 +155,6 @@ func (servicio *Servicio) registrar(contexto context.Context, comprador dominio.
 		if err != nil {
 			return dominio.Pedido{}, err
 		}
-		// Hasta que termine la confirmación de este pedido, el proceso en segundo
-		// plano no lo toma.
-		pedido.ProximaConfirmacion = ahora.Add(tiempoApartado)
 		evento := dominio.NuevoEventoEstadoCambiado(servicio.nuevoID(), pedido, "", ahora)
 
 		err = servicio.repositorio.Registrar(contexto, pedido, evento)
@@ -196,47 +175,24 @@ func (servicio *Servicio) registrar(contexto context.Context, comprador dominio.
 	return dominio.Pedido{}, dominio.ErrSinCupo
 }
 
-// confirmar pide los insumos al inventario y guarda el resultado (ADR-010).
-func (servicio *Servicio) confirmar(contexto context.Context, pedido *dominio.Pedido) error {
-	resultado, errReserva := servicio.inventario.Reservar(contexto, pedido.ID, pedido.Insumos)
-	ahora := servicio.ahora()
-	versionLeida := pedido.Version
-
-	switch {
-	case errReserva == nil && resultado == puertos.ReservaConfirmada:
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioConfirmada, nil)
-		return servicio.cambiarEstado(contexto, pedido, dominio.EstadoConfirmado, "", ahora)
-	case errReserva == nil:
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioSinStock, nil)
-		return servicio.cambiarEstado(contexto, pedido, dominio.EstadoCancelado, "No hay insumos para esa fecha.", ahora)
-	case errors.Is(errReserva, puertos.ErrInventarioRechazo):
-		// Reintentar no arregla un error de formato: se frena y lo decide el vendedor.
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioRechazada, errReserva)
-		pedido.MarcarParaRevision("El inventario rechazó la reserva de insumos.", ahora)
-	case errors.Is(errReserva, puertos.ErrInventarioNoDisponible):
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioNoDisponible, errReserva)
-		pedido.RegistrarFalloDeConfirmacion(ahora)
-	default:
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioFallaTransitoria, errReserva)
-		pedido.RegistrarFalloDeConfirmacion(ahora)
-	}
-	return servicio.guardar(contexto, pedido, puertos.Cambio{Pedido: *pedido, VersionAnterior: versionLeida})
-}
-
 // cambiarEstado aplica la transición y la guarda junto con su evento y, si se
-// cancela, con la liberación del cupo.
+// cancela, con la devolución del cupo y de la reserva de insumos. Cancelar no
+// llama al proveedor: la reserva es propia (ADR-020).
 func (servicio *Servicio) cambiarEstado(contexto context.Context, pedido *dominio.Pedido, nuevo dominio.Estado, motivo string, ahora time.Time) error {
 	versionLeida := pedido.Version
+	teniaReserva := pedido.InsumosReservados
 	anterior, err := pedido.CambiarEstado(nuevo, motivo, ahora)
 	if err != nil {
 		return err
 	}
 	evento := dominio.NuevoEventoEstadoCambiado(servicio.nuevoID(), *pedido, anterior, ahora)
+	cancelado := nuevo == dominio.EstadoCancelado
 	return servicio.guardar(contexto, pedido, puertos.Cambio{
 		Pedido:          *pedido,
 		VersionAnterior: versionLeida,
 		Evento:          &evento,
-		LiberarCupo:     nuevo == dominio.EstadoCancelado,
+		LiberarCupo:     cancelado,
+		LiberarReserva:  cancelado && teniaReserva,
 	})
 }
 
@@ -289,8 +245,8 @@ func (servicio *Servicio) ListarDelDia(contexto context.Context, fecha string) (
 }
 
 // Cancelar cancela un pedido del comprador antes de que entre en producción (C8,
-// R6) y libera su cupo y sus insumos (R7). También retira un pedido especial que
-// todavía no se cotizó (ADR-017).
+// R6) y devuelve su cupo y su reserva de insumos (R7). También retira un pedido
+// especial que todavía no se cotizó (ADR-017).
 func (servicio *Servicio) Cancelar(contexto context.Context, idComprador, id string) (dominio.Pedido, error) {
 	pedido, err := servicio.Obtener(contexto, idComprador, id)
 	if err != nil {
@@ -315,12 +271,85 @@ func (servicio *Servicio) aplicarEstado(contexto context.Context, pedido dominio
 	if err := servicio.cambiarEstado(contexto, &pedido, nuevo, motivo, servicio.ahora()); err != nil {
 		return dominio.Pedido{}, err
 	}
-	if pedido.LiberarInsumos {
-		// Se intenta enseguida; si el proveedor no responde, lo reintenta el proceso
-		// en segundo plano.
-		servicio.liberar(contexto, &pedido)
-	}
 	return pedido, nil
+}
+
+// ListarPendientesDeConfirmar es lo que espera al vendedor (ADR-020), cada pedido
+// con los insumos que hoy no alcanzan para hacerlo. Puede confirmarlo igual: decide él.
+func (servicio *Servicio) ListarPendientesDeConfirmar(contexto context.Context) ([]dominio.PendienteDeConfirmar, error) {
+	pedidos, err := servicio.repositorio.ListarPendientesDeConfirmar(contexto)
+	if err != nil {
+		return nil, fmt.Errorf("listar pedidos pendientes de confirmar: %w", err)
+	}
+	existencias, err := servicio.existencias.Listar(contexto)
+	if err != nil {
+		return nil, fmt.Errorf("listar existencias: %w", err)
+	}
+	porInsumo := make(map[[2]string]dominio.Existencia, len(existencias))
+	for _, existencia := range existencias {
+		porInsumo[[2]string{existencia.Ingrediente, existencia.Unidad}] = existencia
+	}
+	pendientes := make([]dominio.PendienteDeConfirmar, len(pedidos))
+	for indice, pedido := range pedidos {
+		pendientes[indice] = dominio.PendienteDeConfirmar{Pedido: pedido}
+		for _, insumo := range pedido.Insumos {
+			faltante := porInsumo[[2]string{insumo.Ingrediente, insumo.Unidad}].Faltante(insumo.Cantidad)
+			if faltante > 0 {
+				pendientes[indice].Faltantes = append(pendientes[indice].Faltantes, dominio.Insumo{Ingrediente: insumo.Ingrediente, Cantidad: faltante, Unidad: insumo.Unidad})
+			}
+		}
+	}
+	return pendientes, nil
+}
+
+// ListarStock devuelve el stock propio de cada ingrediente (ADR-020).
+func (servicio *Servicio) ListarStock(contexto context.Context) ([]dominio.Existencia, error) {
+	existencias, err := servicio.existencias.Listar(contexto)
+	if err != nil {
+		return nil, fmt.Errorf("listar existencias: %w", err)
+	}
+	return existencias, nil
+}
+
+// CargarStock suma cantidad al ingrediente en el proveedor y guarda el stock que
+// este informa (ADR-020). Es la forma de cargar el stock inicial, que arranca en 0,
+// y de reponerlo. Si el proveedor no responde, no se guarda nada y hay que repetirlo.
+func (servicio *Servicio) CargarStock(contexto context.Context, ingrediente, unidad string, cantidad int64) (dominio.Existencia, error) {
+	ingrediente, unidad = strings.TrimSpace(ingrediente), strings.TrimSpace(unidad)
+	if ingrediente == "" || utf8.RuneCountInString(ingrediente) > largoMaximoIngrediente ||
+		unidad == "" || utf8.RuneCountInString(unidad) > largoMaximoUnidad ||
+		cantidad < 1 || cantidad > cantidadMaximaCarga {
+		return dominio.Existencia{}, fmt.Errorf("%w: ingrediente, unidad y una cantidad entre 1 y %d son obligatorios", dominio.ErrSolicitudInvalida, cantidadMaximaCarga)
+	}
+	existencia, err := servicio.existencias.AsignarProducto(contexto, ingrediente, unidad)
+	if err != nil {
+		return dominio.Existencia{}, fmt.Errorf("asignar producto del proveedor: %w", err)
+	}
+	stock, err := servicio.inventario.Aumentar(contexto, existencia.ProductoID, cantidad, "Carga de stock de la pastelería")
+	if err != nil {
+		servicio.eventos.InventarioConsultado(contexto, "", resultadoDe(err), err)
+		return dominio.Existencia{}, fmt.Errorf("aumentar el stock en el proveedor: %w", err)
+	}
+	servicio.eventos.InventarioConsultado(contexto, "", puertos.InventarioCargada, nil)
+	if err := servicio.existencias.GuardarStock(contexto, ingrediente, unidad, stock); err != nil {
+		return dominio.Existencia{}, fmt.Errorf("guardar el stock cargado: %w", err)
+	}
+	existencia.Stock = stock
+	return existencia, nil
+}
+
+// resultadoDe resume una falla del proveedor para las métricas.
+func resultadoDe(err error) puertos.ResultadoInventario {
+	switch {
+	case errors.Is(err, puertos.ErrStockInsuficiente):
+		return puertos.InventarioSinStock
+	case errors.Is(err, puertos.ErrInventarioRechazo):
+		return puertos.InventarioRechazada
+	case errors.Is(err, puertos.ErrInventarioNoDisponible):
+		return puertos.InventarioNoDisponible
+	default:
+		return puertos.InventarioFallaTransitoria
+	}
 }
 
 // DefinirCapacidad fija cuántas unidades se pueden producir un día (VE3).
@@ -350,61 +379,147 @@ func (servicio *Servicio) ListarCapacidad(contexto context.Context, desde, hasta
 	return dias, nil
 }
 
-// ProcesarConfirmaciones reintenta la reserva de insumos de los pedidos pendientes
-// y la liberación de los cancelados. Lo llama periódicamente un proceso en
-// segundo plano y devuelve cuántos pedidos procesó.
-func (servicio *Servicio) ProcesarConfirmaciones(contexto context.Context) (int, error) {
+// ProcesarConsumos descuenta en el proveedor los insumos de los pedidos que
+// entraron en producción, de a un pedido por vez (ADR-020). Lo llama
+// periódicamente un proceso en segundo plano y devuelve cuántos pedidos procesó.
+func (servicio *Servicio) ProcesarConsumos(contexto context.Context) (int, error) {
 	procesados := 0
 	for {
 		if err := contexto.Err(); err != nil {
 			return procesados, err
 		}
 		ahora := servicio.ahora()
-		pedido, encontrado, err := servicio.repositorio.TomarParaConfirmar(contexto, ahora, ahora.Add(tiempoApartado))
+		pedido, encontrado, err := servicio.repositorio.TomarParaConsumir(contexto, ahora, ahora.Add(tiempoApartado))
 		if err != nil {
-			return procesados, fmt.Errorf("tomar pedido para confirmar: %w", err)
+			return procesados, fmt.Errorf("tomar pedido para consumir: %w", err)
 		}
 		if !encontrado {
 			break
 		}
-		if err := servicio.confirmar(contexto, &pedido); err != nil && !errors.Is(err, dominio.ErrModificadoAlMismoTiempo) {
+		if err := servicio.consumir(contexto, &pedido); err != nil && !errors.Is(err, dominio.ErrModificadoAlMismoTiempo) {
 			return procesados, err
 		}
 		procesados++
 	}
+	if pendientes, err := servicio.repositorio.ContarConsumosPendientes(contexto); err == nil {
+		servicio.eventos.ConsumosPendientes(contexto, pendientes)
+	}
+	return procesados, nil
+}
+
+// consumir descuenta los insumos del pedido uno por uno y guarda el avance de cada
+// uno, así que si algo falla a la mitad no se repite lo que ya se descontó. Se
+// detiene en el primer insumo que no se pudo resolver.
+func (servicio *Servicio) consumir(contexto context.Context, pedido *dominio.Pedido) error {
 	for {
-		if err := contexto.Err(); err != nil {
-			return procesados, err
+		insumo, hay := pedido.InsumoPorConsumir()
+		if !hay {
+			return nil
 		}
-		ahora := servicio.ahora()
-		pedido, encontrado, err := servicio.repositorio.TomarParaLiberar(contexto, ahora, ahora.Add(tiempoApartado))
-		if err != nil {
-			return procesados, fmt.Errorf("tomar pedido para liberar insumos: %w", err)
+		seguir, err := servicio.consumirInsumo(contexto, pedido, insumo)
+		if err != nil || !seguir {
+			return err
 		}
-		if !encontrado {
-			return procesados, nil
-		}
-		servicio.liberar(contexto, &pedido)
-		procesados++
 	}
 }
 
-// liberar le pide al proveedor que libere los insumos del pedido. Si no puede,
-// lo deja para el próximo reintento.
-func (servicio *Servicio) liberar(contexto context.Context, pedido *dominio.Pedido) {
-	errLiberar := servicio.inventario.Liberar(contexto, pedido.ID)
-	ahora := servicio.ahora()
-	versionLeida := pedido.Version
-	if errLiberar != nil {
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioFallaTransitoria, errLiberar)
-		pedido.ProximaLiberacion = ahora.Add(esperaReintentoLiberar)
-	} else {
-		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioLiberada, nil)
-		pedido.InsumosLiberados(ahora)
+// consumirInsumo descuenta un insumo en el proveedor. Devuelve si se puede seguir
+// con el siguiente.
+//
+// Reducir no es idempotente: un pedido repetido se descuenta dos veces. Por eso,
+// antes de llamar, el pedido queda guardado "en duda"; si la llamada no responde o
+// el servicio se cae a mitad, la próxima vez se consulta el stock del proveedor y
+// se compara con el conocido para saber si ya se aplicó.
+func (servicio *Servicio) consumirInsumo(contexto context.Context, pedido *dominio.Pedido, insumo dominio.Insumo) (bool, error) {
+	existencia, err := servicio.existencias.AsignarProducto(contexto, insumo.Ingrediente, insumo.Unidad)
+	if errors.Is(err, puertos.ErrSinProductoDelProveedor) {
+		return false, servicio.pasarARevision(contexto, pedido, fmt.Sprintf("No hay un producto del proveedor para %s.", insumo.Ingrediente))
 	}
-	// Si falla el guardado, el pedido sigue con LiberarInsumos y se vuelve a
-	// intentar: Liberar es idempotente del lado del proveedor.
-	_ = servicio.guardar(contexto, pedido, puertos.Cambio{Pedido: *pedido, VersionAnterior: versionLeida})
+	if err != nil {
+		return false, fmt.Errorf("asignar producto del proveedor a %s: %w", insumo.Ingrediente, err)
+	}
+
+	enDudaAntes := pedido.ConsumoEnDuda
+	if !enDudaAntes {
+		pedido.ConsumoEnDuda = true
+		if err := servicio.guardar(contexto, pedido, puertos.Cambio{Pedido: *pedido, VersionAnterior: pedido.Version}); err != nil {
+			return false, err
+		}
+	}
+
+	if enDudaAntes {
+		yaAplicado, seguir, err := servicio.yaSeAplico(contexto, pedido, existencia, insumo)
+		if err != nil || !seguir {
+			return false, err
+		}
+		if yaAplicado != nil {
+			return true, servicio.registrarConsumo(contexto, pedido, insumo, *yaAplicado)
+		}
+	}
+
+	stock, err := servicio.inventario.Reducir(contexto, existencia.ProductoID, insumo.Cantidad, "Pedido "+pedido.ID)
+	if err == nil {
+		servicio.eventos.InventarioConsultado(contexto, pedido.ID, puertos.InventarioConsumida, nil)
+		return true, servicio.registrarConsumo(contexto, pedido, insumo, stock)
+	}
+
+	servicio.eventos.InventarioConsultado(contexto, pedido.ID, resultadoDe(err), err)
+	switch {
+	case errors.Is(err, puertos.ErrStockInsuficiente):
+		pedido.ConsumoEnDuda = false
+		return false, servicio.pasarARevision(contexto, pedido, fmt.Sprintf("El proveedor no tiene stock de %s.", insumo.Ingrediente))
+	case errors.Is(err, puertos.ErrInventarioRechazo):
+		// Reintentar no arregla un error de formato: lo decide el vendedor y lo revisa el equipo.
+		pedido.ConsumoEnDuda = false
+		return false, servicio.pasarARevision(contexto, pedido, "El proveedor rechazó el consumo de insumos.")
+	case errors.Is(err, puertos.ErrInventarioNoDisponible):
+		// No se llegó a llamar: la duda es la de antes.
+		pedido.ConsumoEnDuda = enDudaAntes
+		pedido.RegistrarFalloDeConsumo(false, servicio.ahora())
+	default:
+		pedido.RegistrarFalloDeConsumo(true, servicio.ahora())
+	}
+	return false, servicio.guardar(contexto, pedido, puertos.Cambio{Pedido: *pedido, VersionAnterior: pedido.Version})
+}
+
+// yaSeAplico consulta el stock del proveedor después de una llamada sin respuesta.
+// Si bajó exactamente lo que se quería descontar, devuelve el stock que quedó y no
+// hay que repetir; si no cambió, devuelve nil y se repite. Si dio otra cosa no se
+// puede saber qué pasó, y queda para el vendedor. seguir es false cuando ya se
+// resolvió el pedido de otra forma (reintento o revisión).
+func (servicio *Servicio) yaSeAplico(contexto context.Context, pedido *dominio.Pedido, existencia dominio.Existencia, insumo dominio.Insumo) (*int64, bool, error) {
+	actual, err := servicio.inventario.Consultar(contexto, existencia.ProductoID)
+	if err != nil {
+		servicio.eventos.InventarioConsultado(contexto, pedido.ID, resultadoDe(err), err)
+		pedido.RegistrarFalloDeConsumo(!errors.Is(err, puertos.ErrInventarioNoDisponible), servicio.ahora())
+		return nil, false, servicio.guardar(contexto, pedido, puertos.Cambio{Pedido: *pedido, VersionAnterior: pedido.Version})
+	}
+	switch existencia.Stock - actual {
+	case insumo.Cantidad:
+		return &actual, true, nil
+	case 0:
+		return nil, true, nil
+	}
+	return nil, false, servicio.pasarARevision(contexto, pedido,
+		fmt.Sprintf("El stock de %s en el proveedor (%d) no coincide con el que conocemos (%d).", insumo.Ingrediente, actual, existencia.Stock))
+}
+
+// registrarConsumo guarda el avance del pedido y el stock que quedó en el proveedor.
+func (servicio *Servicio) registrarConsumo(contexto context.Context, pedido *dominio.Pedido, insumo dominio.Insumo, stockQueda int64) error {
+	pedido.InsumoConsumido(servicio.ahora())
+	return servicio.guardar(contexto, pedido, puertos.Cambio{
+		Pedido:          *pedido,
+		VersionAnterior: pedido.Version,
+		Consumo:         &puertos.Consumo{Insumo: insumo, StockQueda: stockQueda},
+	})
+}
+
+// pasarARevision deja el pedido para el vendedor y devuelve lo que no se consumió,
+// en la misma transacción. No frena la producción.
+func (servicio *Servicio) pasarARevision(contexto context.Context, pedido *dominio.Pedido, motivo string) error {
+	teniaReserva := pedido.InsumosReservados
+	pedido.MarcarParaRevision(motivo, servicio.ahora())
+	return servicio.guardar(contexto, pedido, puertos.Cambio{Pedido: *pedido, VersionAnterior: pedido.Version, LiberarReserva: teniaReserva})
 }
 
 // PublicarEventos manda al broker los eventos de la bandeja de salida, del más

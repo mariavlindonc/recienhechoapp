@@ -244,7 +244,15 @@ func TestEnCaminoEsUnPasoOpcionalDelEnvio(prueba *testing.T) {
 	}
 }
 
-func TestCancelarMarcaLosInsumosParaLiberar(prueba *testing.T) {
+func TestUnPedidoConRecetaNaceConLosInsumosReservados(prueba *testing.T) {
+	pedido := pedidoNuevo(prueba)
+
+	if !pedido.InsumosReservados || pedido.ConsumoPendiente {
+		prueba.Errorf("tenía que nacer con la reserva y sin consumo pendiente: %+v", pedido)
+	}
+}
+
+func TestCancelarDevuelveLaReservaSinConsumirNada(prueba *testing.T) {
 	pedido := pedidoNuevo(prueba)
 
 	anterior, err := pedido.CambiarEstado(dominio.EstadoCancelado, "Cancelado por el comprador.", momento)
@@ -252,28 +260,101 @@ func TestCancelarMarcaLosInsumosParaLiberar(prueba *testing.T) {
 	if err != nil || anterior != dominio.EstadoPendienteConfirmacion {
 		prueba.Fatalf("anterior = %s, error = %v", anterior, err)
 	}
-	if !pedido.LiberarInsumos || pedido.MotivoCancelacion != "Cancelado por el comprador." {
-		prueba.Errorf("se esperaba insumos por liberar y el motivo: %+v", pedido)
+	if pedido.InsumosReservados || pedido.ConsumoPendiente || pedido.MotivoCancelacion != "Cancelado por el comprador." {
+		prueba.Errorf("se esperaba sin reserva, sin consumo y con el motivo: %+v", pedido)
 	}
 }
 
-func TestReconfirmacionConEsperasQueSeDuplican(prueba *testing.T) {
+func TestPasarAProduccionDejaElConsumoPendiente(prueba *testing.T) {
+	pedido := pedidoNuevo(prueba)
+	pedido.CambiarEstado(dominio.EstadoConfirmado, "", momento)
+
+	pedido.CambiarEstado(dominio.EstadoEnProduccion, "", momento)
+
+	insumo, hay := pedido.InsumoPorConsumir()
+	if !pedido.ConsumoPendiente || !pedido.ProximoConsumo.Equal(momento) || !hay || insumo.Ingrediente != "harina" {
+		prueba.Errorf("el consumo tenía que quedar pendiente desde ya, con la harina primero: %+v", pedido)
+	}
+}
+
+func TestUnPedidoSinInsumosNoTieneNadaQueConsumir(prueba *testing.T) {
+	pedido := pedidoNuevo(prueba)
+	pedido.Insumos, pedido.InsumosReservados = nil, false
+	pedido.CambiarEstado(dominio.EstadoConfirmado, "", momento)
+
+	pedido.CambiarEstado(dominio.EstadoEnProduccion, "", momento)
+
+	if pedido.ConsumoPendiente {
+		prueba.Error("sin insumos no se llama al proveedor")
+	}
+}
+
+func TestElConsumoAvanzaInsumoPorInsumoYTermina(prueba *testing.T) {
+	pedido := pedidoNuevo(prueba)
+	pedido.Insumos = append(pedido.Insumos, dominio.Insumo{Ingrediente: "manteca", Cantidad: 100, Unidad: "g"})
+	pedido.CambiarEstado(dominio.EstadoConfirmado, "", momento)
+	pedido.CambiarEstado(dominio.EstadoEnProduccion, "", momento)
+	pedido.RegistrarFalloDeConsumo(true, momento)
+
+	pedido.InsumoConsumido(momento)
+
+	siguiente, hay := pedido.InsumoPorConsumir()
+	if !hay || siguiente.Ingrediente != "manteca" || pedido.IntentosConsumo != 0 || pedido.ConsumoEnDuda {
+		prueba.Fatalf("seguía la manteca, con los intentos y la duda en cero: %+v", pedido)
+	}
+	pedido.InsumoConsumido(momento)
+	if _, hay := pedido.InsumoPorConsumir(); hay || pedido.ConsumoPendiente || pedido.InsumosReservados {
+		prueba.Errorf("con el último insumo termina el consumo y no queda reserva: %+v", pedido)
+	}
+}
+
+func TestElConsumoSeReintentaConEsperasQueSeDuplican(prueba *testing.T) {
 	pedido := pedidoNuevo(prueba)
 	esperas := []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute, 10 * time.Minute, 10 * time.Minute}
 
 	for intento, espera := range esperas {
-		pedido.RegistrarFalloDeConfirmacion(momento)
-		if !pedido.ProximaConfirmacion.Equal(momento.Add(espera)) {
-			prueba.Errorf("intento %d: próxima a los %v, se esperaba a los %v", intento+1, pedido.ProximaConfirmacion.Sub(momento), espera)
+		pedido.RegistrarFalloDeConsumo(false, momento)
+		if !pedido.ProximoConsumo.Equal(momento.Add(espera)) {
+			prueba.Errorf("intento %d: próximo a los %v, se esperaba a los %v", intento+1, pedido.ProximoConsumo.Sub(momento), espera)
 		}
 	}
-	if pedido.RequiereRevision {
-		prueba.Error("antes de las 24 h no se marca para revisión")
+	if pedido.ConsumoEnDuda {
+		prueba.Error("un fallo sin duda no marca el consumo en duda")
 	}
+	pedido.RegistrarFalloDeConsumo(true, momento)
+	if !pedido.ConsumoEnDuda {
+		prueba.Error("un timeout deja el consumo en duda")
+	}
+}
 
-	pedido.RegistrarFalloDeConfirmacion(momento.Add(dominio.VidaMaximaSinConfirmar))
-	if !pedido.RequiereRevision || pedido.Estado != dominio.EstadoPendienteConfirmacion {
-		prueba.Errorf("a las 24 h queda para el vendedor, sin cancelarse: %s, revisión %v", pedido.Estado, pedido.RequiereRevision)
+func TestMarcarParaRevisionFrenaElConsumoSinCancelar(prueba *testing.T) {
+	pedido := pedidoNuevo(prueba)
+	pedido.CambiarEstado(dominio.EstadoConfirmado, "", momento)
+	pedido.CambiarEstado(dominio.EstadoEnProduccion, "", momento)
+
+	pedido.MarcarParaRevision("Falta harina.", momento)
+
+	if !pedido.RequiereRevision || pedido.ConsumoPendiente || pedido.InsumosReservados || pedido.Estado != dominio.EstadoEnProduccion {
+		prueba.Errorf("queda para el vendedor, sin consumo, sin reserva y sin frenar la producción: %+v", pedido)
+	}
+}
+
+func TestFaltanteCuentaLoQueLaReservaDejoSinCubrir(prueba *testing.T) {
+	casos := []struct {
+		nombre     string
+		existencia dominio.Existencia
+		necesario  int64
+		esperado   int64
+		disponible int64
+	}{
+		{"alcanza", dominio.Existencia{Stock: 1000, Reservado: 500}, 500, 0, 500},
+		{"falta una parte", dominio.Existencia{Stock: 300, Reservado: 500}, 500, 200, -200},
+		{"no hay nada", dominio.Existencia{Stock: 0, Reservado: 1500}, 500, 500, -1500},
+	}
+	for _, caso := range casos {
+		if caso.existencia.Disponible() != caso.disponible || caso.existencia.Faltante(caso.necesario) != caso.esperado {
+			prueba.Errorf("%s: disponible %d, faltante %d", caso.nombre, caso.existencia.Disponible(), caso.existencia.Faltante(caso.necesario))
+		}
 	}
 }
 

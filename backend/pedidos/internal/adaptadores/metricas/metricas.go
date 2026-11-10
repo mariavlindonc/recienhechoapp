@@ -34,6 +34,7 @@ type Metricas struct {
 	inventario  *prometheus.CounterVec
 	circuito    *prometheus.GaugeVec
 	publicados  *prometheus.CounterVec
+	consumos    prometheus.Gauge
 	conexiones  prometheus.Gauge
 	mensajes    prometheus.Counter
 }
@@ -67,6 +68,10 @@ func Nuevas() *Metricas {
 			Name: "pedidos_eventos_publicados_total",
 			Help: "Eventos de la bandeja de salida que se intentaron publicar, por resultado: publicado o error.",
 		}, []string{"resultado"}),
+		consumos: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "pedidos_consumos_pendientes",
+			Help: "Pedidos en producción que esperan que el proveedor descuente sus insumos (ADR-020).",
+		}),
 		conexiones: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "pedidos_conexiones_tiempo_real",
 			Help: "Compradores conectados por WebSocket en este momento (ADR-018).",
@@ -78,7 +83,7 @@ func Nuevas() *Metricas {
 	}
 	metricas.registro.MustRegister(
 		metricas.solicitudes, metricas.duracion, metricas.registrados, metricas.inventario, metricas.circuito, metricas.publicados,
-		metricas.conexiones, metricas.mensajes,
+		metricas.consumos, metricas.conexiones, metricas.mensajes,
 		collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 	// Las series existen desde el arranque, así las alertas funcionan aunque todavía no haya pasado nada.
@@ -86,7 +91,7 @@ func Nuevas() *Metricas {
 		metricas.registrados.WithLabelValues(resultado)
 	}
 	for _, resultado := range []puertos.ResultadoInventario{
-		puertos.InventarioConfirmada, puertos.InventarioSinStock, puertos.InventarioLiberada,
+		puertos.InventarioConsumida, puertos.InventarioCargada, puertos.InventarioSinStock,
 		puertos.InventarioRechazada, puertos.InventarioFallaTransitoria, puertos.InventarioNoDisponible,
 	} {
 		metricas.inventario.WithLabelValues(string(resultado))
@@ -122,6 +127,11 @@ func (metricas *Metricas) MarcarCircuito(actual puertos.EstadoCircuito) {
 // ContarPublicacion suma un intento de publicar un evento.
 func (metricas *Metricas) ContarPublicacion(resultado string) {
 	metricas.publicados.WithLabelValues(resultado).Inc()
+}
+
+// MarcarConsumosPendientes deja en la métrica cuántos pedidos esperan el consumo.
+func (metricas *Metricas) MarcarConsumosPendientes(cantidad int) {
+	metricas.consumos.Set(float64(cantidad))
 }
 
 // ConexionAbierta suma un comprador conectado por WebSocket.

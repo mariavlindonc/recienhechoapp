@@ -6,7 +6,7 @@ Escenarios de [ADR-013](../../docs/adr/ADR-013-capacidad-y-costos.md), escritos 
 |---|---|---|
 | `notificaciones.js` | `POST /notificaciones` con claves de idempotencia nuevas y `GET` de la creada. Umbral: 99 % de los `POST` en menos de 300 ms (SLO de ADR-006) | Rampa de 10 a 200 usuarios virtuales en 5 min, después 5 min sostenido |
 | `catalogo.js` | Listado por categoría y detalle de producto. Umbral: p95 menor a 300 ms (RNF2). Se corre con la caché prendida y apagada | Igual |
-| `pedidos.js` | Crea pedidos para el mismo día hasta agotar el cupo (`201` y después `409 sin_cupo`). Umbral: p95 de los pedidos creados menor a 2 s (RNF3), medido en `pedido_creado_duracion`, sin los `409`. Se corre con el inventario falso en `confirma` y en `lento` | 50 usuarios virtuales durante 2 min |
+| `pedidos.js` | Crea pedidos para el mismo día hasta agotar el cupo (`201` y después `409 sin_cupo`). Umbral: p95 de los pedidos creados menor a 2 s (RNF3), medido en `pedido_creado_duracion`, sin los `409`. Crear un pedido no llama al inventario ([ADR-020](../../docs/adr/ADR-020-reserva-y-consumo-de-insumos.md)): el `INVENTARIO_MODO` no cambia el resultado | 50 usuarios virtuales durante 2 min |
 
 ## Correr
 

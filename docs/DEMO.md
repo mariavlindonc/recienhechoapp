@@ -88,7 +88,7 @@ Dos formas de pedir, para todo lo que sigue:
 | Punto de entrada único con autenticación, ruteo y control de tráfico | [Gateway](#gateway) |
 | Al menos tres servicios operativos | [Contenedores](#contenedores) |
 | Capacidad propia en la nube con URL pública | [Capacidad en la nube](#capacidad-en-la-nube) |
-| Capacidad del proveedor en el flujo principal | [Proveedor de inventario](#proveedor-de-inventario) (hoy con el simulador: ver [Lo que todavía no está](#lo-que-todavía-no-está)) |
+| Capacidad del proveedor en el flujo principal | [Proveedor de inventario](#proveedor-de-inventario) (con el inventario falso o con el real: ver [Lo que todavía no está](#lo-que-todavía-no-está)) |
 | Dos tipos de almacenamiento | [Ver los datos en las bases](#ver-los-datos-en-las-bases): MySQL (productos, usuarios) y MongoDB (pedidos, notificaciones), más Redis y Meilisearch |
 | Caché con medición antes y después | [Caché](#caché) y [Carga](#carga) |
 | Dos estilos de arquitectura interna | Hexagonal en notificaciones, pedidos y productos (`internal/dominio`, `aplicacion`, `puertos`, `adaptadores`); capas en usuarios (`handler`, `servicio`, `modelo`). [ADR-007](adr/ADR-007-arquitectura-interna.md) |
@@ -301,10 +301,12 @@ $pedido | Select-Object id, estado, fecha, precioCentavos
 (Invoke-RestMethod -Method Post "$gw/pedidos" -Headers ($comprador + @{ 'Idempotency-Key' = $llave }) -ContentType $json -Body $cuerpo).id -eq $pedido.id   # True: repetirlo con la misma clave devuelve el mismo pedido
 ```
 
-`tipo` puede ser `programado` (con `fecha`) o `inmediato` (sin fecha: toma el primer día con cupo). El pedido pasa solo de `pendiente_confirmacion` a `confirmado` cuando el inventario reserva los insumos.
+`tipo` puede ser `programado` (con `fecha`) o `inmediato` (sin fecha: toma el primer día con cupo). El pedido queda en `pendiente_confirmacion` hasta que lo confirma el vendedor: al encargarlo se reservan los insumos de la receta en el stock propio, aunque no alcancen, y no se llama al proveedor ([ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md)).
 
 ```powershell
 Invoke-RestMethod "$gw/pedidos/$($pedido.id)" -Headers $comprador | Select-Object id, estado
+Invoke-RestMethod "$gw/pedidos/pendientes" -Headers $vendedor | Select-Object id, estado, faltantes   # lo que espera al vendedor, con los insumos que faltan
+Invoke-RestMethod -Method Put "$gw/pedidos/$($pedido.id)/estado" -Headers $vendedor -ContentType $json -Body '{"estado":"confirmado"}' | Select-Object estado
 Invoke-RestMethod -Method Put "$gw/pedidos/$($pedido.id)/estado" -Headers $vendedor -ContentType $json -Body '{"estado":"en_produccion"}' | Select-Object estado
 $salto = Invoke-WebRequest -Method Put "$gw/pedidos/$($pedido.id)/estado" -Headers $vendedor -ContentType $json -Body '{"estado":"entregado"}' -SkipHttpErrorCheck
 "$($salto.StatusCode) $($salto.Content)"                       # 409 transicion_invalida: no se puede saltar estados
@@ -312,7 +314,7 @@ Invoke-RestMethod "$gw/pedidos" -Headers $vendedor -Body @{ fecha = $fecha } | F
 Invoke-RestMethod "$gw/pedidos" -Headers $comprador | Format-Table id, estado, fecha                                           # el comprador ve todos los suyos
 ```
 
-Estados: `pendiente_confirmacion` → `confirmado` → `en_produccion` → `listo` → `en_camino` (opcional) → `entregado`. Se puede cancelar en `pendiente_confirmacion` y `confirmado`. Cada cambio manda un mail al comprador.
+Estados: `pendiente_confirmacion` → `confirmado` → `en_produccion` → `listo` → `en_camino` (opcional) → `entregado`. Se puede cancelar en `pendiente_confirmacion` y `confirmado`, y la reserva de insumos vuelve al stock propio sin llamar al proveedor. Cada cambio manda un mail al comprador.
 
 **Cupo:**
 
@@ -401,22 +403,26 @@ El mock público del contrato: https://recienhecho-notificaciones-mock.onrender.
 
 ## Proveedor de inventario
 
-Pedidos le pide los insumos al inventario del otro grupo detrás de un puerto propio (capa anticorrupción) y de un disyuntor ([ADR-010](adr/ADR-010-consumo-de-inventario.md)). Hoy corre con **el simulador**, que se configura con `INVENTARIO_MODO`:
+Pedidos lleva su propio stock y sus reservas (base `inventario`), y solo llama al inventario del otro grupo en dos casos: cuando el vendedor **carga stock** (`increase`) y cuando un pedido **pasa a `en_produccion`** y un proceso en segundo plano descuenta sus insumos (`decrease`). Va detrás de un puerto propio (capa anticorrupción) y de un disyuntor ([ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md)). Con `INVENTARIO_URL` vacía usa **el inventario falso**, que lleva el stock en memoria y se configura con `INVENTARIO_MODO`:
 
 | Modo | Qué hace |
 |---|---|
-| `confirma` | reserva bien (el normal) |
-| `sin_stock` | rechaza: el pedido queda `cancelado` con "No hay insumos para esa fecha." |
-| `lento` | tarda más que el timeout de 1,5 s: el pedido queda `pendiente_confirmacion` y se reintenta |
-| `error` | responde error: igual que lento, se reintenta |
+| `confirma` | lleva el stock como un proveedor real (el normal) |
+| `sin_stock` | reducir siempre responde `409`: el pedido sigue en producción y queda marcado "para revisar" |
+| `lento` | tarda más que el timeout de 1,5 s: el consumo se reintenta con esperas de 1, 2, 4, 8 y 10 minutos |
+| `error` | responde error: igual que lento |
 | `rechazo` | rechaza por formato: se frena, con la alerta `InventarioRechazaReservas` |
 
 ```powershell
+$vendedor = @{ Authorization = "Bearer $tokenVendedor" }   # el token del vendedor, como en "Pedidos y consistencia"
+Invoke-RestMethod -Method Post "$gw/pedidos/stock" -Headers $vendedor -ContentType $json -Body '{"ingrediente":"harina","unidad":"g","cantidad":1000}'   # carga stock: suma en el proveedor y guarda lo que devuelve
+Invoke-RestMethod "$gw/pedidos/stock" -Headers $vendedor | Format-Table ingrediente, stock, reservado, disponible   # disponible negativo = faltan insumos para los pedidos reservados
+# encargar un pedido como en "Pedidos y consistencia", confirmarlo y pasarlo a en_produccion: a los 3 s el stock bajó y lo reservado volvió a 0
 $env:INVENTARIO_MODO = 'sin_stock'; docker compose up -d pedidos; $env:INVENTARIO_MODO = $null   # cambia el modo (reinicia pedidos)
-# encargar un pedido como en "Pedidos y consistencia" y mirar su estado a los 3 s
 docker compose up -d pedidos                                                                     # vuelve a confirma (el valor de .env)
 (Invoke-RestMethod $prom -Body @{ query = 'sum by (resultado) (pedidos_inventario_llamadas_total)' }).data.result | ForEach-Object { "$($_.metric.resultado): $($_.value[1])" }
 (Invoke-RestMethod $prom -Body @{ query = 'pedidos_circuito_inventario == 1' }).data.result.metric.estado   # estado del disyuntor
+(Invoke-RestMethod $prom -Body @{ query = 'pedidos_consumos_pendientes' }).data.result.value[1]            # pedidos esperando que el proveedor descuente sus insumos
 ```
 
 El servicio real del otro grupo está en https://stock-volcamelli.onrender.com (`/health` responde `{"status":"ok"}`). La dirección que figuraba en su contrato, con `-inventario` al final, daba `404 no-server` el 06/11 y el 08/11 porque ahí no hay servicio. Como respaldo, por si no está el día de la demo, el compose tiene un **mock de su contrato** (`inventario-mock`, [ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md#traducción-al-proveedor)). Responde siempre el ejemplo del contrato:
@@ -427,7 +433,7 @@ Invoke-RestMethod http://localhost:4011/api/branches/1/products/1/stock -Headers
 (Invoke-WebRequest -Method Post http://localhost:4011/api/branches/1/products/1/stock/decrease -Headers @{ 'X-API-Key' = 'prueba'; 'Prefer' = 'code=409' } -ContentType $json -Body '{"quantity":2,"reason":"prueba"}' -SkipHttpErrorCheck).Content   # fuerza el 409 de stock insuficiente
 ```
 
-Pedidos todavía no le habla ni al mock ni al servicio real: ver [Lo que todavía no está](#lo-que-todavía-no-está).
+Para que pedidos le hable al servicio real, o al mock, se completa `INVENTARIO_URL` en `.env` (`https://stock-volcamelli.onrender.com` o `http://inventario-mock:4011`) con `INVENTARIO_CLAVE_API`, y `docker compose up -d pedidos`. Los productos del proveedor se reparten de casillero de a un ingrediente (`INVENTARIO_PRODUCTOS_IDS`).
 
 ## Caídas
 
@@ -443,7 +449,7 @@ Qué pasa cuando se cae cada dependencia ([ADR-011](adr/ADR-011-resiliencia.md),
 | Mailpit (servidor de correo) | `docker compose stop mailpit` | El `POST /notificaciones` sigue en `202`; quedan `pendiente`; se abre el disyuntor y salen al volver |
 | productos colgado | `docker compose pause productos` | `POST /pedidos` espera el timeout de pedidos (1 s por intento) y da `503` en 3 s |
 | MongoDB de pedidos | `docker compose stop mongo-pedidos` | `POST /pedidos` da `503` en 2 s; el catálogo sigue andando |
-| Inventario lento o con error | `INVENTARIO_MODO` (ver arriba) | El pedido queda `pendiente_confirmacion` y se reintenta |
+| Inventario lento o con error | `INVENTARIO_MODO` (ver arriba) | Crear y cancelar pedidos siguen igual; el consumo de los que están en producción se reintenta |
 | El gateway | `docker compose stop api-gateway` | No entra nada: es el único punto de entrada |
 
 Para mostrar que una caída se detecta sola: dejar abierto http://localhost:9090/alerts, o Grafana, mientras está caída.
@@ -540,7 +546,7 @@ Los tests que más conviene mostrar: las transiciones de estado y el cupo en `ba
 
 Para no prometer lo que no hay:
 
-- **Inventario real del otro grupo y su test de contrato** ([#77](https://github.com/mariavlindonc/recienhechoapp/issues/77)). El enunciado pide la capacidad del proveedor en el flujo principal y un test de contrato para la defensa. Hoy pedidos usa el simulador. El servicio del otro grupo anda en `https://stock-volcamelli.onrender.com` (verificado el 09/11 con la API key que nos pasó el grupo: catálogo, stock y el `409` de stock insuficiente responden como dice el contrato, en menos de 0,7 s). Su stock está vacío, así que antes de la demo hay que cargarlo con un `increase` ([ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md#pendientes)).
+- **Probar pedidos contra el inventario real del otro grupo** ([#77](https://github.com/mariavlindonc/recienhechoapp/issues/77)). Pedidos ya le habla con `INVENTARIO_URL` y tiene su test de contrato con el mock, pero el flujo completo solo se probó con el inventario falso. El servicio del otro grupo está en `https://stock-volcamelli.onrender.com`: el 09/11 respondió catálogo, stock y el `409` como dice el contrato, y el 10/11 su `/health` daba `200` pero todas las consultas de datos daban `500`. Su stock está vacío, así que antes de la demo hay que cargarlo desde la pantalla Stock ([ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md#pendientes)).
 - **Tests de punta a punta** (bonus B1, [#76](https://github.com/mariavlindonc/recienhechoapp/issues/76)).
 
 ## Si algo falla

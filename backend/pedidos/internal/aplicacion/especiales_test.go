@@ -37,13 +37,13 @@ func TestEspecialAceptadoReservaCupoYSeConfirma(prueba *testing.T) {
 	}
 	aceptado, err := actual.servicio.ResponderEspecial(context.Background(), comprador.ID, cotizado.ID, true)
 
-	if err != nil || aceptado.Estado != dominio.EstadoConfirmado || aceptado.TotalCentavos != 9000000 {
+	if err != nil || aceptado.Estado != dominio.EstadoPendienteConfirmacion || aceptado.TotalCentavos != 9000000 {
 		prueba.Fatalf("estado %s, total %d, err %v", aceptado.Estado, aceptado.TotalCentavos, err)
 	}
 	if reservados := actual.repositorio.reservados(fechaEspecial); reservados != 1 {
 		prueba.Errorf("reservados = %d, se esperaba 1", reservados)
 	}
-	if estados := actual.repositorio.estadosDeLosEventos(); !slices.Equal(estados, []string{"solicitado", "cotizado", "pendiente_confirmacion", "confirmado"}) {
+	if estados := actual.repositorio.estadosDeLosEventos(); !slices.Equal(estados, []string{"solicitado", "cotizado", "pendiente_confirmacion"}) {
 		prueba.Errorf("eventos = %v", estados)
 	}
 }
@@ -134,14 +134,11 @@ func TestCompradorCancelaUnEspecialSolicitado(prueba *testing.T) {
 	}
 	cancelado, err := actual.servicio.Cancelar(contexto, comprador.ID, especial.ID)
 
-	if err != nil || cancelado.Estado != dominio.EstadoCancelado || cancelado.LiberarInsumos {
-		prueba.Fatalf("estado %s, liberar insumos %v, err %v", cancelado.Estado, cancelado.LiberarInsumos, err)
+	if err != nil || cancelado.Estado != dominio.EstadoCancelado || cancelado.InsumosReservados {
+		prueba.Fatalf("estado %s, insumos reservados %v, err %v", cancelado.Estado, cancelado.InsumosReservados, err)
 	}
 	if reservados := actual.repositorio.reservados(fechaEspecial); reservados != 0 {
 		prueba.Errorf("no tenía cupo reservado; reservados = %d", reservados)
-	}
-	if len(actual.inventario.liberados) != 0 {
-		prueba.Errorf("no tenía insumos reservados; se liberaron %v", actual.inventario.liberados)
 	}
 	if abiertos, _ := actual.servicio.ListarEspecialesAbiertos(contexto); len(abiertos) != 0 {
 		prueba.Errorf("un cancelado no queda abierto; hay %d", len(abiertos))
@@ -164,8 +161,8 @@ func TestVendedorRechazaUnEspecialSolicitado(prueba *testing.T) {
 	if err != nil || rechazado.Estado != dominio.EstadoCancelado || rechazado.MensajeVendedor != "Para esa fecha no llegamos con una torta tan grande." {
 		prueba.Fatalf("estado %s, mensaje %q, err %v", rechazado.Estado, rechazado.MensajeVendedor, err)
 	}
-	if reservados := actual.repositorio.reservados(fechaEspecial); reservados != 0 || len(actual.inventario.liberados) != 0 {
-		prueba.Errorf("no tenía cupo ni insumos reservados; reservados %d, liberados %v", reservados, actual.inventario.liberados)
+	if reservados := actual.repositorio.reservados(fechaEspecial); reservados != 0 {
+		prueba.Errorf("no tenía cupo reservado; reservados %d", reservados)
 	}
 	ultimo := actual.repositorio.eventos[len(actual.repositorio.eventos)-1].Evento.Datos
 	if ultimo.EstadoNuevo != "cancelado" || ultimo.MensajeVendedor != rechazado.MensajeVendedor {
@@ -199,28 +196,6 @@ func TestUnEspecialCotizadoNoSeCancela(prueba *testing.T) {
 
 	if _, err := actual.servicio.Cancelar(context.Background(), comprador.ID, cotizado.ID); !errors.Is(err, dominio.ErrTransicionInvalida) {
 		prueba.Errorf("se esperaba ErrTransicionInvalida, dio %v", err)
-	}
-}
-
-// Igual que al crear: si se acepta pero falla guardar la confirmación, se
-// responde lo que está en la base y lo retoma el proceso en segundo plano.
-func TestGuardadoFallidoAlAceptarDevuelveLoQueEstaEnLaBase(prueba *testing.T) {
-	actual := nuevoEntorno()
-	actual.capacidad(prueba, fechaEspecial, 5)
-	cotizado := actual.especialCotizado(prueba)
-	actual.inventario.alReservar = func() { actual.repositorio.fallarGuardar = errCaido }
-
-	aceptado, err := actual.servicio.ResponderEspecial(context.Background(), comprador.ID, cotizado.ID, true)
-
-	if err != nil {
-		prueba.Fatalf("la aceptación ya está guardada, no tiene que fallar: %v", err)
-	}
-	guardado, _ := actual.repositorio.Buscar(context.Background(), cotizado.ID)
-	if aceptado.Estado != guardado.Estado || guardado.Estado != dominio.EstadoPendienteConfirmacion {
-		prueba.Errorf("respondió %s y en la base está %s", aceptado.Estado, guardado.Estado)
-	}
-	if len(actual.eventos.noGuardadas) != 1 {
-		prueba.Errorf("el error de guardado se avisó %d veces, se esperaba 1", len(actual.eventos.noGuardadas))
 	}
 }
 
@@ -262,26 +237,5 @@ func TestSolicitarEspecialValidaEsIdempotente(prueba *testing.T) {
 		if _, err := actual.servicio.SolicitarEspecial(contexto, comprador, "clave-"+invalida.fecha+invalida.descripcion, invalida.descripcion, invalida.fecha); !errors.Is(err, dominio.ErrSolicitudInvalida) {
 			prueba.Errorf("%+v tenía que ser inválida, dio %v", invalida, err)
 		}
-	}
-}
-
-// Como al crear un pedido: mientras la aceptación confirma con el inventario, el
-// proceso en segundo plano no toma el mismo pedido. Si lo tomara, le pediría los
-// insumos al inventario dos veces.
-func TestAceptarUnEspecialLoApartaDelProcesoEnSegundoPlano(prueba *testing.T) {
-	actual := nuevoEntorno()
-	actual.capacidad(prueba, fechaEspecial, 5)
-	cotizado := actual.especialCotizado(prueba)
-	actual.inventario.alReservar = func() {
-		actual.servicio.ProcesarConfirmaciones(context.Background())
-	}
-
-	aceptado, err := actual.servicio.ResponderEspecial(context.Background(), comprador.ID, cotizado.ID, true)
-
-	if err != nil || aceptado.Estado != dominio.EstadoConfirmado {
-		prueba.Fatalf("estado %s, err %v", aceptado.Estado, err)
-	}
-	if actual.inventario.reservas != 1 {
-		prueba.Errorf("se le pidieron los insumos al inventario %d veces, se esperaba 1", actual.inventario.reservas)
 	}
 }

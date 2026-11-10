@@ -17,6 +17,7 @@ type medidor interface {
 	ContarInventario(resultado puertos.ResultadoInventario)
 	MarcarCircuito(estado puertos.EstadoCircuito)
 	ContarPublicacion(resultado string)
+	MarcarConsumosPendientes(cantidad int)
 }
 
 // Eventos cumple puertos.Eventos.
@@ -73,8 +74,8 @@ func (eventos *Eventos) EventoPublicado(contexto context.Context, idEvento strin
 	eventos.logger.WarnContext(contexto, "no se pudo publicar un evento; queda en la bandeja de salida", "id_evento", idEvento, "error", err.Error())
 }
 
-// ConfirmacionNoGuardada lo deja en el log como ERROR: falló la base de pedidos
-// justo después de hablar con el inventario.
-func (eventos *Eventos) ConfirmacionNoGuardada(contexto context.Context, idPedido string, err error) {
-	eventos.logger.ErrorContext(contexto, "no se pudo guardar la confirmación del pedido; la retoma el proceso en segundo plano", "id_pedido", idPedido, "error", err.Error())
+// ConsumosPendientes deja en la métrica cuántos pedidos esperan que el proveedor
+// descuente sus insumos.
+func (eventos *Eventos) ConsumosPendientes(_ context.Context, cantidad int) {
+	eventos.metricas.MarcarConsumosPendientes(cantidad)
 }

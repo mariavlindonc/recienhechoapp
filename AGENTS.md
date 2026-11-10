@@ -46,7 +46,7 @@ Las herramientas de desarrollo (MongoDB, MySQL, Redis, Meilisearch, RabbitMQ, Ma
 | Dependencia | Uso | Puerto | URL local |
 |---|---|---|---|
 | MongoDB (`mongo:8`) | Base de `notificaciones` ([ADR-002](docs/adr/ADR-002-persistencia.md)) | `NOTIFICACIONES_MONGO_PORT` (27017) | `mongodb://localhost:27017` (usuario y clave en `.env`) |
-| MongoDB (`mongo:8`, replica set) | Base de `pedidos`, con transacciones ([ADR-015](docs/adr/ADR-015-consistencia-y-concurrencia.md)) | `PEDIDOS_MONGO_PORT` (27020) | `mongodb://localhost:27020/?directConnection=true` (usuario y clave en `.env`) |
+| MongoDB (`mongo:8`, replica set) | Bases `pedidos` e `inventario` (stock y reservas propias), con transacciones entre las dos ([ADR-015](docs/adr/ADR-015-consistencia-y-concurrencia.md), [ADR-020](docs/adr/ADR-020-reserva-y-consumo-de-insumos.md)) | `PEDIDOS_MONGO_PORT` (27020) | `mongodb://localhost:27020/?directConnection=true` (usuario y clave en `.env`) |
 | MySQL (`mysql:8.4.10`) | Base de `productos`, con GORM ([ADR-002](docs/adr/ADR-002-persistencia.md)) | `PRODUCTOS_MYSQL_PORT` (3307) | `localhost:3307`, base `productos` (usuario y clave en `.env`) |
 | MySQL (`mysql:8.4.10`) | Base de `usuarios`, con GORM ([ADR-002](docs/adr/ADR-002-persistencia.md), [ADR-019](docs/adr/ADR-019-sesion-en-cookie.md)) | `USUARIOS_MYSQL_PORT` (3308) | `localhost:3308`, base `usuarios` (usuario y clave en `.env`) |
 | Redis (`redis:7.4.11`) | Caché del catálogo de `productos` ([ADR-009](docs/adr/ADR-009-cache.md)) | `PRODUCTOS_REDIS_PORT` (6379) | `redis://localhost:6379` |

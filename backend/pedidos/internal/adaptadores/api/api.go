@@ -52,6 +52,9 @@ type CasosDeUso interface {
 	CotizarEspecial(contexto context.Context, id string, precioCentavos int64) (dominio.Pedido, error)
 	RechazarEspecial(contexto context.Context, id, mensaje string) (dominio.Pedido, error)
 	ResponderEspecial(contexto context.Context, idComprador, id string, acepta bool) (dominio.Pedido, error)
+	ListarPendientesDeConfirmar(contexto context.Context) ([]dominio.PendienteDeConfirmar, error)
+	ListarStock(contexto context.Context) ([]dominio.Existencia, error)
+	CargarStock(contexto context.Context, ingrediente, unidad string, cantidad int64) (dominio.Existencia, error)
 }
 
 // ConectarEnVivo abre el WebSocket de un comprador ya identificado (ADR-018).
@@ -84,6 +87,12 @@ func Registrar(router gin.IRouter, casos CasosDeUso, chequearSalud func(contexto
 	pedidos.POST("/especiales/:id/declinacion", soloRol(rolVendedor), manejador.declinarEspecial)
 	pedidos.POST("/especiales/:id/aceptacion", soloRol(rolComprador), manejador.responderEspecial(true))
 	pedidos.POST("/especiales/:id/rechazo", soloRol(rolComprador), manejador.responderEspecial(false))
+
+	// El vendedor confirma cada pedido con la nota de los insumos que faltan, y carga
+	// el stock (ADR-020). Confirmar o rechazar usa PUT /pedidos/:id/estado.
+	pedidos.GET("/pendientes", soloRol(rolVendedor), manejador.listarPendientes)
+	pedidos.GET("/stock", soloRol(rolVendedor), manejador.listarStock)
+	pedidos.POST("/stock", soloRol(rolVendedor), manejador.cargarStock)
 
 	capacidad := router.Group("/capacidad", identificar, soloRol(rolVendedor))
 	capacidad.GET("", manejador.listarCapacidad)
@@ -142,6 +151,40 @@ type respuestaItem struct {
 	Cantidad               int    `json:"cantidad"`
 	PrecioUnitarioCentavos int64  `json:"precioUnitarioCentavos"`
 	SubtotalCentavos       int64  `json:"subtotalCentavos"`
+}
+
+// respuestaPendiente es un pedido que espera al vendedor, con los insumos que hoy no
+// alcanzan (ADR-020).
+type respuestaPendiente struct {
+	respuestaPedido
+	Faltantes []respuestaInsumo `json:"faltantes"`
+}
+
+type respuestaInsumo struct {
+	Ingrediente string `json:"ingrediente"`
+	Cantidad    int64  `json:"cantidad"`
+	Unidad      string `json:"unidad"`
+}
+
+type cuerpoCarga struct {
+	Ingrediente string `json:"ingrediente"`
+	Unidad      string `json:"unidad"`
+	Cantidad    int64  `json:"cantidad"`
+}
+
+type respuestaExistencia struct {
+	Ingrediente string `json:"ingrediente"`
+	Unidad      string `json:"unidad"`
+	Stock       int64  `json:"stock"`
+	Reservado   int64  `json:"reservado"`
+	Disponible  int64  `json:"disponible"` // negativo si lo reservado supera al stock
+}
+
+func aRespuestaExistencia(existencia dominio.Existencia) respuestaExistencia {
+	return respuestaExistencia{
+		Ingrediente: existencia.Ingrediente, Unidad: existencia.Unidad,
+		Stock: existencia.Stock, Reservado: existencia.Reservado, Disponible: existencia.Disponible(),
+	}
 }
 
 type respuestaDia struct {
@@ -239,6 +282,49 @@ func (manejador *manejador) cambiarEstado(contexto *gin.Context) {
 		return
 	}
 	contexto.JSON(http.StatusOK, aRespuesta(pedido))
+}
+
+func (manejador *manejador) listarPendientes(contexto *gin.Context) {
+	pendientes, err := manejador.casos.ListarPendientesDeConfirmar(contexto.Request.Context())
+	if err != nil {
+		responderErrorDeDominio(contexto, err)
+		return
+	}
+	respuesta := make([]respuestaPendiente, len(pendientes))
+	for indice, pendiente := range pendientes {
+		faltantes := make([]respuestaInsumo, len(pendiente.Faltantes))
+		for posicion, faltante := range pendiente.Faltantes {
+			faltantes[posicion] = respuestaInsumo(faltante)
+		}
+		respuesta[indice] = respuestaPendiente{respuestaPedido: aRespuesta(pendiente.Pedido), Faltantes: faltantes}
+	}
+	contexto.JSON(http.StatusOK, respuesta)
+}
+
+func (manejador *manejador) listarStock(contexto *gin.Context) {
+	existencias, err := manejador.casos.ListarStock(contexto.Request.Context())
+	if err != nil {
+		responderErrorDeDominio(contexto, err)
+		return
+	}
+	respuesta := make([]respuestaExistencia, len(existencias))
+	for indice, existencia := range existencias {
+		respuesta[indice] = aRespuestaExistencia(existencia)
+	}
+	contexto.JSON(http.StatusOK, respuesta)
+}
+
+func (manejador *manejador) cargarStock(contexto *gin.Context) {
+	var cuerpo cuerpoCarga
+	if !leerCuerpo(contexto, &cuerpo) {
+		return
+	}
+	existencia, err := manejador.casos.CargarStock(contexto.Request.Context(), cuerpo.Ingrediente, cuerpo.Unidad, cuerpo.Cantidad)
+	if err != nil {
+		responderErrorDeDominio(contexto, err)
+		return
+	}
+	contexto.JSON(http.StatusOK, aRespuestaExistencia(existencia))
 }
 
 // listarCapacidad devuelve un objeto fecha -> {capacidad, reservados}.
@@ -357,6 +443,11 @@ func responderErrorDeDominio(contexto *gin.Context, err error) {
 		responderError(contexto, http.StatusConflict, "cotizacion_vencida", "La cotización venció: "+motivo+".")
 	case errors.Is(err, dominio.ErrModificadoAlMismoTiempo):
 		responderError(contexto, http.StatusConflict, "modificado_al_mismo_tiempo", "El pedido cambió mientras se lo modificaba. Volvé a cargarlo.")
+	case errors.Is(err, puertos.ErrSinProductoDelProveedor):
+		responderError(contexto, http.StatusConflict, "sin_producto_del_proveedor", "El proveedor no tiene más productos para guardar este ingrediente.")
+	case errors.Is(err, puertos.ErrInventarioNoDisponible) || errors.Is(err, puertos.ErrInventarioRechazo):
+		slog.WarnContext(contexto.Request.Context(), "el inventario del proveedor no atendió la carga de stock", "error", err)
+		responderError(contexto, http.StatusServiceUnavailable, "inventario_no_disponible", "El inventario del proveedor no responde, probá en un rato.")
 	case errors.Is(err, puertos.ErrProductoNoDisponible):
 		slog.WarnContext(contexto.Request.Context(), "productos no respondió al crear un pedido", "error", err)
 		responderError(contexto, http.StatusServiceUnavailable, "productos_no_disponible", "No pudimos tomar el pedido, probá en un rato.")

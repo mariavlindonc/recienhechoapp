@@ -27,6 +27,7 @@ import (
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/adaptadores/rabbitmq"
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/adaptadores/tiemporeal"
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/aplicacion"
+	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/puertos"
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/registro"
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/trazas"
 )
@@ -75,7 +76,8 @@ func ejecutar() error {
 	}
 	defer clienteMongo.Disconnect(context.Background())
 
-	repositorio := mongodb.NuevoRepositorio(clienteMongo, configuracion.baseMongo)
+	repositorio := mongodb.NuevoRepositorio(clienteMongo, configuracion.baseMongo, configuracion.baseInventario)
+	existencias := mongodb.NuevasExistencias(clienteMongo, configuracion.baseInventario, configuracion.productosInventario)
 	contextoArranque, cancelarArranque := context.WithTimeout(contexto, esperaAlArrancar)
 	defer cancelarArranque()
 	if err := repositorio.PrepararIndices(contextoArranque); err != nil {
@@ -89,15 +91,21 @@ func ejecutar() error {
 	observador := eventos.Nuevos(medidor, slog.Default())
 	enVivo := tiemporeal.Nuevo(medidor, slog.Default())
 	defer enVivo.Cerrar()
-	// shortcut: inventario falso hasta que el grupo proveedor publique su contrato
-	// (ADR-010); el adaptador real se enchufa en el mismo lugar, detrás del disyuntor.
-	reservador := inventario.NuevoDisyuntor(inventario.NuevoFalso(configuracion.modoInventario), observador, inventario.ConfiguracionDelServicio)
+	// Con INVENTARIO_URL se llama al proveedor real; sin ella, al falso configurable
+	// para el desarrollo y las caídas provocadas (ADR-020). Los dos van detrás del disyuntor.
+	var proveedor puertos.ProveedorDeStock = inventario.NuevoFalso(configuracion.modoInventario)
+	descripcionInventario := string(configuracion.modoInventario)
+	if configuracion.direccionInventario != nil {
+		proveedor = inventario.NuevoProveedor(configuracion.direccionInventario, configuracion.claveInventario, configuracion.sucursalInventario)
+		descripcionInventario = configuracion.direccionInventario.String()
+	}
 	servicio := aplicacion.NuevoServicio(aplicacion.Dependencias{
 		Repositorio: repositorio,
 		Bandeja:     repositorio,
 		Publicador:  publicador,
 		Catalogo:    productos.NuevoCatalogo(configuracion.direccionProductos),
-		Inventario:  reservador,
+		Existencias: existencias,
+		Inventario:  inventario.NuevoDisyuntor(proveedor, observador, inventario.ConfiguracionDelServicio),
 		Eventos:     observador,
 		Avisos:      enVivo,
 		Ahora:       ahora,
@@ -125,7 +133,7 @@ func ejecutar() error {
 	}()
 	go func() {
 		defer procesos.Done()
-		repetir(contexto, intervalo, "pedidos reconfirmados o liberados", servicio.ProcesarConfirmaciones)
+		repetir(contexto, intervalo, "pedidos con insumos consumidos en el proveedor", servicio.ProcesarConsumos)
 	}()
 	go func() {
 		defer procesos.Done()
@@ -136,7 +144,7 @@ func ejecutar() error {
 
 	errorDelServidor := make(chan error, 1)
 	go func() {
-		slog.Info("pedidos escuchando", "puerto", configuracion.puerto, "inventario", configuracion.modoInventario)
+		slog.Info("pedidos escuchando", "puerto", configuracion.puerto, "inventario", descripcionInventario)
 		if err := servidor.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errorDelServidor <- err
 		}
