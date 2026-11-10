@@ -40,7 +40,7 @@ Cada llamada a `navegador.ts` abre un Chrome nuevo y la sesión no pasa de una a
 
 ```bash
 MSYS_NO_PATHCONV=1 COMO=vendedor bun .claude/skills/run-recienhechoapp/navegador.ts captura /vendedor/pedidos
-MSYS_NO_PATHCONV=1 COMO=vendedor bun .claude/skills/run-recienhechoapp/navegador.ts captura /vendedor/inventario
+MSYS_NO_PATHCONV=1 COMO=vendedor bun .claude/skills/run-recienhechoapp/navegador.ts captura /vendedor/stock
 MSYS_NO_PATHCONV=1 COMO=vendedor bun .claude/skills/run-recienhechoapp/navegador.ts eval /vendedor/pedidos "await (async () => { const boton = [...document.querySelectorAll('md-button')].find(elemento => elemento.textContent.trim() === 'Confirmar'); if (!boton) return 'no hay pendientes'; boton.click(); await new Promise(listo => setTimeout(listo, 1500)); return [...document.querySelectorAll('md-card')].map(tarjeta => tarjeta.innerText.replace(/\n+/g, ' / ')) })()"
 ```
 
@@ -56,10 +56,11 @@ TOKEN=$(curl -s -X POST localhost:8080/usuarios/sesion -H 'Content-Type: applica
 curl -s localhost:8080/usuarios/yo -H "Authorization: Bearer $TOKEN"
 curl -s "localhost:8080/productos/busqueda?q=limon&disponible=true"
 curl -s "localhost:8080/pedidos/especiales" -H "Authorization: Bearer $TOKEN"
-curl -s localhost:8080/inventario -H "Authorization: Bearer $TOKEN"
+curl -s localhost:8080/pedidos/stock -H "Authorization: Bearer $TOKEN"
+curl -s localhost:8080/pedidos/pendientes -H "Authorization: Bearer $TOKEN"
 ```
 
-`/inventario` devuelve stock, reservado y disponible por ingrediente (ADR-020). `disponible` puede quedar negativo: el vendedor puede confirmar con faltantes. El proveedor de inventario del compose es el mock de Prism (`inventario-mock`, puerto 4011).
+`/pedidos/stock` devuelve stock, reservado y disponible por ingrediente, y `/pedidos/pendientes` los pedidos que esperan al vendedor con sus `faltantes` (ADR-020). `disponible` puede quedar negativo: el vendedor puede confirmar con faltantes. Con `INVENTARIO_URL` vacía, `pedidos` usa el inventario falso, que arranca en 0: hay que cargar stock (`POST /pedidos/stock`) para ver consumos exitosos.
 
 ## Notificaciones sola (sin el compose)
 
