@@ -10,7 +10,7 @@ Todas las rutas son relativas a la raíz del repo. Los comandos son para Git Bas
 ## Prerequisitos
 
 - Go 1.27, Bun 1.4 y Chrome o Edge instalados (`navegador.ts` los busca solos; si no, `NAVEGADOR=/ruta/al/chrome`).
-- Docker. En Windows no hay `docker.exe`: está dentro de WSL (Ubuntu). Los scripts usan `docker` si existe y si no `wsl -e docker`; los puertos de WSL se ven en `localhost` de Windows.
+- Docker Desktop (`docker` en el PATH de Git Bash, con la integración con Ubuntu apagada, como en [DEMO.md](../../../docs/DEMO.md)). Los scripts usan `docker` si existe y, si no, caen a `wsl -e docker`; ese Docker de Ubuntu es otro motor, con otros contenedores y volúmenes.
 
 ## Correr la app completa (camino para agentes)
 
@@ -25,21 +25,26 @@ bash .claude/skills/run-recienhechoapp/app.sh detener
 
 | Comando | Qué hace |
 |---|---|
-| `app.sh levantar` | Arma `.tmp/env` (tu `.env` más lo que falte de `.env.example`, sin tocar tu `.env`), deja WSL despierto, `docker compose up --build -d` y espera al gateway, al frontend y a que `/api` del frontend llegue al gateway. Unos 15 s con las imágenes hechas |
+| `app.sh levantar` | Arma `.tmp/env` (tu `.env` más lo que falte de `.env.example`, sin tocar tu `.env`), (solo si usa el Docker de WSL, lo deja despierto) `docker compose up --build -d` y espera al gateway, al frontend y a que `/api` del frontend llegue al gateway. Entre 15 y 30 s con las imágenes hechas |
 | `app.sh cargar` | Entra como el vendedor del `.env`, crea las categorías Zanahoria, Cítricos y Sin harina de trigo, tres budines (si no estaban) y cupo de 10 para hoy y los próximos 7 días |
 | `app.sh estado` | `docker compose ps -a` del proyecto |
-| `app.sh detener` | `docker compose down` (los volúmenes y los budines quedan) y suelta WSL |
+| `app.sh detener` | `docker compose down` (los volúmenes y los budines quedan) y, si lo había despertado, suelta WSL |
 | `navegador.ts flujo` | Registra un comprador nuevo, abre un budín, lo encarga para mañana y comprueba que quede en "Mis pedidos" resaltado. Saca `flujo-1-catalogo`, `flujo-2-detalle` y `flujo-3-mis-pedidos`. Corta con error si no termina en `/mis-pedidos` |
 | `navegador.ts captura <ruta> [oscuro]` | Abre la ruta y saca una captura de 1280x860, en modo claro u oscuro |
 | `navegador.ts eval <ruta> '<js>'` | Abre la ruta, evalúa la expresión (acepta `await`) e imprime el resultado en JSON |
+| `COMO=vendedor navegador.ts captura\|eval ...` | Igual, pero antes entra como el vendedor del `.env` |
 
 Las capturas quedan en `.claude/skills/run-recienhechoapp/.tmp/capturas/`. Mirarlas: que el comando termine bien no garantiza que la pantalla tenga datos.
 
-Cada llamada a `navegador.ts` abre un Chrome nuevo, así que la sesión no pasa de una a otra: una pantalla que pide sesión, sin ella, manda a `/ingresar`. Para entrar, completar el formulario dentro del mismo `eval`:
+Cada llamada a `navegador.ts` abre un Chrome nuevo y la sesión no pasa de una a otra: una pantalla que pide sesión, sin ella, manda a `/ingresar`. Con `COMO=vendedor`, `captura` y `eval` entran antes con el vendedor del `.env` (lo leen de `.tmp/env`, que arma `app.sh levantar`). Así se ven las pantallas del vendedor, como la confirmación de pedidos con los insumos que faltan (ADR-020) y el stock:
 
 ```bash
-MSYS_NO_PATHCONV=1 bun .claude/skills/run-recienhechoapp/navegador.ts eval /ingresar "await (async () => { const llenar = (etiqueta, valor) => { const campo = [...document.querySelectorAll('md-text-field')].find(elemento => elemento.label?.startsWith(etiqueta)); campo.value = valor; campo.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true })) }; llenar('Email', 'vendedor@recienhecho.test'); llenar('Contraseña', 'vendedor-desarrollo'); await new Promise(listo => setTimeout(listo, 200)); document.querySelector('form').requestSubmit(); await new Promise(listo => setTimeout(listo, 2000)); return location.pathname + ' | ' + document.querySelector('main').innerText.slice(0, 120) })()"
+MSYS_NO_PATHCONV=1 COMO=vendedor bun .claude/skills/run-recienhechoapp/navegador.ts captura /vendedor/pedidos
+MSYS_NO_PATHCONV=1 COMO=vendedor bun .claude/skills/run-recienhechoapp/navegador.ts captura /vendedor/inventario
+MSYS_NO_PATHCONV=1 COMO=vendedor bun .claude/skills/run-recienhechoapp/navegador.ts eval /vendedor/pedidos "await (async () => { const boton = [...document.querySelectorAll('md-button')].find(elemento => elemento.textContent.trim() === 'Confirmar'); if (!boton) return 'no hay pendientes'; boton.click(); await new Promise(listo => setTimeout(listo, 1500)); return [...document.querySelectorAll('md-card')].map(tarjeta => tarjeta.innerText.replace(/\n+/g, ' / ')) })()"
 ```
+
+El último confirma el primer pedido pendiente (el que deja `flujo`) y lista las tarjetas.
 
 ## Pegarle a la API por el gateway
 
@@ -51,7 +56,10 @@ TOKEN=$(curl -s -X POST localhost:8080/usuarios/sesion -H 'Content-Type: applica
 curl -s localhost:8080/usuarios/yo -H "Authorization: Bearer $TOKEN"
 curl -s "localhost:8080/productos/busqueda?q=limon&disponible=true"
 curl -s "localhost:8080/pedidos/especiales" -H "Authorization: Bearer $TOKEN"
+curl -s localhost:8080/inventario -H "Authorization: Bearer $TOKEN"
 ```
+
+`/inventario` devuelve stock, reservado y disponible por ingrediente (ADR-020). `disponible` puede quedar negativo: el vendedor puede confirmar con faltantes. El proveedor de inventario del compose es el mock de Prism (`inventario-mock`, puerto 4011).
 
 ## Notificaciones sola (sin el compose)
 
@@ -76,12 +84,12 @@ for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet 
 Integración de `productos` contra bases reales (sin las variables se saltean en silencio). Bajar el compose antes: `mysql-productos` también usa el 3307.
 
 ```bash
-MSYS_NO_PATHCONV=1 wsl -e docker run -d --name mysql-prueba-productos -p 127.0.0.1:3307:3306 -e MYSQL_ROOT_PASSWORD=prueba -e MYSQL_DATABASE=productos_test mysql:8.4.10
-MSYS_NO_PATHCONV=1 wsl -e docker run -d --name redis-prueba-productos -p 127.0.0.1:6380:6379 redis:7.4.11
-MSYS_NO_PATHCONV=1 wsl -e docker run -d --name meili-prueba-productos -p 127.0.0.1:7701:7700 -e MEILI_MASTER_KEY=clave-de-prueba-de-16 getmeili/meilisearch:v1.54.3
-until MSYS_NO_PATHCONV=1 wsl -e docker exec mysql-prueba-productos mysqladmin ping -h127.0.0.1 --protocol=tcp -uroot -pprueba >/dev/null 2>&1; do sleep 2; done
+docker run -d --name mysql-prueba-productos -p 127.0.0.1:3307:3306 -e MYSQL_ROOT_PASSWORD=prueba -e MYSQL_DATABASE=productos_test mysql:8.4.10
+docker run -d --name redis-prueba-productos -p 127.0.0.1:6380:6379 redis:7.4.11
+docker run -d --name meili-prueba-productos -p 127.0.0.1:7701:7700 -e MEILI_MASTER_KEY=clave-de-prueba-de-16 getmeili/meilisearch:v1.54.3
+until docker exec mysql-prueba-productos mysqladmin ping -h127.0.0.1 --protocol=tcp -uroot -pprueba >/dev/null 2>&1; do sleep 2; done
 (cd backend/productos && MYSQL_DSN_TEST="root:prueba@tcp(127.0.0.1:3307)/productos_test" REDIS_URL_TEST=redis://127.0.0.1:6380/0 MEILI_URL_TEST=http://127.0.0.1:7701 MEILI_CLAVE_TEST=clave-de-prueba-de-16 go test -race -count=1 ./...)
-MSYS_NO_PATHCONV=1 wsl -e docker rm -f mysql-prueba-productos redis-prueba-productos meili-prueba-productos
+docker rm -f mysql-prueba-productos redis-prueba-productos meili-prueba-productos
 ```
 
 Con `smoke.sh arrancar` corriendo, la integración de notificaciones: `(cd backend/notificaciones && MONGO_URI_TEST=mongodb://localhost:27018 go test -count=1 ./internal/adaptadores/mongodb/...)`.
@@ -91,7 +99,7 @@ Con `smoke.sh arrancar` corriendo, la integración de notificaciones: `(cd backe
 Escenarios en `tests/carga/` ([README](../../../tests/carga/README.md)). Con la app levantada y `app.sh cargar` hecho, k6 corre en el compose con el perfil `carga`. Antes hay que subir `NOTIFICACIONES_LIMITE_POR_MINUTO` en el env que usa el compose y recrear el gateway; si no, notificaciones da `429`. Un escenario completo tarda 10 minutos; para probar que el script anda, `--vus 1 --iterations 1`:
 
 ```bash
-MSYS_NO_PATHCONV=1 wsl -e bash -c "cd '<raíz en /mnt/c/...>' && docker compose --env-file .claude/skills/run-recienhechoapp/.tmp/env --profile carga run --rm k6 run --vus 1 --iterations 1 /carga/catalogo.js"
+MSYS_NO_PATHCONV=1 docker compose --env-file .claude/skills/run-recienhechoapp/.tmp/env --profile carga run --rm k6 run --vus 1 --iterations 1 /carga/catalogo.js
 ```
 
 Los resultados también van a Prometheus (`k6_http_req_duration_p95`, `k6_http_reqs_total`), etiquetados con `testid` si se pasa `--tag testid=<nombre>`.
@@ -103,15 +111,19 @@ Los resultados también van a Prometheus (`k6_http_req_duration_p95`, `k6_http_r
 ## Trampas
 
 - **Git Bash cambia las rutas que empiezan con `/`** cuando llama a un `.exe` como Bun: `navegador.ts captura /` llegaba como `C:/Program Files/Git/` y Chrome sacaba captura de esa carpeta. Siempre `MSYS_NO_PATHCONV=1` delante; el script corta con un aviso si le llega una ruta así.
-- **`git rev-parse --show-toplevel` devuelve `C:/Users/...` en Git Bash**, no `/c/Users/...`. `app.sh` convierte las dos formas a `/mnt/c/...` para WSL.
+- **Dos Dockers en la misma máquina.** Con Docker Desktop, `docker` anda directo. Si en algún momento no está en el PATH, `app.sh` cae al de WSL, que tiene sus propios contenedores y volúmenes: los budines cargados en uno no están en el otro. `git rev-parse --show-toplevel` devuelve `C:/Users/...` en Git Bash y `app.sh` lo convierte a `/mnt/c/...` solo en ese caso.
 - **Un `bun run dev` olvidado le gana al contenedor.** Vite escucha en `[::1]:5173` y el compose en `127.0.0.1:5173`; `localhost` va primero a `::1`, así que el navegador ve Vite y `/api` devuelve el HTML de la app (`Unexpected token '<'`). Al cortar `bun run dev` desde una herramienta puede quedar vivo el `node.exe` hijo: buscarlo con `netstat -ano | grep :5173`. `app.sh levantar` lo detecta y corta.
 - **Chrome sin ventana copia el tema de Windows.** Con Windows en oscuro, todas las capturas salían oscuras. `navegador.ts` fija claro u oscuro en cada llamada.
-- **En Windows el Docker de WSL se apaga por inactividad** cuando no queda ningún proceso de `wsl` vivo, y se lleva los contenedores. `app.sh` deja un `wsl -e sleep` en segundo plano (PID en `.tmp/wsl.pid`) y lo mata en `detener`.
-- **Un contenedor viejo con el mismo nombre frena el compose** (`Conflict. The container name "/recienhecho-frontend" is already in use`). Pasa con contenedores de otro proyecto de compose (otro `-p` o carpeta). Ver de dónde es con `wsl -e docker ps -a --filter name=recienhecho`; si está parado y es de otra corrida, borrarlo.
-- **`docker compose ps --format '...'` pierde las comillas** al pasar por `wsl -e bash -c`: `app.sh estado` usa `ps -a` sin formato.
+- **Solo con el Docker de WSL:** se apaga por inactividad cuando no queda ningún proceso de `wsl` vivo, y se lleva los contenedores. `app.sh` deja un `wsl -e sleep` en segundo plano (PID en `.tmp/wsl.pid`) y lo mata en `detener`. Con Docker Desktop no pasa.
+- **Un contenedor viejo con el mismo nombre frena el compose** (`Conflict. The container name "/recienhecho-frontend" is already in use`). Pasa con contenedores de otro proyecto de compose (otro `-p` o carpeta). Ver de dónde es con `docker ps -a --filter name=recienhecho`; si está parado y es de otra corrida, borrarlo.
+- **`docker compose ps --format '...'` pierde las comillas** al pasar por `wsl -e bash -c` (solo en el camino de WSL): `app.sh estado` usa `ps -a` sin formato.
 - **La búsqueda tarda unos 3 s en ver un cambio** (bandeja de Meilisearch, ADR-008). Recién cargados o borrados, los budines pueden no aparecer en el catálogo.
 - **Los budines quedan en los volúmenes** después de `detener`. `cargar` no los duplica. Los precios son de relleno a propósito: no sabemos los reales.
 - **Los `md-text-field` no son `input`:** para llenarlos desde JS hay que poner `.value` y disparar un `InputEvent` con `composed: true`. Buscarlos por `.label` (es propiedad, no atributo).
+- **La sesión muere con cada Chrome.** Es una cookie de sesión (sin `Max-Age`) más `sessionStorage` (ADR-019), así que reusar el perfil de Chrome no alcanza: por eso `COMO=vendedor` entra en la misma corrida.
+- **El estado de un pedido no sale en `innerText`.** Es un `md-chip` con el texto en la propiedad `label`: leerlo con `[...document.querySelectorAll('.estado-pedido')].map(chip => chip.label)`.
+- **"mañana" en la tarjeta del pedido es la franja horaria** (mañana o tarde), no "el día siguiente".
+- **"Mañana" con `toISOString()` es en UTC.** Después de las 21 h de Argentina daba pasado mañana. `flujo` usa la fecha local (`toLocaleDateString('sv')`).
 - **Enter no siempre envía los formularios de material-esm** (pasó en el navegador del panel de Claude): `navegador.ts` usa `form.requestSubmit()`.
 - **MySQL arranca dos veces.** La imagen levanta un servidor temporal y después se reinicia. Esperar con `mysqladmin ping --protocol=tcp`, porque el temporal no escucha en la red.
 - **Mailpit guarda los mails en memoria**: `smoke.sh caida` lo recrea y la bandeja queda vacía. Con Mailpit caído, una notificación tarda unos 3,5 minutos en pasar a `fallida`.
@@ -127,3 +139,4 @@ Los resultados también van a Prometheus (`k6_http_req_duration_p95`, `k6_http_r
 | El catálogo muestra `Unexpected token '<'` | Lo mismo: el navegador está viendo Vite, no el contenedor |
 | `la ruta llegó como C:/...` | Faltó `MSYS_NO_PATHCONV=1` |
 | `flujo` corta en el registro (`sesion=false`) | Mirar `flujo-1-catalogo.png`: muestra el error del formulario |
+| `no entró como vendedor (quedó en /ingresar)` | Falta `.tmp/env` o la clave del vendedor no coincide: correr `app.sh levantar` |

@@ -3,8 +3,9 @@
 //   bun .claude/skills/run-recienhechoapp/navegador.ts captura <ruta> [oscuro]
 //   bun .claude/skills/run-recienhechoapp/navegador.ts eval <ruta> '<expresión JS>'
 //   bun .claude/skills/run-recienhechoapp/navegador.ts flujo
+// Con COMO=vendedor, captura y eval entran antes con el vendedor del .env (lo lee de .tmp/env).
 // Las capturas quedan en .claude/skills/run-recienhechoapp/.tmp/capturas/.
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const FRONTEND = process.env.FRONTEND_URL ?? 'http://localhost:5173'
@@ -101,6 +102,19 @@ const LLENAR = `(etiqueta, valor) => {
   campo.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }))
 }`
 
+// La sesión es una cookie de sesión más sessionStorage (ADR-019): muere con cada Chrome, así que se entra en la misma corrida.
+async function entrarComoVendedor() {
+  const env = readFileSync(join(CARPETA, 'env'), 'utf8')
+  const valor = (nombre: string) => env.match(new RegExp(`^${nombre}=(.*)$`, 'm'))?.[1]?.trim() ?? ''
+  await ir('/ingresar')
+  await evaluar(`(() => { const llenar = ${LLENAR}; llenar('Email', ${JSON.stringify(valor('VENDEDOR_EMAIL'))}); llenar('Contraseña', ${JSON.stringify(valor('VENDEDOR_CLAVE'))}) })()`)
+  await esperar(200)
+  await evaluar(`document.querySelector('form').requestSubmit()`)
+  await esperar(2000)
+  const ruta = await evaluar('location.pathname')
+  if (ruta !== '/vendedor/pedidos') throw new Error(`no entró como vendedor (quedó en ${ruta}); ¿corriste app.sh levantar?`)
+}
+
 async function flujo() {
   const email = `flujo${Date.now()}@ejemplo.com`
   await ir('/registrarse')
@@ -115,7 +129,8 @@ async function flujo() {
   await capturar('flujo-2-detalle')
   await evaluar(`[...document.querySelectorAll('main a')].find(enlace => enlace.textContent.includes('Encargar')).click()`)
   await esperar(1500)
-  const manana = new Date(Date.now() + 864e5).toISOString().slice(0, 10)
+  // Fecha local: con toISOString (UTC), después de las 21 h de Argentina encargaba para pasado mañana.
+  const manana = new Date(Date.now() + 864e5).toLocaleDateString('sv')
   await evaluar(`(() => { const llenar = ${LLENAR}; llenar('Fecha', '${manana}') })()`)
   await esperar(200)
   await evaluar(`document.querySelector('form').requestSubmit()`)
@@ -133,6 +148,7 @@ try {
   if (/^[a-z]:[\\/]/i.test(ruta)) throw new Error(`la ruta llegó como ${ruta}: correlo con MSYS_NO_PATHCONV=1`)
   // Chrome sin ventana copia el tema de Windows: si está en oscuro, todo sale oscuro. Se fija siempre.
   await enviar('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: extra === 'oscuro' ? 'dark' : 'light' }] })
+  if (process.env.COMO === 'vendedor' && comando !== 'flujo') await entrarComoVendedor()
   if (comando === 'captura') {
     await ir(ruta)
     await capturar(`${nombreDeArchivo(ruta)}${extra === 'oscuro' ? '-oscuro' : ''}`)
