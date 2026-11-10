@@ -23,6 +23,8 @@ type casosFalsos struct {
 	solicitud    dominio.Solicitud
 	errCapacidad error
 	errResponder error
+	errCarga     error
+	carga        string
 	conectado    string
 }
 
@@ -71,6 +73,20 @@ func (casos *casosFalsos) ResponderEspecial(context.Context, string, string, boo
 		return dominio.Pedido{}, casos.errResponder
 	}
 	return dominio.Pedido{}, dominio.ErrCotizacionVencida
+}
+
+func (casos *casosFalsos) ListarPendientesDeConfirmar(context.Context) ([]dominio.PendienteDeConfirmar, error) {
+	return []dominio.PendienteDeConfirmar{{
+		Pedido:    dominio.Pedido{ID: "pedido-1", Estado: dominio.EstadoPendienteConfirmacion},
+		Faltantes: []dominio.Insumo{{Ingrediente: "harina", Cantidad: 200, Unidad: "g"}},
+	}}, nil
+}
+func (casos *casosFalsos) ListarStock(context.Context) ([]dominio.Existencia, error) {
+	return []dominio.Existencia{{Ingrediente: "harina", Unidad: "g", Stock: 300, Reservado: 500}}, nil
+}
+func (casos *casosFalsos) CargarStock(_ context.Context, ingrediente, unidad string, cantidad int64) (dominio.Existencia, error) {
+	casos.carga = fmt.Sprintf("%s %s %d", ingrediente, unidad, cantidad)
+	return dominio.Existencia{Ingrediente: ingrediente, Unidad: unidad, Stock: cantidad}, casos.errCarga
 }
 
 var comprador = map[string]string{"X-Id-Usuario": "comprador-1", "X-Email-Usuario": "cliente@ejemplo.com", "X-Rol-Usuario": "comprador"}
@@ -178,6 +194,62 @@ func TestCapacidad(prueba *testing.T) {
 	respuesta, datos = pedir(casos, http.MethodPut, "/capacidad/2026-10-30", `{"capacidad":5}`, vendedor)
 	if respuesta.Code != http.StatusConflict || !strings.Contains(datos["mensaje"].(string), "6") {
 		prueba.Errorf("estado %d, datos %v", respuesta.Code, datos)
+	}
+}
+
+func TestElVendedorVeLosPendientesConLosInsumosQueFaltan(prueba *testing.T) {
+	respuesta, _ := pedir(&casosFalsos{}, http.MethodGet, "/pedidos/pendientes", "", vendedor)
+
+	var pendientes []map[string]any
+	json.Unmarshal(respuesta.Body.Bytes(), &pendientes)
+	if respuesta.Code != http.StatusOK || len(pendientes) != 1 || pendientes[0]["id"] != "pedido-1" {
+		prueba.Fatalf("estado %d, pendientes %v", respuesta.Code, pendientes)
+	}
+	faltantes := pendientes[0]["faltantes"].([]any)
+	if len(faltantes) != 1 || faltantes[0].(map[string]any)["ingrediente"] != "harina" || faltantes[0].(map[string]any)["cantidad"] != float64(200) {
+		prueba.Errorf("faltantes = %v", faltantes)
+	}
+	if respuesta, _ := pedir(&casosFalsos{}, http.MethodGet, "/pedidos/pendientes", "", comprador); respuesta.Code != http.StatusForbidden {
+		prueba.Errorf("un comprador no ve los pendientes: %d", respuesta.Code)
+	}
+}
+
+func TestStockDelVendedor(prueba *testing.T) {
+	respuesta, _ := pedir(&casosFalsos{}, http.MethodGet, "/pedidos/stock", "", vendedor)
+	var existencias []map[string]any
+	json.Unmarshal(respuesta.Body.Bytes(), &existencias)
+	if respuesta.Code != http.StatusOK || len(existencias) != 1 || existencias[0]["disponible"] != float64(-200) {
+		prueba.Fatalf("estado %d, existencias %v", respuesta.Code, existencias)
+	}
+
+	casos := &casosFalsos{}
+	respuesta, datos := pedir(casos, http.MethodPost, "/pedidos/stock", `{"ingrediente":"harina","unidad":"g","cantidad":1000}`, vendedor)
+	if respuesta.Code != http.StatusOK || casos.carga != "harina g 1000" || datos["stock"] != float64(1000) {
+		prueba.Errorf("estado %d, carga %q, datos %v", respuesta.Code, casos.carga, datos)
+	}
+	if respuesta, _ := pedir(&casosFalsos{}, http.MethodPost, "/pedidos/stock", `{"ingrediente":"harina","unidad":"g","cantidad":1}`, comprador); respuesta.Code != http.StatusForbidden {
+		prueba.Errorf("un comprador no carga stock: %d", respuesta.Code)
+	}
+}
+
+func TestErroresAlCargarStock(prueba *testing.T) {
+	casos := []struct {
+		nombre string
+		err    error
+		estado int
+		codigo string
+	}{
+		{"cantidad inválida", dominio.ErrSolicitudInvalida, http.StatusBadRequest, "solicitud_invalida"},
+		{"sin casilleros", puertos.ErrSinProductoDelProveedor, http.StatusConflict, "sin_producto_del_proveedor"},
+		{"proveedor caído", puertos.ErrInventarioNoDisponible, http.StatusServiceUnavailable, "inventario_no_disponible"},
+	}
+	for _, caso := range casos {
+		prueba.Run(caso.nombre, func(prueba *testing.T) {
+			respuesta, datos := pedir(&casosFalsos{errCarga: caso.err}, http.MethodPost, "/pedidos/stock", `{"ingrediente":"harina","unidad":"g","cantidad":1}`, vendedor)
+			if respuesta.Code != caso.estado || datos["codigo"] != caso.codigo {
+				prueba.Errorf("estado %d, código %v; se esperaba %d %s", respuesta.Code, datos["codigo"], caso.estado, caso.codigo)
+			}
+		})
 	}
 }
 

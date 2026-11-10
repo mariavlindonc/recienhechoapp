@@ -1,6 +1,7 @@
-// Package mongodb implementa los puertos Repositorio y BandejaDeSalida sobre
-// MongoDB (ADR-002). Las operaciones que escriben en más de una colección van en
-// una transacción, por eso MongoDB tiene que correr como replica set (D4).
+// Package mongodb implementa los puertos Repositorio, BandejaDeSalida y Existencias
+// sobre MongoDB (ADR-002, ADR-020). Las operaciones que escriben en más de una
+// colección, incluso de dos bases del mismo servidor, van en una transacción, por
+// eso MongoDB tiene que correr como replica set (D4).
 package mongodb
 
 import (
@@ -18,9 +19,10 @@ import (
 )
 
 const (
-	coleccionPedidos = "pedidos"
-	coleccionDias    = "dias"
-	coleccionEventos = "eventos_pendientes"
+	coleccionPedidos     = "pedidos"
+	coleccionDias        = "dias"
+	coleccionEventos     = "eventos_pendientes"
+	coleccionExistencias = "existencias"
 
 	// esperaPorOperacion es lo máximo que tarda cada operación simple (ADR-011).
 	esperaPorOperacion = 2 * time.Second
@@ -35,10 +37,11 @@ func conLimite(contexto context.Context, limite time.Duration) (context.Context,
 
 // Repositorio cumple puertos.Repositorio y puertos.BandejaDeSalida.
 type Repositorio struct {
-	cliente *mongo.Client
-	pedidos *mongo.Collection
-	dias    *mongo.Collection
-	eventos *mongo.Collection
+	cliente     *mongo.Client
+	pedidos     *mongo.Collection
+	dias        *mongo.Collection
+	eventos     *mongo.Collection
+	existencias *mongo.Collection // en la base de inventario, no en la de pedidos
 }
 
 var (
@@ -46,14 +49,16 @@ var (
 	_ puertos.BandejaDeSalida = (*Repositorio)(nil)
 )
 
-// NuevoRepositorio usa las colecciones de la base dada.
-func NuevoRepositorio(cliente *mongo.Client, base string) *Repositorio {
+// NuevoRepositorio usa las colecciones de la base de pedidos y las existencias de
+// la base de inventario, que comparte servidor con ella (ADR-020).
+func NuevoRepositorio(cliente *mongo.Client, base, baseInventario string) *Repositorio {
 	baseDeDatos := cliente.Database(base)
 	return &Repositorio{
-		cliente: cliente,
-		pedidos: baseDeDatos.Collection(coleccionPedidos),
-		dias:    baseDeDatos.Collection(coleccionDias),
-		eventos: baseDeDatos.Collection(coleccionEventos),
+		cliente:     cliente,
+		pedidos:     baseDeDatos.Collection(coleccionPedidos),
+		dias:        baseDeDatos.Collection(coleccionDias),
+		eventos:     baseDeDatos.Collection(coleccionEventos),
+		existencias: cliente.Database(baseInventario).Collection(coleccionExistencias),
 	}
 }
 
@@ -78,12 +83,19 @@ func (repositorio *Repositorio) PrepararIndices(contexto context.Context) error 
 			Options: options.Index().SetName("por_fecha"),
 		}},
 		{repositorio.pedidos, mongo.IndexModel{
-			Keys:    bson.D{{Key: "estado", Value: 1}, {Key: "requiereRevision", Value: 1}, {Key: "proximaConfirmacion", Value: 1}},
-			Options: options.Index().SetName("por_confirmar"),
+			Keys:    bson.D{{Key: "estado", Value: 1}, {Key: "creadoEn", Value: 1}},
+			Options: options.Index().SetName("por_estado"),
 		}},
 		{repositorio.pedidos, mongo.IndexModel{
-			Keys:    bson.D{{Key: "liberarInsumos", Value: 1}, {Key: "proximaLiberacion", Value: 1}},
-			Options: options.Index().SetName("por_liberar"),
+			Keys:    bson.D{{Key: "consumoPendiente", Value: 1}, {Key: "proximoConsumo", Value: 1}},
+			Options: options.Index().SetName("por_consumir"),
+		}},
+		// Un producto del proveedor sirve de casillero de un solo ingrediente (ADR-020).
+		// Crear el índice también crea la colección, que dentro de una transacción no conviene crear.
+		{repositorio.existencias, mongo.IndexModel{
+			Keys: bson.D{{Key: "productoId", Value: 1}},
+			Options: options.Index().SetName("producto_del_proveedor").SetUnique(true).
+				SetPartialFilterExpression(bson.D{{Key: "productoId", Value: bson.D{{Key: "$gt", Value: 0}}}}),
 		}},
 		{repositorio.eventos, mongo.IndexModel{
 			Keys:    bson.D{{Key: "proximoIntento", Value: 1}, {Key: "evento.ocurridoEn", Value: 1}},
@@ -138,8 +150,36 @@ func (repositorio *Repositorio) Registrar(contexto context.Context, pedido domin
 				return err
 			}
 		}
+		if pedido.InsumosReservados {
+			if err := repositorio.moverReserva(contexto, pedido.Insumos, 1); err != nil {
+				return err
+			}
+		}
 		return repositorio.guardarEvento(contexto, evento)
 	})
+}
+
+// moverReserva suma (sentido 1) o devuelve (sentido -1) lo reservado de cada
+// insumo. Al reservar crea la existencia en cero si todavía no estaba: la reserva
+// nunca rechaza un pedido, aunque el stock no alcance (ADR-020).
+func (repositorio *Repositorio) moverReserva(contexto context.Context, insumos []dominio.Insumo, sentido int64) error {
+	for _, insumo := range insumos {
+		_, err := repositorio.existencias.UpdateOne(contexto,
+			bson.D{{Key: "_id", Value: idExistencia(insumo.Ingrediente, insumo.Unidad)}},
+			bson.D{
+				{Key: "$inc", Value: bson.D{{Key: "reservado", Value: sentido * insumo.Cantidad}}},
+				{Key: "$setOnInsert", Value: bson.D{
+					{Key: "ingrediente", Value: insumo.Ingrediente}, {Key: "unidad", Value: insumo.Unidad},
+					{Key: "stock", Value: int64(0)}, {Key: "productoId", Value: int64(0)},
+				}},
+			},
+			options.UpdateOne().SetUpsert(true),
+		)
+		if err != nil {
+			return fmt.Errorf("mover la reserva de %s: %w", insumo.Ingrediente, err)
+		}
+	}
+	return nil
 }
 
 // reservarCupo es la reserva condicional: solo suma si después de sumar no se
@@ -191,11 +231,37 @@ func (repositorio *Repositorio) GuardarCambio(contexto context.Context, cambio p
 				return fmt.Errorf("liberar cupo del %s: %w", cambio.Pedido.Fecha, err)
 			}
 		}
+		if cambio.LiberarReserva {
+			if err := repositorio.moverReserva(contexto, cambio.Pedido.Insumos[cambio.Pedido.InsumosConsumidos:], -1); err != nil {
+				return err
+			}
+		}
+		if cambio.Consumo != nil {
+			if err := repositorio.registrarConsumo(contexto, *cambio.Consumo); err != nil {
+				return err
+			}
+		}
 		if cambio.Evento != nil {
 			return repositorio.guardarEvento(contexto, *cambio.Evento)
 		}
 		return nil
 	})
+}
+
+// registrarConsumo deja como stock el que informó el proveedor y baja lo reservado
+// en lo que se consumió.
+func (repositorio *Repositorio) registrarConsumo(contexto context.Context, consumo puertos.Consumo) error {
+	_, err := repositorio.existencias.UpdateOne(contexto,
+		bson.D{{Key: "_id", Value: idExistencia(consumo.Insumo.Ingrediente, consumo.Insumo.Unidad)}},
+		bson.D{
+			{Key: "$set", Value: bson.D{{Key: "stock", Value: consumo.StockQueda}}},
+			{Key: "$inc", Value: bson.D{{Key: "reservado", Value: -consumo.Insumo.Cantidad}}},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("registrar el consumo de %s: %w", consumo.Insumo.Ingrediente, err)
+	}
+	return nil
 }
 
 func (repositorio *Repositorio) guardarEvento(contexto context.Context, evento dominio.Evento) error {
@@ -276,23 +342,33 @@ func (repositorio *Repositorio) listar(contexto context.Context, filtro, orden b
 	return pedidos, nil
 }
 
-// TomarParaConfirmar aparta un pedido pendiente en una sola operación atómica:
-// si el proceso en segundo plano y una solicitud lo piden al mismo tiempo, solo
-// uno lo obtiene. Sube la versión, así quien lo tenía leído de antes no lo pisa.
-func (repositorio *Repositorio) TomarParaConfirmar(contexto context.Context, ahora, hasta time.Time) (dominio.Pedido, bool, error) {
-	return repositorio.tomar(contexto, bson.D{
-		{Key: "estado", Value: string(dominio.EstadoPendienteConfirmacion)},
-		{Key: "requiereRevision", Value: false},
-		{Key: "proximaConfirmacion", Value: bson.D{{Key: "$lte", Value: ahora}}},
-	}, "proximaConfirmacion", hasta)
+// ListarPendientesDeConfirmar devuelve los pedidos que esperan al vendedor, del más
+// viejo al más nuevo.
+func (repositorio *Repositorio) ListarPendientesDeConfirmar(contexto context.Context) ([]dominio.Pedido, error) {
+	return repositorio.listar(contexto,
+		bson.D{{Key: "estado", Value: string(dominio.EstadoPendienteConfirmacion)}},
+		bson.D{{Key: "creadoEn", Value: 1}})
 }
 
-// TomarParaLiberar aparta un pedido con insumos por liberar.
-func (repositorio *Repositorio) TomarParaLiberar(contexto context.Context, ahora, hasta time.Time) (dominio.Pedido, bool, error) {
+// TomarParaConsumir aparta un pedido con insumos por consumir en una sola
+// operación atómica. Sube la versión, así quien lo tenía leído de antes no lo pisa.
+func (repositorio *Repositorio) TomarParaConsumir(contexto context.Context, ahora, hasta time.Time) (dominio.Pedido, bool, error) {
 	return repositorio.tomar(contexto, bson.D{
-		{Key: "liberarInsumos", Value: true},
-		{Key: "proximaLiberacion", Value: bson.D{{Key: "$lte", Value: ahora}}},
-	}, "proximaLiberacion", hasta)
+		{Key: "consumoPendiente", Value: true},
+		{Key: "proximoConsumo", Value: bson.D{{Key: "$lte", Value: ahora}}},
+	}, "proximoConsumo", hasta)
+}
+
+// ContarConsumosPendientes cuenta los pedidos que esperan que el proveedor
+// descuente sus insumos.
+func (repositorio *Repositorio) ContarConsumosPendientes(contexto context.Context) (int, error) {
+	contexto, cancelar := conLimite(contexto, esperaPorOperacion)
+	defer cancelar()
+	cantidad, err := repositorio.pedidos.CountDocuments(contexto, bson.D{{Key: "consumoPendiente", Value: true}})
+	if err != nil {
+		return 0, fmt.Errorf("contar consumos pendientes: %w", err)
+	}
+	return int(cantidad), nil
 }
 
 func (repositorio *Repositorio) tomar(contexto context.Context, filtro bson.D, campo string, hasta time.Time) (dominio.Pedido, bool, error) {

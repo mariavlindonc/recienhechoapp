@@ -25,10 +25,13 @@ type repositorioFalso struct {
 	// fallarGuardar, si no es nil, hace fallar solo GuardarCambio: el pedido se
 	// registra, pero no se guarda lo que pasa después.
 	fallarGuardar error
+	// existencias comparte el stock con existenciasFalsas: Registrar reserva, y
+	// GuardarCambio devuelve la reserva o registra el consumo, como el de MongoDB.
+	existencias *existenciasFalsas
 }
 
-func nuevoRepositorioFalso() *repositorioFalso {
-	return &repositorioFalso{pedidos: map[string]dominio.Pedido{}, dias: map[string]dominio.Dia{}, apartados: map[string]time.Time{}}
+func nuevoRepositorioFalso(existencias *existenciasFalsas) *repositorioFalso {
+	return &repositorioFalso{pedidos: map[string]dominio.Pedido{}, dias: map[string]dominio.Dia{}, apartados: map[string]time.Time{}, existencias: existencias}
 }
 
 func (repositorio *repositorioFalso) Registrar(_ context.Context, pedido dominio.Pedido, evento dominio.Evento) error {
@@ -46,6 +49,9 @@ func (repositorio *repositorioFalso) Registrar(_ context.Context, pedido dominio
 		if err := repositorio.reservarCupo(pedido); err != nil {
 			return err
 		}
+	}
+	if pedido.InsumosReservados {
+		repositorio.existencias.mover(pedido.Insumos, 1)
 	}
 	repositorio.pedidos[pedido.ID] = pedido
 	repositorio.eventos = append(repositorio.eventos, puertos.EventoGuardado{Evento: evento})
@@ -76,6 +82,12 @@ func (repositorio *repositorioFalso) GuardarCambio(_ context.Context, cambio pue
 		dia := repositorio.dias[pedido.Fecha]
 		dia.Reservados -= pedido.Unidades()
 		repositorio.dias[pedido.Fecha] = dia
+	}
+	if cambio.LiberarReserva {
+		repositorio.existencias.mover(pedido.Insumos[pedido.InsumosConsumidos:], -1)
+	}
+	if cambio.Consumo != nil {
+		repositorio.existencias.consumir(cambio.Consumo.Insumo, cambio.Consumo.StockQueda)
 	}
 	if cambio.Evento != nil {
 		repositorio.eventos = append(repositorio.eventos, puertos.EventoGuardado{Evento: *cambio.Evento})
@@ -142,24 +154,22 @@ func (repositorio *repositorioFalso) filtrar(incluir func(dominio.Pedido) bool) 
 	return encontrados
 }
 
-func (repositorio *repositorioFalso) TomarParaConfirmar(_ context.Context, ahora, hasta time.Time) (dominio.Pedido, bool, error) {
+func (repositorio *repositorioFalso) ListarPendientesDeConfirmar(context.Context) ([]dominio.Pedido, error) {
+	return repositorio.filtrar(func(pedido dominio.Pedido) bool { return pedido.Estado == dominio.EstadoPendienteConfirmacion }), nil
+}
+
+func (repositorio *repositorioFalso) TomarParaConsumir(_ context.Context, ahora, hasta time.Time) (dominio.Pedido, bool, error) {
 	return repositorio.tomar(func(pedido *dominio.Pedido) bool {
-		if pedido.Estado != dominio.EstadoPendienteConfirmacion || pedido.RequiereRevision || pedido.ProximaConfirmacion.After(ahora) {
+		if !pedido.ConsumoPendiente || pedido.ProximoConsumo.After(ahora) {
 			return false
 		}
-		pedido.ProximaConfirmacion = hasta
+		pedido.ProximoConsumo = hasta
 		return true
 	})
 }
 
-func (repositorio *repositorioFalso) TomarParaLiberar(_ context.Context, ahora, hasta time.Time) (dominio.Pedido, bool, error) {
-	return repositorio.tomar(func(pedido *dominio.Pedido) bool {
-		if !pedido.LiberarInsumos || pedido.ProximaLiberacion.After(ahora) {
-			return false
-		}
-		pedido.ProximaLiberacion = hasta
-		return true
-	})
+func (repositorio *repositorioFalso) ContarConsumosPendientes(context.Context) (int, error) {
+	return len(repositorio.filtrar(func(pedido dominio.Pedido) bool { return pedido.ConsumoPendiente })), nil
 }
 
 func (repositorio *repositorioFalso) tomar(apartar func(*dominio.Pedido) bool) (dominio.Pedido, bool, error) {
@@ -257,45 +267,152 @@ func (catalogo catalogoFalso) ObtenerProducto(_ context.Context, id string) (dom
 	return producto, nil
 }
 
-// inventarioFalso responde lo configurado y cuenta las llamadas.
-type inventarioFalso struct {
-	mutex       sync.Mutex
-	resultado   puertos.ResultadoReserva
-	fallar      error
-	reservas    int
-	liberados   []string
-	fallarLiber error
-	// alReservar, si no es nil, corre una sola vez, en la próxima reserva: sirve
-	// para que algo pase justo mientras se habla con el inventario (que falle la
-	// base, o que el proceso en segundo plano corra al mismo tiempo).
-	alReservar func()
+// existenciasFalsas guarda el stock propio en memoria y respeta las mismas reglas
+// que el de MongoDB: la reserva crea la existencia en cero y los productos del
+// proveedor se reparten de a uno por ingrediente.
+type existenciasFalsas struct {
+	mutex     sync.Mutex
+	porInsumo map[[2]string]*dominio.Existencia
+	productos []int64 // casilleros que quedan por repartir
 }
 
-func (inventario *inventarioFalso) Reservar(_ context.Context, idPedido string, _ []dominio.Insumo) (puertos.ResultadoReserva, error) {
-	inventario.mutex.Lock()
-	inventario.reservas++
-	gancho := inventario.alReservar
-	inventario.alReservar = nil
-	fallar, resultado := inventario.fallar, inventario.resultado
-	inventario.mutex.Unlock()
-	// Sin el mutex tomado: el gancho puede volver a llamar al inventario.
-	if gancho != nil {
-		gancho()
-	}
-	if fallar != nil {
-		return "", fallar
-	}
-	return resultado, nil
+func nuevasExistenciasFalsas(productos ...int64) *existenciasFalsas {
+	return &existenciasFalsas{porInsumo: map[[2]string]*dominio.Existencia{}, productos: productos}
 }
 
-func (inventario *inventarioFalso) Liberar(_ context.Context, idPedido string) error {
-	inventario.mutex.Lock()
-	defer inventario.mutex.Unlock()
-	if inventario.fallarLiber != nil {
-		return inventario.fallarLiber
+// existencia se llama con el mutex tomado.
+func (existencias *existenciasFalsas) existencia(ingrediente, unidad string) *dominio.Existencia {
+	clave := [2]string{ingrediente, unidad}
+	if existencias.porInsumo[clave] == nil {
+		existencias.porInsumo[clave] = &dominio.Existencia{Ingrediente: ingrediente, Unidad: unidad}
 	}
-	inventario.liberados = append(inventario.liberados, idPedido)
+	return existencias.porInsumo[clave]
+}
+
+func (existencias *existenciasFalsas) mover(insumos []dominio.Insumo, sentido int64) {
+	existencias.mutex.Lock()
+	defer existencias.mutex.Unlock()
+	for _, insumo := range insumos {
+		existencias.existencia(insumo.Ingrediente, insumo.Unidad).Reservado += sentido * insumo.Cantidad
+	}
+}
+
+func (existencias *existenciasFalsas) consumir(insumo dominio.Insumo, stockQueda int64) {
+	existencias.mutex.Lock()
+	defer existencias.mutex.Unlock()
+	actual := existencias.existencia(insumo.Ingrediente, insumo.Unidad)
+	actual.Stock = stockQueda
+	actual.Reservado -= insumo.Cantidad
+}
+
+// conStock deja cargado el stock conocido de un ingrediente.
+func (existencias *existenciasFalsas) conStock(ingrediente, unidad string, stock int64) {
+	existencias.mutex.Lock()
+	defer existencias.mutex.Unlock()
+	existencias.existencia(ingrediente, unidad).Stock = stock
+}
+
+func (existencias *existenciasFalsas) de(ingrediente, unidad string) dominio.Existencia {
+	existencias.mutex.Lock()
+	defer existencias.mutex.Unlock()
+	return *existencias.existencia(ingrediente, unidad)
+}
+
+func (existencias *existenciasFalsas) Listar(context.Context) ([]dominio.Existencia, error) {
+	existencias.mutex.Lock()
+	defer existencias.mutex.Unlock()
+	var todas []dominio.Existencia
+	for _, existencia := range existencias.porInsumo {
+		todas = append(todas, *existencia)
+	}
+	sort.Slice(todas, func(primera, segunda int) bool { return todas[primera].Ingrediente < todas[segunda].Ingrediente })
+	return todas, nil
+}
+
+func (existencias *existenciasFalsas) Obtener(_ context.Context, ingrediente, unidad string) (dominio.Existencia, error) {
+	existencias.mutex.Lock()
+	defer existencias.mutex.Unlock()
+	return *existencias.existencia(ingrediente, unidad), nil
+}
+
+func (existencias *existenciasFalsas) AsignarProducto(_ context.Context, ingrediente, unidad string) (dominio.Existencia, error) {
+	existencias.mutex.Lock()
+	defer existencias.mutex.Unlock()
+	actual := existencias.existencia(ingrediente, unidad)
+	if actual.ProductoID != 0 {
+		return *actual, nil
+	}
+	if len(existencias.productos) == 0 {
+		return dominio.Existencia{}, fmt.Errorf("%w: %s", puertos.ErrSinProductoDelProveedor, ingrediente)
+	}
+	actual.ProductoID, existencias.productos = existencias.productos[0], existencias.productos[1:]
+	return *actual, nil
+}
+
+func (existencias *existenciasFalsas) GuardarStock(_ context.Context, ingrediente, unidad string, stock int64) error {
+	existencias.conStock(ingrediente, unidad, stock)
 	return nil
+}
+
+// proveedorFalso lleva el stock del proveedor por producto y cuenta las llamadas.
+// Responde con la falla que se le indique y puede aplicar el cambio igual (como un
+// proveedor al que se le cortó la respuesta).
+type proveedorFalso struct {
+	mutex  sync.Mutex
+	stocks map[int64]int64
+	// fallar, si no es nil, es lo que devuelve en vez de responder.
+	fallar error
+	// aplicarAunqueFalle hace que Reducir descuente el stock y después devuelva el
+	// error de fallar: la respuesta se perdió pero el cambio ocurrió.
+	aplicarAunqueFalle bool
+	reducciones        []llamada
+	consultas          int
+}
+
+type llamada struct {
+	producto, cantidad int64
+	motivo             string
+}
+
+func nuevoProveedorFalso() *proveedorFalso {
+	return &proveedorFalso{stocks: map[int64]int64{}}
+}
+
+func (proveedor *proveedorFalso) Reducir(_ context.Context, idProducto, cantidad int64, motivo string) (int64, error) {
+	proveedor.mutex.Lock()
+	defer proveedor.mutex.Unlock()
+	proveedor.reducciones = append(proveedor.reducciones, llamada{idProducto, cantidad, motivo})
+	if proveedor.fallar != nil && !proveedor.aplicarAunqueFalle {
+		return 0, proveedor.fallar
+	}
+	if proveedor.stocks[idProducto] < cantidad {
+		return 0, puertos.ErrStockInsuficiente
+	}
+	proveedor.stocks[idProducto] -= cantidad
+	if proveedor.fallar != nil {
+		return 0, proveedor.fallar
+	}
+	return proveedor.stocks[idProducto], nil
+}
+
+func (proveedor *proveedorFalso) Aumentar(_ context.Context, idProducto, cantidad int64, _ string) (int64, error) {
+	proveedor.mutex.Lock()
+	defer proveedor.mutex.Unlock()
+	if proveedor.fallar != nil {
+		return 0, proveedor.fallar
+	}
+	proveedor.stocks[idProducto] += cantidad
+	return proveedor.stocks[idProducto], nil
+}
+
+func (proveedor *proveedorFalso) Consultar(_ context.Context, idProducto int64) (int64, error) {
+	proveedor.mutex.Lock()
+	defer proveedor.mutex.Unlock()
+	proveedor.consultas++
+	if proveedor.fallar != nil && !proveedor.aplicarAunqueFalle {
+		return 0, proveedor.fallar
+	}
+	return proveedor.stocks[idProducto], nil
 }
 
 // publicadorFalso guarda lo publicado o falla.
@@ -314,9 +431,9 @@ func (publicador *publicadorFalso) Publicar(_ context.Context, guardado puertos.
 
 // eventosFalsos registra los hechos avisados.
 type eventosFalsos struct {
-	mutex       sync.Mutex
-	inventario  []puertos.ResultadoInventario
-	noGuardadas []error
+	mutex      sync.Mutex
+	inventario []puertos.ResultadoInventario
+	pendientes int
 }
 
 func (eventos *eventosFalsos) PedidoRegistrado(context.Context, string) {}
@@ -328,10 +445,10 @@ func (eventos *eventosFalsos) InventarioConsultado(_ context.Context, _ string, 
 func (eventos *eventosFalsos) CircuitoDelInventarioCambio(context.Context, puertos.EstadoCircuito, puertos.EstadoCircuito) {
 }
 func (eventos *eventosFalsos) EventoPublicado(context.Context, string, error) {}
-func (eventos *eventosFalsos) ConfirmacionNoGuardada(_ context.Context, _ string, err error) {
+func (eventos *eventosFalsos) ConsumosPendientes(_ context.Context, cantidad int) {
 	eventos.mutex.Lock()
 	defer eventos.mutex.Unlock()
-	eventos.noGuardadas = append(eventos.noGuardadas, err)
+	eventos.pendientes = cantidad
 }
 
 var errCaido = errors.New("caído")

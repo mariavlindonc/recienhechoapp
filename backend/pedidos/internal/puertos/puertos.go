@@ -1,6 +1,7 @@
 // Package puertos define, como interfaces, lo que la aplicación necesita del
-// exterior: dónde guardar los pedidos, de dónde sacar los productos, cómo reservar
-// insumos y cómo publicar eventos (ADR-007). Los adaptadores las implementan.
+// exterior: dónde guardar los pedidos y el stock propio, de dónde sacar los
+// productos, cómo consumir el stock del proveedor y cómo publicar eventos
+// (ADR-007, ADR-020). Los adaptadores las implementan.
 package puertos
 
 import (
@@ -24,15 +25,30 @@ type Cambio struct {
 	// ReservarCupo ocupa el cupo del día (al aceptar un especial). Si no alcanza,
 	// no se guarda nada y devuelve dominio.ErrSinCupo.
 	ReservarCupo bool
+	// LiberarReserva devuelve al stock propio los insumos que el pedido tenía
+	// reservados (al cancelar, R7). No llama al proveedor (ADR-020).
+	LiberarReserva bool
+	// Consumo, si no es nil, pasa a stock lo que el proveedor descontó de un insumo.
+	Consumo *Consumo
+}
+
+// Consumo es un insumo que el proveedor descontó para un pedido: el stock propio
+// queda en lo que el proveedor devolvió y la reserva baja en la cantidad consumida.
+type Consumo struct {
+	Insumo dominio.Insumo
+	// StockQueda es el stock que informó el proveedor después de descontar.
+	StockQueda int64
 }
 
 // Repositorio guarda los pedidos, los cupos por día y la bandeja de salida de
 // eventos (outbox). Cada método que escribe más de una cosa lo hace en una sola
 // transacción: o se guarda todo o nada (D4).
 type Repositorio interface {
-	// Registrar guarda el pedido nuevo, reserva su cupo en el día y guarda el
-	// evento. Devuelve dominio.ErrSinCupo si el día no alcanza, y
-	// dominio.ErrPedidoRepetido si el comprador ya usó esa clave de idempotencia.
+	// Registrar guarda el pedido nuevo, reserva su cupo en el día y sus insumos en
+	// el stock propio, y guarda el evento. Los insumos se reservan aunque no
+	// alcancen: la reserva nunca rechaza un pedido (ADR-020). Devuelve
+	// dominio.ErrSinCupo si el día no alcanza, y dominio.ErrPedidoRepetido si el
+	// comprador ya usó esa clave de idempotencia.
 	Registrar(contexto context.Context, pedido dominio.Pedido, evento dominio.Evento) error
 
 	// GuardarCambio guarda el pedido modificado, y en la misma transacción el
@@ -55,12 +71,18 @@ type Repositorio interface {
 	// ListarEspecialesAbiertos devuelve los especiales solicitados o cotizados (VE5).
 	ListarEspecialesAbiertos(contexto context.Context) ([]dominio.Pedido, error)
 
-	// TomarParaConfirmar aparta hasta `hasta` un pedido pendiente de confirmación
-	// cuya próxima confirmación ya llegó, para que nadie más lo procese mientras tanto.
-	TomarParaConfirmar(contexto context.Context, ahora, hasta time.Time) (pedido dominio.Pedido, encontrado bool, err error)
+	// ListarPendientesDeConfirmar devuelve los pedidos que esperan al vendedor, del
+	// más viejo al más nuevo.
+	ListarPendientesDeConfirmar(contexto context.Context) ([]dominio.Pedido, error)
 
-	// TomarParaLiberar aparta un pedido con insumos por liberar en el proveedor.
-	TomarParaLiberar(contexto context.Context, ahora, hasta time.Time) (pedido dominio.Pedido, encontrado bool, err error)
+	// TomarParaConsumir aparta hasta `hasta` un pedido en producción con insumos por
+	// consumir cuyo próximo intento ya llegó, para que nadie más lo procese mientras
+	// tanto. Va de a uno por vez (ADR-020).
+	TomarParaConsumir(contexto context.Context, ahora, hasta time.Time) (pedido dominio.Pedido, encontrado bool, err error)
+
+	// ContarConsumosPendientes devuelve cuántos pedidos esperan que el proveedor
+	// descuente sus insumos.
+	ContarConsumosPendientes(contexto context.Context) (int, error)
 
 	// DefinirCapacidad fija la capacidad de un día. Devuelve
 	// dominio.ErrCapacidadMenorQueReservados si ya hay más reservado.
@@ -104,31 +126,38 @@ type Catalogo interface {
 	ObtenerProducto(contexto context.Context, id string) (dominio.Producto, error)
 }
 
-// ResultadoReserva es la respuesta de negocio del proveedor de inventario.
-type ResultadoReserva string
+// Existencias guarda el stock propio y las reservas de los pedidos, en la base
+// `inventario` (ADR-020). Las reservas y los consumos que van junto con un pedido
+// se guardan por el Repositorio, en la misma transacción.
+type Existencias interface {
+	// Listar devuelve el stock de todos los ingredientes que se conocen.
+	Listar(contexto context.Context) ([]dominio.Existencia, error)
 
-const (
-	ReservaConfirmada ResultadoReserva = "confirmada"
-	ReservaSinStock   ResultadoReserva = "sin_stock"
-)
+	// Obtener devuelve la existencia del ingrediente, y la crea en cero si todavía
+	// no existe.
+	Obtener(contexto context.Context, ingrediente, unidad string) (dominio.Existencia, error)
 
-// ErrInventarioRechazo lo devuelve el ReservadorDeInsumos cuando el proveedor
+	// AsignarProducto le da al ingrediente un producto libre del proveedor, si no
+	// tenía. Devuelve ErrSinProductoDelProveedor si ya están todos usados.
+	AsignarProducto(contexto context.Context, ingrediente, unidad string) (dominio.Existencia, error)
+
+	// GuardarStock deja como stock conocido el que informó el proveedor.
+	GuardarStock(contexto context.Context, ingrediente, unidad string, stock int64) error
+}
+
+// ErrSinProductoDelProveedor lo devuelve Existencias cuando el proveedor no tiene
+// más productos para usar de casillero: el ingrediente queda sin producto y el
+// pedido se marca para el vendedor (ADR-020).
+var ErrSinProductoDelProveedor = errors.New("no quedan productos del proveedor para este ingrediente")
+
+// ErrInventarioRechazo lo devuelve el ProveedorDeStock cuando el proveedor
 // rechazó la solicitud por un error de formato (4xx inesperado): reintentar no lo
-// arregla y lo tiene que revisar el equipo (ADR-010).
+// arregla y lo tiene que revisar el equipo (ADR-020).
 var ErrInventarioRechazo = errors.New("el inventario rechazó la solicitud")
 
-// ErrInventarioNoDisponible lo devuelve el ReservadorDeInsumos cuando no intentó
-// la llamada porque el disyuntor está abierto (ADR-011).
+// ErrInventarioNoDisponible lo devuelve el ProveedorDeStock cuando no intentó la
+// llamada porque el disyuntor está abierto (ADR-011).
 var ErrInventarioNoDisponible = errors.New("el inventario no está disponible")
-
-// ReservadorDeInsumos es la capa anticorrupción frente al inventario del otro
-// grupo (ADR-010). idPedido viaja como clave de idempotencia: repetir una reserva
-// no reserva dos veces. Cualquier error que no sea ErrInventarioRechazo es
-// transitorio y se reintenta.
-type ReservadorDeInsumos interface {
-	Reservar(contexto context.Context, idPedido string, insumos []dominio.Insumo) (ResultadoReserva, error)
-	Liberar(contexto context.Context, idPedido string) error
-}
 
 // ErrStockInsuficiente lo devuelve el ProveedorDeStock cuando reducir no alcanza
 // (409 del proveedor): el stock no cambió y no hay que reintentar (ADR-020).
@@ -148,9 +177,9 @@ type ProveedorDeStock interface {
 type ResultadoInventario string
 
 const (
-	InventarioConfirmada       ResultadoInventario = "confirmada"
+	InventarioConsumida        ResultadoInventario = "consumida"
+	InventarioCargada          ResultadoInventario = "cargada"
 	InventarioSinStock         ResultadoInventario = "sin_stock"
-	InventarioLiberada         ResultadoInventario = "liberada"
 	InventarioRechazada        ResultadoInventario = "rechazada"
 	InventarioFallaTransitoria ResultadoInventario = "falla_transitoria"
 	InventarioNoDisponible     ResultadoInventario = "no_disponible"
@@ -180,7 +209,7 @@ type Eventos interface {
 	InventarioConsultado(contexto context.Context, idPedido string, resultado ResultadoInventario, err error)
 	CircuitoDelInventarioCambio(contexto context.Context, anterior, nuevo EstadoCircuito)
 	EventoPublicado(contexto context.Context, idEvento string, err error)
-	// ConfirmacionNoGuardada avisa que no se pudo guardar el resultado de la
-	// confirmación de un pedido recién creado; la retoma el proceso en segundo plano.
-	ConfirmacionNoGuardada(contexto context.Context, idPedido string, err error)
+	// ConsumosPendientes avisa cuántos pedidos esperan que el proveedor descuente sus
+	// insumos, en cada vuelta del proceso en segundo plano.
+	ConsumosPendientes(contexto context.Context, cantidad int)
 }

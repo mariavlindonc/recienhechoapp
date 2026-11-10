@@ -58,12 +58,8 @@ const (
 	// formatoFecha es el de las fechas de producción: un día, sin hora.
 	formatoFecha = "2006-01-02"
 
-	// VidaMaximaSinConfirmar es cuánto puede esperar un pedido la confirmación del
-	// inventario antes de marcarse para que lo revise el vendedor (ADR-010).
-	VidaMaximaSinConfirmar = 24 * time.Hour
-
-	esperaBaseConfirmacion   = time.Minute
-	esperaMaximaConfirmacion = 10 * time.Minute
+	esperaBaseConsumo   = time.Minute
+	esperaMaximaConsumo = 10 * time.Minute
 )
 
 // zonaDeLaPasteleria define qué día es "hoy". Argentina no tiene horario de verano,
@@ -241,15 +237,22 @@ type Pedido struct {
 	ClaveIdempotencia string
 	Huella            string
 
-	// Seguimiento de la confirmación con el inventario del proveedor (ADR-010).
-	IntentosConfirmacion int
-	ProximaConfirmacion  time.Time
-	RequiereRevision     bool   // el vendedor tiene que decidir qué hacer
-	MotivoRevision       string // por qué
-	// LiberarInsumos indica que hay que avisarle al proveedor que libere los
-	// insumos del pedido (R7). Se reintenta hasta que el proveedor lo confirme.
-	LiberarInsumos    bool
-	ProximaLiberacion time.Time
+	RequiereRevision bool   // el vendedor tiene que decidir qué hacer
+	MotivoRevision   string // por qué
+
+	// InsumosReservados indica que el pedido tiene insumos reservados en el stock
+	// propio y todavía no se consumieron todos (ADR-020). Cancelarlo los devuelve.
+	InsumosReservados bool
+	// Seguimiento del consumo en el proveedor, que empieza al pasar a producción
+	// (ADR-020). El avance se guarda por insumo: si falla a la mitad, no se repite
+	// lo que ya se descontó.
+	ConsumoPendiente  bool
+	ProximoConsumo    time.Time
+	IntentosConsumo   int
+	InsumosConsumidos int
+	// ConsumoEnDuda es cuando la última llamada de reducir no tuvo respuesta: no se
+	// sabe si se aplicó, y antes de repetirla hay que consultar el stock del proveedor.
+	ConsumoEnDuda bool
 
 	CreadoEn      time.Time
 	ActualizadoEn time.Time
@@ -276,17 +279,16 @@ func NuevoPedido(id string, comprador Comprador, clave string, solicitud Solicit
 	}
 
 	pedido := Pedido{
-		ID:                  id,
-		Comprador:           comprador,
-		Fecha:               fecha,
-		Franja:              solicitud.Franja,
-		Tipo:                solicitud.Tipo,
-		Estado:              EstadoPendienteConfirmacion,
-		ClaveIdempotencia:   clave,
-		Huella:              solicitud.Huella(),
-		ProximaConfirmacion: ahora,
-		CreadoEn:            ahora,
-		ActualizadoEn:       ahora,
+		ID:                id,
+		Comprador:         comprador,
+		Fecha:             fecha,
+		Franja:            solicitud.Franja,
+		Tipo:              solicitud.Tipo,
+		Estado:            EstadoPendienteConfirmacion,
+		ClaveIdempotencia: clave,
+		Huella:            solicitud.Huella(),
+		CreadoEn:          ahora,
+		ActualizadoEn:     ahora,
 	}
 	posicionDelInsumo := map[[2]string]int{} // (ingrediente, unidad) -> posición en Insumos
 	for _, solicitado := range solicitud.Items {
@@ -314,6 +316,8 @@ func NuevoPedido(id string, comprador Comprador, clave string, solicitud Solicit
 			pedido.Insumos = append(pedido.Insumos, Insumo{Ingrediente: insumo.Ingrediente, Cantidad: cantidad, Unidad: insumo.Unidad})
 		}
 	}
+	// La reserva de los insumos la guarda el repositorio junto con el pedido.
+	pedido.InsumosReservados = len(pedido.Insumos) > 0
 	return pedido, nil
 }
 
@@ -338,8 +342,9 @@ func (pedido Pedido) PuedePasarA(nuevo Estado) bool {
 }
 
 // CambiarEstado aplica una transición válida y devuelve el estado anterior.
-// Cancelar marca los insumos para liberar en el proveedor (R7); el cupo lo
-// devuelve el repositorio en la misma operación que guarda el cambio.
+// Cancelar devuelve la reserva de los insumos (R7) y pasar a producción deja el
+// consumo pendiente (ADR-020). El cupo y el stock los actualiza el repositorio en
+// la misma operación que guarda el cambio.
 func (pedido *Pedido) CambiarEstado(nuevo Estado, motivo string, ahora time.Time) (Estado, error) {
 	anterior := pedido.Estado
 	if !pedido.PuedePasarA(nuevo) {
@@ -349,51 +354,68 @@ func (pedido *Pedido) CambiarEstado(nuevo Estado, motivo string, ahora time.Time
 	pedido.ActualizadoEn = ahora
 	pedido.RequiereRevision = false
 	pedido.MotivoRevision = ""
-	if nuevo == EstadoCancelado {
+	switch nuevo {
+	case EstadoCancelado:
 		pedido.MotivoCancelacion = motivo
-		pedido.LiberarInsumos = true
-		pedido.ProximaLiberacion = ahora
+		pedido.InsumosReservados = false
+	case EstadoEnProduccion:
+		pedido.ConsumoPendiente = pedido.InsumosReservados
+		pedido.ProximoConsumo = ahora
 	}
 	return anterior, nil
 }
 
-// RegistrarFalloDeConfirmacion reprograma la confirmación con esperas que se
-// duplican (1, 2, 4, 8 minutos) hasta un máximo de 10. Si pasaron 24 h sin
-// confirmar, el pedido queda marcado para el vendedor y no se reintenta más (ADR-010).
-func (pedido *Pedido) RegistrarFalloDeConfirmacion(ahora time.Time) {
-	pedido.IntentosConfirmacion++
-	pedido.ActualizadoEn = ahora
-	if ahora.Sub(pedido.CreadoEn) >= VidaMaximaSinConfirmar {
-		pedido.MarcarParaRevision("El inventario no confirmó los insumos en 24 horas.", ahora)
-		return
+// InsumoPorConsumir devuelve el próximo insumo que falta descontar en el proveedor,
+// o false si ya no queda ninguno.
+func (pedido Pedido) InsumoPorConsumir() (Insumo, bool) {
+	if !pedido.ConsumoPendiente || pedido.InsumosConsumidos >= len(pedido.Insumos) {
+		return Insumo{}, false
 	}
-	pedido.ProximaConfirmacion = ahora.Add(EsperaAntesDeReconfirmar(pedido.IntentosConfirmacion))
+	return pedido.Insumos[pedido.InsumosConsumidos], true
 }
 
-// MarcarParaRevision deja el pedido para que lo resuelva el vendedor: no se
-// reintenta la confirmación automáticamente.
+// InsumoConsumido registra que el proveedor descontó el insumo actual. Con el
+// último, el consumo termina y no queda nada reservado.
+func (pedido *Pedido) InsumoConsumido(ahora time.Time) {
+	pedido.InsumosConsumidos++
+	pedido.IntentosConsumo = 0
+	pedido.ConsumoEnDuda = false
+	pedido.ActualizadoEn = ahora
+	if pedido.InsumosConsumidos >= len(pedido.Insumos) {
+		pedido.ConsumoPendiente = false
+		pedido.InsumosReservados = false
+	}
+}
+
+// RegistrarFalloDeConsumo reprograma el consumo con esperas que se duplican (1, 2,
+// 4, 8 minutos) hasta un máximo de 10. enDuda es si la llamada pudo haberse
+// aplicado: antes de repetirla hay que consultar el stock del proveedor (ADR-020).
+func (pedido *Pedido) RegistrarFalloDeConsumo(enDuda bool, ahora time.Time) {
+	pedido.IntentosConsumo++
+	pedido.ConsumoEnDuda = pedido.ConsumoEnDuda || enDuda
+	pedido.ProximoConsumo = ahora.Add(EsperaAntesDeReintentar(pedido.IntentosConsumo))
+	pedido.ActualizadoEn = ahora
+}
+
+// MarcarParaRevision deja el pedido para que lo resuelva el vendedor y frena el
+// consumo: no se reintenta solo. No frena la producción.
 func (pedido *Pedido) MarcarParaRevision(motivo string, ahora time.Time) {
 	pedido.RequiereRevision = true
 	pedido.MotivoRevision = motivo
+	pedido.ConsumoPendiente = false
 	pedido.ActualizadoEn = ahora
 }
 
-// InsumosLiberados registra que el proveedor liberó los insumos.
-func (pedido *Pedido) InsumosLiberados(ahora time.Time) {
-	pedido.LiberarInsumos = false
-	pedido.ActualizadoEn = ahora
-}
-
-// EsperaAntesDeReconfirmar devuelve cuánto esperar después de intentosHechos
-// confirmaciones fallidas: 1, 2, 4, 8 y después 10 minutos.
-func EsperaAntesDeReconfirmar(intentosHechos int) time.Duration {
+// EsperaAntesDeReintentar devuelve cuánto esperar después de intentosHechos
+// intentos fallidos: 1, 2, 4, 8 y después 10 minutos.
+func EsperaAntesDeReintentar(intentosHechos int) time.Duration {
 	if intentosHechos < 1 {
 		return 0
 	}
 	if intentosHechos > 4 {
-		return esperaMaximaConfirmacion
+		return esperaMaximaConsumo
 	}
-	return min(esperaBaseConfirmacion<<(intentosHechos-1), esperaMaximaConfirmacion)
+	return min(esperaBaseConsumo<<(intentosHechos-1), esperaMaximaConsumo)
 }
 
 // PerteneceA indica si el pedido es del comprador dado.

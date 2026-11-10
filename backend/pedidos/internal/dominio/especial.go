@@ -11,8 +11,8 @@ import (
 
 // Pedidos especiales (C6, VE5, R8): pasan por solicitado → cotizado y de ahí a
 // rechazado, vencido o, al aceptarlos, a pendiente_confirmacion, donde siguen como
-// cualquier pedido: reservan el cupo del día y los confirma el inventario
-// (docs/ARCHITECTURE.md, "Estados de un pedido"; ADR-017).
+// cualquier pedido: reservan el cupo del día y los confirma el vendedor
+// (docs/ARCHITECTURE.md, "Estados de un pedido"; ADR-017, ADR-020).
 const (
 	TipoEspecial Tipo = "especial"
 
@@ -95,7 +95,7 @@ func (pedido *Pedido) Cotizar(precioCentavos int64, ahora time.Time) (Estado, er
 }
 
 // ResponderCotizacion acepta o rechaza la cotización (C6). Aceptar la deja
-// pendiente_confirmacion para que reserve el cupo y la confirme el inventario.
+// pendiente_confirmacion para que reserve el cupo y la confirme el vendedor.
 // Pasadas 48 h (R8), o si la fecha del pedido ya pasó, el especial queda vencido
 // y devuelve ErrCotizacionVencida: el cambio igual hay que guardarlo.
 func (pedido *Pedido) ResponderCotizacion(acepta bool, ahora time.Time) (Estado, error) {
@@ -113,7 +113,6 @@ func (pedido *Pedido) ResponderCotizacion(acepta bool, ahora time.Time) (Estado,
 		return anterior, fmt.Errorf("%w: la fecha del pedido ya pasó", ErrCotizacionVencida)
 	case acepta:
 		pedido.Estado = EstadoPendienteConfirmacion
-		pedido.ProximaConfirmacion = ahora
 	default:
 		pedido.Estado = EstadoRechazado
 	}

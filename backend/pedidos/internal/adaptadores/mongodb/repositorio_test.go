@@ -35,6 +35,15 @@ const fecha = "2026-10-30"
 
 func nuevoRepositorio(prueba *testing.T) *mongodb.Repositorio {
 	prueba.Helper()
+	repositorio, _ := nuevoRepositorioConExistencias(prueba)
+	return repositorio
+}
+
+// nuevoRepositorioConExistencias da también las existencias, que comparten con el
+// repositorio la base de inventario; los productos 1, 2 y 3 del proveedor se reparten
+// entre los ingredientes.
+func nuevoRepositorioConExistencias(prueba *testing.T) (*mongodb.Repositorio, *mongodb.Existencias) {
+	prueba.Helper()
 	direccion := os.Getenv("MONGO_URI_TEST")
 	if direccion == "" {
 		prueba.Skip("MONGO_URI_TEST no está definida: se saltea el test de integración")
@@ -51,33 +60,35 @@ func nuevoRepositorio(prueba *testing.T) *mongodb.Repositorio {
 	}
 
 	nombreBase := fmt.Sprintf("pedidos_test_%d", time.Now().UnixNano())
+	nombreInventario := nombreBase + "_inventario"
 	prueba.Cleanup(func() {
 		contextoLimpieza, cancelarLimpieza := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancelarLimpieza()
 		cliente.Database(nombreBase).Drop(contextoLimpieza)
+		cliente.Database(nombreInventario).Drop(contextoLimpieza)
 		cliente.Disconnect(contextoLimpieza)
 	})
 
-	repositorio := mongodb.NuevoRepositorio(cliente, nombreBase)
+	repositorio := mongodb.NuevoRepositorio(cliente, nombreBase, nombreInventario)
 	if err := repositorio.PrepararIndices(contexto); err != nil {
 		prueba.Fatalf("preparar índices: %v", err)
 	}
-	return repositorio
+	return repositorio, mongodb.NuevasExistencias(cliente, nombreInventario, []int64{1, 2, 3})
 }
 
 func pedido(id, idComprador, clave string, cantidad int) dominio.Pedido {
 	return dominio.Pedido{
-		ID:                  id,
-		Comprador:           dominio.Comprador{ID: idComprador, Email: idComprador + "@ejemplo.com"},
-		Items:               []dominio.Item{{ProductoID: "torta", Nombre: "Torta", Cantidad: cantidad}},
-		Fecha:               fecha,
-		Tipo:                dominio.TipoProgramado,
-		Estado:              dominio.EstadoPendienteConfirmacion,
-		ClaveIdempotencia:   clave,
-		Insumos:             []dominio.Insumo{{Ingrediente: "harina", Cantidad: 500, Unidad: "g"}},
-		ProximaConfirmacion: momento,
-		CreadoEn:            momento,
-		ActualizadoEn:       momento,
+		ID:                id,
+		Comprador:         dominio.Comprador{ID: idComprador, Email: idComprador + "@ejemplo.com"},
+		Items:             []dominio.Item{{ProductoID: "torta", Nombre: "Torta", Cantidad: cantidad}},
+		Fecha:             fecha,
+		Tipo:              dominio.TipoProgramado,
+		Estado:            dominio.EstadoPendienteConfirmacion,
+		ClaveIdempotencia: clave,
+		Insumos:           []dominio.Insumo{{Ingrediente: "harina", Cantidad: 500, Unidad: "g"}},
+		InsumosReservados: true,
+		CreadoEn:          momento,
+		ActualizadoEn:     momento,
 	}
 }
 
@@ -185,16 +196,35 @@ func TestLaMismaClaveNoReservaDosVeces(prueba *testing.T) {
 	}
 }
 
-// R7: cancelar devuelve el cupo y guarda el evento en la misma transacción.
-func TestCancelarDevuelveElCupo(prueba *testing.T) {
-	repositorio := nuevoRepositorio(prueba)
+// harinaReservada es lo reservado de harina en el stock propio.
+func harinaReservada(prueba *testing.T, existencias *mongodb.Existencias) int64 {
+	prueba.Helper()
+	todas, err := existencias.Listar(context.Background())
+	if err != nil {
+		prueba.Fatalf("listar existencias: %v", err)
+	}
+	for _, existencia := range todas {
+		if existencia.Ingrediente == "harina" {
+			return existencia.Reservado
+		}
+	}
+	return 0
+}
+
+// R7: cancelar devuelve el cupo y la reserva de insumos, y guarda el evento, en la
+// misma transacción.
+func TestCancelarDevuelveElCupoYLaReserva(prueba *testing.T) {
+	repositorio, existencias := nuevoRepositorioConExistencias(prueba)
 	definir(prueba, repositorio, 10)
 	nuevo := pedido("pedido-1", "comprador-1", "clave", 4)
 	repositorio.Registrar(context.Background(), nuevo, evento("evento-1", nuevo))
+	if reservada := harinaReservada(prueba, existencias); reservada != 500 {
+		prueba.Fatalf("al registrar se reservan los insumos: %d", reservada)
+	}
 
 	anterior, _ := nuevo.CambiarEstado(dominio.EstadoCancelado, "Cancelado por el comprador.", momento)
 	cancelacion := dominio.NuevoEventoEstadoCambiado("evento-2", nuevo, anterior, momento)
-	err := repositorio.GuardarCambio(context.Background(), puertos.Cambio{Pedido: nuevo, VersionAnterior: 0, Evento: &cancelacion, LiberarCupo: true})
+	err := repositorio.GuardarCambio(context.Background(), puertos.Cambio{Pedido: nuevo, VersionAnterior: 0, Evento: &cancelacion, LiberarCupo: true, LiberarReserva: true})
 
 	if err != nil {
 		prueba.Fatalf("error inesperado: %v", err)
@@ -202,8 +232,11 @@ func TestCancelarDevuelveElCupo(prueba *testing.T) {
 	if total := reservados(prueba, repositorio); total != 0 {
 		prueba.Errorf("reservados = %d, se esperaba 0", total)
 	}
+	if reservada := harinaReservada(prueba, existencias); reservada != 0 {
+		prueba.Errorf("la reserva de insumos tenía que volver: %d", reservada)
+	}
 	guardado, _ := repositorio.Buscar(context.Background(), "pedido-1")
-	if guardado.Estado != dominio.EstadoCancelado || guardado.Version != 1 || !guardado.LiberarInsumos {
+	if guardado.Estado != dominio.EstadoCancelado || guardado.Version != 1 || guardado.InsumosReservados {
 		prueba.Errorf("pedido guardado: %+v", guardado)
 	}
 	if eventos := contarEventos(prueba, repositorio); eventos != 2 {
@@ -275,18 +308,135 @@ func TestCapacidadNoBajaDeLoReservado(prueba *testing.T) {
 	}
 }
 
-func TestTomarParaConfirmarApartaUnaSolaVez(prueba *testing.T) {
+func TestTomarParaConsumirApartaUnaSolaVez(prueba *testing.T) {
 	repositorio := nuevoRepositorio(prueba)
 	definir(prueba, repositorio, 10)
 	nuevo := pedido("pedido-1", "comprador-1", "clave", 1)
 	repositorio.Registrar(context.Background(), nuevo, evento("evento-1", nuevo))
+	if _, encontrado, _ := repositorio.TomarParaConsumir(context.Background(), momento, momento.Add(2*time.Minute)); encontrado {
+		prueba.Fatal("un pedido que no entró en producción no tiene nada que consumir")
+	}
+	enProduccion := nuevo
+	enProduccion.CambiarEstado(dominio.EstadoConfirmado, "", momento)
+	enProduccion.CambiarEstado(dominio.EstadoEnProduccion, "", momento)
+	if err := repositorio.GuardarCambio(context.Background(), puertos.Cambio{Pedido: enProduccion, VersionAnterior: 0}); err != nil {
+		prueba.Fatalf("guardar: %v", err)
+	}
 
-	tomado, encontrado, err := repositorio.TomarParaConfirmar(context.Background(), momento, momento.Add(2*time.Minute))
-	if err != nil || !encontrado || tomado.Version != 1 {
+	tomado, encontrado, err := repositorio.TomarParaConsumir(context.Background(), momento, momento.Add(2*time.Minute))
+	if err != nil || !encontrado || tomado.Version != 2 {
 		prueba.Fatalf("tomado %+v, encontrado %v (%v)", tomado, encontrado, err)
 	}
-	if _, encontrado, _ := repositorio.TomarParaConfirmar(context.Background(), momento, momento.Add(2*time.Minute)); encontrado {
+	if _, encontrado, _ := repositorio.TomarParaConsumir(context.Background(), momento, momento.Add(2*time.Minute)); encontrado {
 		prueba.Error("un pedido apartado no se toma de nuevo antes de que venza el apartado")
+	}
+	if pendientes, err := repositorio.ContarConsumosPendientes(context.Background()); err != nil || pendientes != 1 {
+		prueba.Errorf("pendientes = %d (%v), se esperaba 1", pendientes, err)
+	}
+}
+
+func TestListarPendientesDeConfirmar(prueba *testing.T) {
+	repositorio := nuevoRepositorio(prueba)
+	definir(prueba, repositorio, 10)
+	primero := pedido("pedido-1", "comprador-1", "clave-1", 1)
+	segundo := pedido("pedido-2", "comprador-1", "clave-2", 1)
+	segundo.CreadoEn = momento.Add(time.Minute)
+	repositorio.Registrar(context.Background(), primero, evento("evento-1", primero))
+	repositorio.Registrar(context.Background(), segundo, evento("evento-2", segundo))
+	confirmado := primero
+	confirmado.CambiarEstado(dominio.EstadoConfirmado, "", momento)
+	repositorio.GuardarCambio(context.Background(), puertos.Cambio{Pedido: confirmado, VersionAnterior: 0})
+
+	pendientes, err := repositorio.ListarPendientesDeConfirmar(context.Background())
+
+	if err != nil || len(pendientes) != 1 || pendientes[0].ID != "pedido-2" {
+		prueba.Errorf("solo el segundo espera al vendedor: %v (%v)", pendientes, err)
+	}
+}
+
+// El consumo deja como stock el que informó el proveedor y baja lo reservado, a la vez
+// que se guarda el avance del pedido.
+func TestElConsumoActualizaElStockYLaReserva(prueba *testing.T) {
+	repositorio, existencias := nuevoRepositorioConExistencias(prueba)
+	definir(prueba, repositorio, 10)
+	nuevo := pedido("pedido-1", "comprador-1", "clave", 1)
+	repositorio.Registrar(context.Background(), nuevo, evento("evento-1", nuevo))
+	nuevo.InsumoConsumido(momento)
+
+	err := repositorio.GuardarCambio(context.Background(), puertos.Cambio{
+		Pedido: nuevo, VersionAnterior: 0,
+		Consumo: &puertos.Consumo{Insumo: dominio.Insumo{Ingrediente: "harina", Cantidad: 500, Unidad: "g"}, StockQueda: 1500},
+	})
+
+	if err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+	todas, _ := existencias.Listar(context.Background())
+	if len(todas) != 1 || todas[0].Stock != 1500 || todas[0].Reservado != 0 {
+		prueba.Errorf("existencias = %+v", todas)
+	}
+}
+
+func TestLaReservaNoRechazaAunqueNoHayaStock(prueba *testing.T) {
+	repositorio, existencias := nuevoRepositorioConExistencias(prueba)
+	definir(prueba, repositorio, 10)
+	nuevo := pedido("pedido-1", "comprador-1", "clave", 1)
+
+	if err := repositorio.Registrar(context.Background(), nuevo, evento("evento-1", nuevo)); err != nil {
+		prueba.Fatalf("la reserva nunca rechaza un pedido: %v", err)
+	}
+
+	harina, err := existencias.Obtener(context.Background(), "harina", "g")
+	if err != nil || harina.Stock != 0 || harina.Reservado != 500 || harina.Disponible() != -500 {
+		prueba.Errorf("harina = %+v (%v)", harina, err)
+	}
+}
+
+func TestLosProductosDelProveedorSeRepartenSinRepetir(prueba *testing.T) {
+	_, existencias := nuevoRepositorioConExistencias(prueba)
+	contexto := context.Background()
+
+	var asignados []int64
+	for _, ingrediente := range []string{"harina", "manteca", "azúcar"} {
+		existencia, err := existencias.AsignarProducto(contexto, ingrediente, "g")
+		if err != nil {
+			prueba.Fatalf("asignar %s: %v", ingrediente, err)
+		}
+		asignados = append(asignados, existencia.ProductoID)
+	}
+	if asignados[0] != 1 || asignados[1] != 2 || asignados[2] != 3 {
+		prueba.Errorf("asignados = %v, se esperaba 1, 2 y 3", asignados)
+	}
+	otra, err := existencias.AsignarProducto(contexto, "harina", "g")
+	if err != nil || otra.ProductoID != 1 {
+		prueba.Errorf("pedir de nuevo devuelve el mismo producto: %d (%v)", otra.ProductoID, err)
+	}
+	if _, err := existencias.AsignarProducto(contexto, "huevos", "u"); !errors.Is(err, puertos.ErrSinProductoDelProveedor) {
+		prueba.Errorf("sin productos libres se esperaba ErrSinProductoDelProveedor, dio: %v", err)
+	}
+}
+
+func TestAsignacionesSimultaneasNoComparteProducto(prueba *testing.T) {
+	_, existencias := nuevoRepositorioConExistencias(prueba)
+	var grupo sync.WaitGroup
+	productos := make([]int64, 3)
+	for posicion, ingrediente := range []string{"harina", "manteca", "azúcar"} {
+		grupo.Go(func() {
+			existencia, err := existencias.AsignarProducto(context.Background(), ingrediente, "g")
+			if err != nil {
+				prueba.Errorf("asignar %s: %v", ingrediente, err)
+			}
+			productos[posicion] = existencia.ProductoID
+		})
+	}
+	grupo.Wait()
+
+	vistos := map[int64]bool{}
+	for _, producto := range productos {
+		if producto == 0 || vistos[producto] {
+			prueba.Fatalf("cada ingrediente tiene que quedarse con un producto distinto: %v", productos)
+		}
+		vistos[producto] = true
 	}
 }
 

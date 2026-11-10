@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/adaptadores/inventario"
-	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/dominio"
 	"github.com/mariavlindonc/recienhechoapp/backend/pedidos/internal/puertos"
 )
 
@@ -21,8 +20,8 @@ type eventosFalsos struct {
 func (eventos *eventosFalsos) PedidoRegistrado(context.Context, string) {}
 func (eventos *eventosFalsos) InventarioConsultado(context.Context, string, puertos.ResultadoInventario, error) {
 }
-func (eventos *eventosFalsos) EventoPublicado(context.Context, string, error)        {}
-func (eventos *eventosFalsos) ConfirmacionNoGuardada(context.Context, string, error) {}
+func (eventos *eventosFalsos) EventoPublicado(context.Context, string, error) {}
+func (eventos *eventosFalsos) ConsumosPendientes(context.Context, int)        {}
 func (eventos *eventosFalsos) CircuitoDelInventarioCambio(_ context.Context, _, nuevo puertos.EstadoCircuito) {
 	eventos.mutex.Lock()
 	defer eventos.mutex.Unlock()
@@ -45,19 +44,26 @@ func (controlado *inventarioControlado) fallarCon(err error) {
 	controlado.err = err
 }
 
-func (controlado *inventarioControlado) Reservar(context.Context, string, []dominio.Insumo) (puertos.ResultadoReserva, error) {
+func (controlado *inventarioControlado) responder() (int64, error) {
 	controlado.mutex.Lock()
 	defer controlado.mutex.Unlock()
 	controlado.llamadas++
 	if controlado.err != nil {
-		return "", controlado.err
+		return 0, controlado.err
 	}
-	return puertos.ReservaConfirmada, nil
+	return 7, nil
 }
 
-func (controlado *inventarioControlado) Liberar(context.Context, string) error {
-	_, err := controlado.Reservar(context.Background(), "", nil)
-	return err
+func (controlado *inventarioControlado) Reducir(context.Context, int64, int64, string) (int64, error) {
+	return controlado.responder()
+}
+
+func (controlado *inventarioControlado) Aumentar(context.Context, int64, int64, string) (int64, error) {
+	return controlado.responder()
+}
+
+func (controlado *inventarioControlado) Consultar(context.Context, int64) (int64, error) {
+	return controlado.responder()
 }
 
 func TestSeAbreConCincoFallasYDespuesNoLlama(prueba *testing.T) {
@@ -65,12 +71,12 @@ func TestSeAbreConCincoFallasYDespuesNoLlama(prueba *testing.T) {
 	disyuntor := inventario.NuevoDisyuntor(inventario.NuevoFalso(inventario.ModoError), eventos, configuracion)
 
 	for intento := range 5 {
-		if _, err := disyuntor.Reservar(context.Background(), "pedido", nil); err == nil || errors.Is(err, puertos.ErrInventarioNoDisponible) {
+		if _, err := disyuntor.Reducir(context.Background(), 1, 1, "pedido"); err == nil || errors.Is(err, puertos.ErrInventarioNoDisponible) {
 			prueba.Fatalf("intento %d: se esperaba la falla del inventario, dio: %v", intento+1, err)
 		}
 	}
 	inicio := time.Now()
-	_, err := disyuntor.Reservar(context.Background(), "pedido", nil)
+	_, err := disyuntor.Reducir(context.Background(), 1, 1, "pedido")
 	if !errors.Is(err, puertos.ErrInventarioNoDisponible) || time.Since(inicio) > 10*time.Millisecond {
 		prueba.Errorf("con el circuito abierto se responde al instante sin llamar: %v", err)
 	}
@@ -86,15 +92,15 @@ func TestSeCierraSoloCuandoElInventarioVuelve(prueba *testing.T) {
 	controlado := &inventarioControlado{err: errors.New("el inventario respondió 503")}
 	disyuntor := inventario.NuevoDisyuntor(controlado, eventos, configuracion)
 	for range 5 {
-		disyuntor.Reservar(context.Background(), "pedido", nil)
+		disyuntor.Reducir(context.Background(), 1, 1, "pedido")
 	}
 
 	controlado.fallarCon(nil)
 	time.Sleep(configuracion.EsperaAbierto + 20*time.Millisecond)
-	resultado, err := disyuntor.Reservar(context.Background(), "pedido", nil)
+	stock, err := disyuntor.Reducir(context.Background(), 1, 1, "pedido")
 
-	if err != nil || resultado != puertos.ReservaConfirmada {
-		prueba.Fatalf("la llamada de prueba tenía que pasar: %s (%v)", resultado, err)
+	if err != nil || stock != 7 {
+		prueba.Fatalf("la llamada de prueba tenía que pasar: %d (%v)", stock, err)
 	}
 	esperados := []puertos.EstadoCircuito{puertos.CircuitoAbierto, puertos.CircuitoSemiabierto, puertos.CircuitoCerrado}
 	if !slices.Equal(eventos.estados, esperados) {
@@ -110,7 +116,7 @@ func TestLasCancelacionesNoAbrenElCircuito(prueba *testing.T) {
 	disyuntor := inventario.NuevoDisyuntor(controlado, eventos, configuracion)
 
 	for range 10 {
-		disyuntor.Reservar(context.Background(), "pedido", nil)
+		disyuntor.Reducir(context.Background(), 1, 1, "pedido")
 	}
 
 	if controlado.llamadas != 10 || len(eventos.estados) != 0 {
@@ -122,7 +128,7 @@ func TestUnRechazoNoAbreElCircuito(prueba *testing.T) {
 	disyuntor := inventario.NuevoDisyuntor(inventario.NuevoFalso(inventario.ModoRechazo), &eventosFalsos{}, configuracion)
 
 	for range 10 {
-		if _, err := disyuntor.Reservar(context.Background(), "pedido", nil); !errors.Is(err, puertos.ErrInventarioRechazo) {
+		if _, err := disyuntor.Reducir(context.Background(), 1, 1, "pedido"); !errors.Is(err, puertos.ErrInventarioRechazo) {
 			prueba.Fatalf("se esperaba el rechazo, dio: %v", err)
 		}
 	}
@@ -132,7 +138,7 @@ func TestInventarioLentoCortaEnElTimeout(prueba *testing.T) {
 	disyuntor := inventario.NuevoDisyuntor(inventario.NuevoFalso(inventario.ModoLento), &eventosFalsos{}, configuracion)
 
 	inicio := time.Now()
-	_, err := disyuntor.Reservar(context.Background(), "pedido", nil)
+	_, err := disyuntor.Reducir(context.Background(), 1, 1, "pedido")
 
 	if err == nil || errors.Is(err, puertos.ErrInventarioRechazo) {
 		prueba.Errorf("se esperaba una falla transitoria, dio: %v", err)
@@ -142,12 +148,31 @@ func TestInventarioLentoCortaEnElTimeout(prueba *testing.T) {
 	}
 }
 
-func TestSinStockEsUnaRespuestaDeNegocio(prueba *testing.T) {
+// Un 409 es una respuesta de negocio: el proveedor contestó, no está caído.
+func TestStockInsuficienteNoAbreElCircuito(prueba *testing.T) {
 	disyuntor := inventario.NuevoDisyuntor(inventario.NuevoFalso(inventario.ModoSinStock), &eventosFalsos{}, configuracion)
 
-	resultado, err := disyuntor.Reservar(context.Background(), "pedido", nil)
+	for range 10 {
+		if _, err := disyuntor.Reducir(context.Background(), 1, 1, "pedido"); !errors.Is(err, puertos.ErrStockInsuficiente) {
+			prueba.Fatalf("se esperaba el 409, dio: %v", err)
+		}
+	}
+}
 
-	if err != nil || resultado != puertos.ReservaSinStock {
-		prueba.Errorf("resultado %s (%v)", resultado, err)
+func TestElFalsoLlevaElStock(prueba *testing.T) {
+	falso := inventario.NuevoFalso(inventario.ModoConfirma)
+	contexto := context.Background()
+
+	if _, err := falso.Reducir(contexto, 1, 1, "pedido"); !errors.Is(err, puertos.ErrStockInsuficiente) {
+		prueba.Errorf("con stock 0 reducir tenía que dar 409, dio: %v", err)
+	}
+	if stock, err := falso.Aumentar(contexto, 1, 10, "carga"); err != nil || stock != 10 {
+		prueba.Errorf("aumentar: %d (%v)", stock, err)
+	}
+	if stock, err := falso.Reducir(contexto, 1, 4, "pedido"); err != nil || stock != 6 {
+		prueba.Errorf("reducir: %d (%v)", stock, err)
+	}
+	if stock, err := falso.Consultar(contexto, 1); err != nil || stock != 6 {
+		prueba.Errorf("consultar: %d (%v)", stock, err)
 	}
 }

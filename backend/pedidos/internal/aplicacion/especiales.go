@@ -80,7 +80,8 @@ func (servicio *Servicio) CotizarEspecial(contexto context.Context, id string, p
 }
 
 // ResponderEspecial acepta o rechaza la cotización (C6). Al aceptar reserva el
-// cupo del día y sigue como un pedido pendiente de confirmación. Una cotización de
+// cupo del día y sigue como un pedido pendiente de confirmación del vendedor
+// (ADR-020). Una cotización de
 // más de 48 h (R8), o de una fecha que ya pasó, queda vencida y responde
 // ErrCotizacionVencida.
 func (servicio *Servicio) ResponderEspecial(contexto context.Context, idComprador, id string, acepta bool) (dominio.Pedido, error) {
@@ -94,11 +95,6 @@ func (servicio *Servicio) ResponderEspecial(contexto context.Context, idComprado
 	if errRespuesta != nil && !errors.Is(errRespuesta, dominio.ErrCotizacionVencida) {
 		return dominio.Pedido{}, errRespuesta
 	}
-	if pedido.Estado == dominio.EstadoPendienteConfirmacion {
-		// Como en Crear: hasta que termine la confirmación de acá abajo, el proceso
-		// en segundo plano no lo toma, así no se piden los insumos dos veces.
-		pedido.ProximaConfirmacion = ahora.Add(tiempoApartado)
-	}
 	evento := dominio.NuevoEventoEstadoCambiado(servicio.nuevoID(), pedido, anterior, ahora)
 	cambio := puertos.Cambio{Pedido: pedido, VersionAnterior: versionLeida, Evento: &evento, ReservarCupo: pedido.Estado == dominio.EstadoPendienteConfirmacion}
 	if err := servicio.guardar(contexto, &pedido, cambio); err != nil {
@@ -106,21 +102,6 @@ func (servicio *Servicio) ResponderEspecial(contexto context.Context, idComprado
 	}
 	if errRespuesta != nil {
 		return pedido, errRespuesta
-	}
-	if pedido.Estado == dominio.EstadoPendienteConfirmacion {
-		// Igual que al crear un pedido: se intenta confirmar ya, y si no termina lo
-		// retoma el proceso en segundo plano.
-		contextoConfirmacion, cancelar := context.WithTimeout(context.WithoutCancel(contexto), esperaConfirmacionInicial)
-		defer cancelar()
-		aceptado := pedido
-		err := servicio.confirmar(contextoConfirmacion, &pedido)
-		if errors.Is(err, dominio.ErrModificadoAlMismoTiempo) {
-			return servicio.repositorio.Buscar(contexto, pedido.ID)
-		}
-		if err != nil {
-			servicio.eventos.ConfirmacionNoGuardada(contexto, pedido.ID, err)
-			return aceptado, nil
-		}
 	}
 	return pedido, nil
 }
