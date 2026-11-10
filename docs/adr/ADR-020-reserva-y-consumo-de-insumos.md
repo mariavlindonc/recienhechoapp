@@ -106,6 +106,8 @@ El vendedor tiene una pantalla simple: elige un ingrediente y una cantidad, y es
 
 El proveedor exige un producto que ya exista en su base: no deja crearlos y un id desconocido da `404`. Cada ingrediente nuestro guarda el `productId` de un producto suyo ya cargado, que usamos como casillero, ignorando su nombre. Mientras un ingrediente no tiene `productId`, no se llama al proveedor y el pedido queda marcado para el vendedor.
 
+Los casilleros se reparten solos, en el orden de `INVENTARIO_PRODUCTOS_IDS`, la primera vez que un ingrediente los necesita (al cargar su stock o al consumirlo): el primer producto libre es para el primer ingrediente. Un producto nunca sirve a dos ingredientes.
+
 Por qué casilleros:
 - **Anda hoy.** Depende solo de lo que el proveedor ya tiene cargado, y sirve igual contra su servicio real y contra el mock.
 - **No depende de que el otro grupo haga algo.** Pedirles que carguen nuestros ingredientes exige que respondan, y su servicio no respondía el 06/11 ni el 08/11, con la entrega cerrando el miércoles 11/11 a las 23:59.

@@ -18,8 +18,8 @@ Que un comprador pueda encargar sin llamar a la pastelería, y que la pastelerí
 
 1. El comprador busca en el catálogo y elige productos.
 2. Encarga para una fecha: el sistema reserva el cupo de producción de ese día. Si no queda cupo, ofrece otra fecha.
-3. El sistema reserva los insumos de la receta en el inventario (capacidad de otro grupo) y confirma el pedido.
-4. El vendedor ve el pedido en su calendario de producción y avanza su estado hasta "listo".
+3. El sistema reserva los insumos de la receta en su stock propio, y el vendedor ve el pedido con una nota de lo que falta y lo confirma.
+4. El vendedor ve el pedido en su calendario de producción y avanza su estado hasta "listo". Al pasar a producción, los insumos se descuentan en el inventario (capacidad de otro grupo).
 5. El comprador recibe un email en cada cambio de estado.
 
 ## Arquitectura

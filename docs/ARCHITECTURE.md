@@ -116,10 +116,10 @@ Cada servicio vive en `backend/<servicio>/`, con su propio `go.mod` y `Dockerfil
 
 ```mermaid
 stateDiagram-v2
-    [*] --> pendiente_confirmacion: se reserva el cupo del día
-    pendiente_confirmacion --> confirmado: inventario reservó los insumos
-    pendiente_confirmacion --> cancelado: sin insumos o cancelado por el comprador
-    confirmado --> en_produccion
+    [*] --> pendiente_confirmacion: se reserva el cupo del día y los insumos
+    pendiente_confirmacion --> confirmado: lo confirma el vendedor
+    pendiente_confirmacion --> cancelado: lo rechaza el vendedor o lo cancela el comprador
+    confirmado --> en_produccion: se descuentan los insumos en el proveedor
     confirmado --> cancelado: cancelado antes de producir
     en_produccion --> listo
     listo --> entregado: se retira en el local
@@ -128,6 +128,8 @@ stateDiagram-v2
     entregado --> [*]
     cancelado --> [*]
 ```
+
+`pendiente_confirmacion` significa "espera al vendedor": la reserva de insumos no rechaza ningún pedido, y el vendedor ve cuáles faltan. Cancelar devuelve el cupo y la reserva sin llamar al proveedor; pasar a `en_produccion` no espera al proveedor, y un proceso en segundo plano descuenta los insumos ([ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md)).
 
 Los pedidos especiales pasan antes por `solicitado` → `cotizado` y de ahí a `aceptado` (sigue como `pendiente_confirmacion`), `rechazado` o `vencido` (48 h sin respuesta del comprador, o ya pasó la fecha del pedido). Antes de que se cotice, el comprador puede cancelar un `solicitado` y el vendedor puede rechazarlo con un mensaje para el comprador; los dos casos terminan en `cancelado` ([ADR-017](adr/ADR-017-pedidos-especiales.md)).
 
@@ -170,7 +172,7 @@ Decisiones en [ADR-006](adr/ADR-006-observabilidad.md) (D11).
 | Integración | Rol | Servicio responsable | Estado |
 |---|---|---|---|
 | Notificaciones | Publicamos | notificaciones (vía api-gateway) | Publicada en Render: https://recienhecho-api-gateway.onrender.com, con el mock del contrato en https://recienhecho-notificaciones-mock.onrender.com ([docs/contracts](contracts/README.md), [ADR-004](adr/ADR-004-contrato-de-notificaciones.md), [ADR-013](adr/ADR-013-capacidad-y-costos.md)) |
-| Inventario | Consumimos | pedidos | Contrato 2.1.0, con reducir y aumentar stock; el modelo de consumo está en [ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md), con un mock del contrato del proveedor en el compose como respaldo por si su servicio no está. Hoy `pedidos` usa un inventario falso configurable (`INVENTARIO_MODO`) detrás del disyuntor ([ADR-010](adr/ADR-010-consumo-de-inventario.md)) |
+| Inventario | Consumimos | pedidos | Contrato 2.1.0, con reducir y aumentar stock; el modelo de consumo está en [ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md), con un mock del contrato del proveedor en el compose como respaldo por si su servicio no está. `pedidos` llama al servicio real si está `INVENTARIO_URL` y, si no, a un inventario falso con stock en memoria (`INVENTARIO_MODO`), los dos detrás del disyuntor ([ADR-011](adr/ADR-011-resiliencia.md)). Crear un pedido no lo llama |
 
 ## Limitaciones conocidas y deuda técnica
 

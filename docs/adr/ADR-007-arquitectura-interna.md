@@ -27,12 +27,12 @@ Los servicios no tienen la misma complejidad:
 ```
 internal/dominio/       entidades, estados, validaciones, errores
 internal/aplicacion/    casos de uso
-internal/puertos/       interfaces (Repositorio, Remitente, ReservadorDeInsumos, PublicadorDeEventos, Buscador, Cache...)
+internal/puertos/       interfaces (Repositorio, Remitente, ProveedorDeStock, PublicadorDeEventos, Buscador, Cache...)
 internal/adaptadores/   api (Gin), mongodb, mysql, smtp, rabbitmq, inventario, meilisearch, redis
 ```
 
 - En `notificaciones` los puertos son `Repositorio`, `Remitente` y `Eventos`. Cambiar Mailpit por Gmail o agregar el consumidor de RabbitMQ es sumar o cambiar un adaptador, sin tocar el dominio.
-- En `pedidos` el puerto `ReservadorDeInsumos` es la capa anticorrupción frente al inventario del otro grupo ([ADR-010](ADR-010-consumo-de-inventario.md)).
+- En `pedidos` el puerto `ProveedorDeStock` (reducir, aumentar y consultar) es la capa anticorrupción frente al inventario del otro grupo, y `Existencias` es el stock propio ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)).
 - En `productos` hay un puerto por tema, y cada uno dice qué se quiere, no cómo lo resuelve la tecnología:
   - para MySQL, `Categorias`, `Productos` y `BandejaDelIndice`, que cumple un solo adaptador como en `pedidos`;
   - `Buscador` para Meilisearch;

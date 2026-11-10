@@ -33,7 +33,9 @@ Para eso, el MongoDB de `pedidos` corre como replica set de un nodo (`--replSet 
 
 Los eventos salen del más viejo al más nuevo. Si publicar uno falla, vuelve a la bandeja como el próximo a tomar, para que al volver el broker no se le adelanten los más nuevos (el comprador no recibe "confirmado" antes que "recibimos tu pedido"). La única excepción es que `pedidos` se caiga mientras tiene un evento apartado: ese evento sale cuando vence el apartado (15 s), y los más nuevos se le pueden adelantar (31/10/2026, revisión de [#59](https://github.com/mariavlindonc/recienhechoapp/pull/59)).
 
-**Fallas parciales con el inventario:** la reserva de insumos va después de la transacción, porque es una llamada a otro sistema que no participa de ella. Si no responde, el pedido queda `pendiente_confirmacion` con su cupo y se reconfirma en segundo plano ([ADR-010](ADR-010-consumo-de-inventario.md)). Liberar insumos al cancelar (R7), que en el proveedor es aumentar el stock que se redujo, se marca en el pedido y se reintenta hasta que el proveedor lo confirme.
+**Insumos:** la reserva de insumos es propia y va dentro de la misma transacción que el pedido, el cupo y el evento: la base `inventario` comparte servidor con la base `pedidos`, y MongoDB permite una transacción entre dos bases del mismo replica set. Cancelar devuelve el cupo, la reserva y guarda el evento juntos, sin llamar al proveedor ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)).
+
+**Fallas parciales con el inventario:** solo el consumo (reducir stock al pasar a `en_produccion`) habla con el proveedor, que no participa de la transacción. El pedido guarda su avance por insumo y queda "en duda" antes de cada llamada; si no hubo respuesta, se consulta el stock del proveedor y se compara con el conocido antes de repetir, para no descontar dos veces.
 
 **Valores:** 5 s por transacción, incluidos los reintentos del driver; un pedido o evento tomado por un proceso en segundo plano queda apartado 2 min (pedido) o 15 s (evento) antes de que otro lo pueda volver a tomar.
 

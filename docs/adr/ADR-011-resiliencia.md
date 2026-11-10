@@ -25,7 +25,7 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 | notificaciones | MongoDB | `POST` y `GET` responden `503`; nada se acepta sin guardarse | Timeout de 2 s por operación; `/health` informa la falla |
 | notificaciones | Servidor de correo (SMTP) | El `POST` sigue respondiendo `202`; las notificaciones quedan `pendiente` | Envío en segundo plano con timeout de conexión de 2 s y de 10 s por envío; tras el primer intento, 3 reintentos con espera exponencial (30, 60 y 120 s) y después `fallida`; si el servidor rechaza el mensaje o el destinatario de forma definitiva (5xx), pasa a `fallida` sin reintentos. Circuit breaker (`sony/gobreaker`): con 5 fallos transitorios seguidos deja de enviar 30 s, sin gastar los reintentos de las pendientes; una pendiente que no se pudo enviar en 24 h pasa a `fallida`. Alerta sobre el estado del circuito ([ADR-006](ADR-006-observabilidad.md)) |
 | pedidos | productos | No se crea el pedido: "no pudimos tomar el pedido, probá en un rato" | Timeout de 1 s y 2 reintentos ([ADR-003](ADR-003-comunicacion-entre-servicios.md)) |
-| pedidos | inventario (otro grupo) | El pedido queda `pendiente_confirmacion` | Timeout de 1,5 s y circuit breaker ([ADR-010](ADR-010-consumo-de-inventario.md)) |
+| pedidos | inventario (otro grupo) | Crear y cancelar pedidos no cambian. El consumo de los insumos de un pedido en producción espera y se reintenta; cargar stock responde `503` | Timeout de 1,5 s y circuit breaker; reintentos del consumo con esperas de 1, 2, 4, 8 y 10 minutos, consultando el stock antes de repetir ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)) |
 | pedidos | RabbitMQ | El cambio de estado se guarda igual; el evento sale cuando vuelve | Bandeja de salida (outbox, [ADR-015](ADR-015-consistencia-y-concurrencia.md)) |
 | pedidos | MongoDB | No se toman pedidos (`503`) | Timeout; no hay degradación posible sin perder la garantía de cupo |
 | productos | Redis | Se lee de MySQL, más lento | Timeout de 50 ms y sin reintentos ([ADR-009](ADR-009-cache.md)); no frena el arranque |
@@ -38,9 +38,9 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 - **Timeouts en toda llamada saliente**, sin excepción. Una dependencia lenta no puede dejar solicitudes colgadas. Los valores de la tabla son los ya definidos; donde dice solo «Timeout», el valor se fija al implementar el servicio.
 - **Reintentos con espera exponencial** solo en operaciones idempotentes y errores transitorios ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
 - **Circuit breaker** (`sony/gobreaker`) donde la dependencia es externa y no la controlamos. En los dos casos abre con 5 fallas seguidas, espera 30 s y deja pasar una llamada de prueba, y su estado se expone como métrica:
-  - `pedidos` → inventario del otro grupo ([ADR-010](ADR-010-consumo-de-inventario.md));
+  - `pedidos` → inventario del otro grupo ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md));
   - `notificaciones` → servidor de correo. Mientras el circuito está abierto, el proceso de envío no toma notificaciones: las pendientes esperan sin gastar sus reintentos, porque no fallaron ellas sino el servidor. Un rechazo definitivo (5xx al destinatario) no cuenta como falla: el servidor respondió.
-- **Trabajo en segundo plano** donde el usuario no necesita esperar: envío de mails, reconfirmación de pedidos, actualización del índice.
+- **Trabajo en segundo plano** donde el usuario no necesita esperar: envío de mails, consumo de insumos de los pedidos en producción, actualización del índice.
 - **Health checks:** cada servicio expone `/health`, que verifica sus dependencias obligatorias (por ejemplo, `notificaciones` hace ping a MongoDB). Para sacar instancias caídas del balanceo, el gateway usa otro chequeo más liviano, `/vivo`, que no mira dependencias ([ADR-012](ADR-012-balanceo-de-carga.md)).
 - **Límite de uso** de `notificaciones`: 60 solicitudes por minuto por grupo (todas las claves de un grupo suman), para que un grupo consumidor no tumbe el servicio. Lo aplica el api-gateway, que ve todas las solicitudes antes de repartirlas, así que es exacto con varias instancias ([ADR-012](ADR-012-balanceo-de-carga.md)).
 
@@ -91,10 +91,10 @@ Como mientras el circuito está abierto no se gastan reintentos, una notificaci�
      - con las dos detenidas, las 4 solicitudes respondieron `503 no_disponible`.
 
 3. **Inventario del proveedor lento** (`INVENTARIO_MODO=lento`, durante el test de carga de pedidos de [ADR-013](ADR-013-capacidad-y-costos.md#resultados)):
-   - **Medido el 29/10/2026**, con 50 usuarios virtuales creando pedidos para un mismo día:
+   - **Medido el 29/10/2026** con el modelo de [ADR-010](ADR-010-consumo-de-inventario.md), en el que crear un pedido llamaba al inventario, con 50 usuarios virtuales creando pedidos para un mismo día:
      - `pedidos` siguió tomando pedidos (RNF4): se crearon los 500 del cupo, en `pendiente_confirmacion`, con un p95 de 1,6 s;
      - al volver el inventario a `confirma`, el proceso en segundo plano confirmó los 500.
-   - Falta un ensayo dedicado que mida el disyuntor del inventario y cuánto tarda la reconfirmación.
+   - Falta un ensayo dedicado que mida el disyuntor del inventario y los reintentos del consumo.
 
 Los informes de los tres ensayos están en [POSTMORTEM](../POSTMORTEM.md). La caída del inventario real se ensaya cuando llegue el contrato del grupo proveedor (D9).
 
