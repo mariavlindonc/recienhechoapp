@@ -1,6 +1,6 @@
 # Arquitectura
 
-Versión de la Entrega 2, actualizada al 29/10/2026 con todos los servicios, el frontend, el balanceo y los tests de carga. Las decisiones que la sostienen están en [docs/adr/](adr/).
+Versión 1.0.0 (entrega final), con todos los servicios, el frontend, el balanceo y los tests de carga. Las decisiones que la sostienen están en [docs/adr/](adr/).
 
 ## Visión general
 
@@ -17,7 +17,7 @@ flowchart TB
     sistema["<b>Recién hecho</b><br/>e-commerce de pastelería a pedido"]
     consumidor["<b>Sistema de otro grupo</b><br/>consumidor de notificaciones"]
     inventario["<b>Sistema de inventario</b><br/>de otro grupo (proveedor)"]
-    correo["Servidor de correo<br/>(Mailpit en desarrollo, Gmail en la demo)"]
+    correo["Servidor de correo<br/>(Mailpit en local, Brevo en Render)"]
 
     comprador -- "usa (web)" --> sistema
     vendedor -- "usa (web)" --> sistema
@@ -28,8 +28,7 @@ flowchart TB
 
 ### Diagrama de contenedores
 
-Los componentes con borde continuo ya están en el `docker-compose`. Los de borde punteado están decididos en los ADRs y se suman para la presentación ([ADR-002](adr/ADR-002-persistencia.md)).
-Desde afuera solo se entra por el api-gateway (`localhost:8080`). Los servicios no publican puerto, y las herramientas de desarrollo (MongoDB, Mailpit, Jaeger, Prometheus, Grafana) se ven solo desde la propia computadora ([ADR-006](adr/ADR-006-observabilidad.md), [ADR-012](adr/ADR-012-balanceo-de-carga.md)).
+Todos los componentes están en el `docker-compose`. Desde afuera solo se entra por el api-gateway (`localhost:8080`). Los servicios no publican puerto, y las herramientas de desarrollo (MongoDB, Mailpit, Jaeger, Prometheus, Grafana) se ven solo desde la propia computadora ([ADR-006](adr/ADR-006-observabilidad.md), [ADR-012](adr/ADR-012-balanceo-de-carga.md)).
 
 ```mermaid
 flowchart TB
@@ -48,7 +47,7 @@ flowchart TB
         myU[("MySQL<br/>usuarios")]
         myP[("MySQL<br/>productos")]
         redis[("Redis<br/>caché de catálogo")]
-        mongoPed[("MongoDB<br/>pedidos")]
+        mongoPed[("MongoDB<br/>pedidos e inventario")]
         mongoNot[("MongoDB<br/>notificaciones")]
         rabbit{{"RabbitMQ"}}
 
@@ -60,7 +59,7 @@ flowchart TB
     end
 
     inventario["Inventario<br/>(otro grupo)"]
-    correo["Servidor de correo<br/>Mailpit en desarrollo, Gmail en la demo"]
+    correo["Servidor de correo<br/>Mailpit en local, Brevo en Render"]
 
     comprador --> frontend
     vendedor --> frontend
@@ -82,6 +81,7 @@ flowchart TB
     notificaciones --> mongoNot
     notificaciones -- "SMTP" --> correo
     gateway -. "trazas (OTLP)" .-> jaeger
+    usuarios -. "trazas (OTLP)" .-> jaeger
     notificaciones -. "trazas (OTLP)" .-> jaeger
     pedidos -. "trazas (OTLP)" .-> jaeger
     productos -. "trazas (OTLP)" .-> jaeger
@@ -89,11 +89,9 @@ flowchart TB
     prometheus -. "lee /metrics" .-> notificaciones
     prometheus -. "lee /metrics" .-> pedidos
     prometheus -. "lee /metrics" .-> productos
+    prometheus -. "lee /metrics" .-> usuarios
     grafana --> prometheus
     grafana --> jaeger
-
-    classDef propuesto stroke-dasharray: 5 5
-    class frontend,myU propuesto
 ```
 
 ## Servicios
@@ -105,12 +103,12 @@ Cada servicio es el único dueño de sus datos ([ADR-001](adr/ADR-001-limites-de
 | api-gateway | 8080 | Punto de entrada único, autenticación (verifica el JWT de la cookie de sesión, [ADR-019](adr/ADR-019-sesion-en-cookie.md)), ruteo, límite de uso de notificaciones por grupo ([ADR-004](adr/ADR-004-contrato-de-notificaciones.md)) | Ninguno | Todas las rutas públicas |
 | usuarios | 8081 | Registro, login, roles comprador/vendedor | Cuentas, roles, contraseñas hasheadas | Registro, login, perfil |
 | productos | 8082 | Catálogo, búsqueda, recetario | Productos, precios (centavos), imágenes, recetas | Catálogo, búsqueda, ABM (vendedor) |
-| pedidos | 8083 | Pedidos inmediatos, programados y especiales; calendario y capacidad de producción | Pedidos y estados, cupos por día | Crear y seguir pedidos, calendario (vendedor) |
+| pedidos | 8083 | Pedidos inmediatos, programados y especiales; calendario y capacidad de producción | Pedidos y estados, cupos por día, stock propio y reservas de insumos (base `inventario`) | Crear y seguir pedidos, calendario (vendedor) |
 | notificaciones | 8084 | Envío de avisos a compradores y a usuarios de otros grupos | Notificaciones, estados, claves de idempotencia | [Contrato](contracts/notificaciones/notificaciones.yaml) |
 
 La capacidad de producción vive en `pedidos` porque reservar el cupo y crear el pedido tienen que ser una sola operación atómica: es la operación del sistema que no puede duplicar ni perder información.
 
-Cada servicio vive en `backend/<servicio>/`, con su propio `go.mod` y `Dockerfile`, y ningún servicio importa código de otro. `notificaciones`, `pedidos` y `productos` son hexagonales (dominio, aplicación, puertos y adaptadores) `usuarios` está en capas (handler, servicio y repositorio) y el api-gateway es un proxy sin dominio; la arquitectura interna de cada uno está en [ADR-007](adr/ADR-007-arquitectura-interna.md). El puerto de la tabla es el interno: desde afuera solo se entra por el api-gateway, salvo `GET /internos/productos/{id}`, que `pedidos` llama dentro del compose y el gateway no enruta ([ADR-003](adr/ADR-003-comunicacion-entre-servicios.md)).
+Cada servicio vive en `backend/<servicio>/`, con su propio `go.mod` y `Dockerfile`, y ningún servicio importa código de otro. `notificaciones`, `pedidos` y `productos` son hexagonales (dominio, aplicación, puertos y adaptadores); `usuarios` está en capas (handler, servicio y repositorio) y el api-gateway es un proxy sin dominio; la arquitectura interna de cada uno está en [ADR-007](adr/ADR-007-arquitectura-interna.md). El puerto de la tabla es el interno: desde afuera solo se entra por el api-gateway, salvo `GET /internos/productos/{id}`, que `pedidos` llama dentro del compose y el gateway no enruta ([ADR-003](adr/ADR-003-comunicacion-entre-servicios.md)).
 
 ### Estados de un pedido
 
@@ -139,14 +137,14 @@ Los pedidos especiales pasan antes por `solicitado` → `cotizado` y de ahí a `
 |---|---|---|
 | usuarios | MySQL | Datos tabulares, email único |
 | productos | MySQL + Redis | Filtros sobre el catálogo; se lee mucho y cambia poco |
-| pedidos | MongoDB | Pedido como documento con sus ítems; campos libres en pedidos especiales |
+| pedidos | MongoDB | Pedido como documento con sus ítems; campos libres en pedidos especiales. El stock y las reservas de insumos van en la base `inventario` del mismo replica set, con transacciones entre las dos ([ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md)) |
 | notificaciones | MongoDB | Documentos simples, clave de idempotencia única por grupo |
 
 Montos siempre en centavos (`int64`). Detalle y limitaciones en [ADR-002](adr/ADR-002-persistencia.md).
 
 ## Comunicación entre servicios
 
-- **Síncrona (HTTP/JSON):** frontend y otros grupos → api-gateway → servicios; `pedidos` → `productos` (precio y receta); `pedidos` → inventario del otro grupo. Con timeouts y reintentos solo en operaciones idempotentes.
+- **Síncrona (HTTP/JSON):** frontend y otros grupos → api-gateway → servicios; `pedidos` → `productos` (precio y receta); `pedidos` → inventario del otro grupo. Con timeouts; se reintentan las operaciones idempotentes, y el consumo de insumos (que no lo es) solo después de consultar el stock del proveedor ([ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md)).
 - **Asíncrona (RabbitMQ):** `pedidos` publica `pedido.estado_cambiado` cada vez que un pedido se crea o cambia de estado; `notificaciones` lo consume y avisa al comprador.
 - **Tiempo real (WebSocket):** con Mis pedidos abierta, el navegador mantiene una conexión con `pedidos` (`GET /pedidos/tiempo-real`), que pasa por el servidor del frontend y el api-gateway. Después de guardar un cambio, `pedidos` se lo avisa solo al dueño del pedido, y la pantalla vuelve a pedir sus pedidos por HTTP ([ADR-018](adr/ADR-018-tiempo-real.md)).
 
@@ -160,10 +158,10 @@ Exchange `pedidos` (topic), cola quorum `notificaciones.pedidos` con hasta 3 ree
 
 Decisiones en [ADR-006](adr/ADR-006-observabilidad.md) (D11).
 
-- **Logs:** api-gateway y notificaciones escriben una línea JSON por evento en la salida estándar (`docker compose logs`), con `servicio` y, cuando hay una traza activa, `trace_id` y `span_id`. Cada solicitud HTTP deja una línea con `metodo`, `ruta`, `estado` y `duracion_ms`, y cada envío fallido de una notificación, una con `id`, `intento`, `resultado` y `error` (con los emails tapados). No se registran claves de API, claves de idempotencia, destinatarios ni contenidos de mails.
-- **Trazas:** OpenTelemetry en api-gateway, pedidos, productos y notificaciones, exportadas por OTLP a Jaeger (http://localhost:16686). Una solicitud a `POST /notificaciones` por el gateway queda como una sola traza: api-gateway → reenvío HTTP → notificaciones → comandos de MongoDB. Los logs de esa solicitud llevan el mismo `trace_id`. Un `POST /pedidos` también queda como una sola traza, que sigue por RabbitMQ (el `traceparent` viaja en los headers del mensaje) hasta el consumidor de notificaciones. Si Jaeger está caído, los servicios siguen funcionando y solo se pierden las trazas.
-- **Métricas:** cada servicio publica `/metrics` en un puerto interno (9464) que no sale del compose; Prometheus lo lee cada 15 s. Las dos tienen `solicitudes_http_total` por método, ruta y estado, y `duracion_solicitud_http_segundos` por método y ruta. El gateway suma `gateway_solicitudes_total` por instancia (reparto del balanceo, ADR-012), `gateway_instancia_sana` (1 si la instancia está en el balanceo, 0 si quedó afuera) y notificaciones suma `notificaciones_envios_total` por resultado (`enviada`, `reintento`, `fallida`) y `notificaciones_correo_circuito`, el estado del disyuntor del correo (0 cerrado, 1 semiabierto, 2 abierto), que la aplicación avisa por el puerto `Eventos`: el adaptador `eventos` decide qué contar y qué loguear, así la aplicación no depende de Prometheus ni de `slog`. Productos suma `cache_aciertos_total` y `cache_fallos_total` por tipo (la tasa de aciertos de [ADR-009](adr/ADR-009-cache.md)) e `indice_pendiente_antiguedad_segundos`, el retraso de la búsqueda (RNF1).
-- **Alertas** (`observabilidad/prometheus/alertas.yml`): `NotificacionesFallidas` (más de 5 en 10 minutos), `CorreoNoDisponible` (el disyuntor del correo lleva 1 minuto sin cerrarse), `InventarioRechazaReservas`, `CircuitoDelInventarioAbierto`, `ObjetivoDeLatenciaIncumplido` (menos del 99 % de los `POST /notificaciones` en menos de 300 ms en la última hora), `BusquedaAtrasada` (un cambio de producto lleva más de 10 s sin aparecer en la búsqueda) y `ServicioSinMetricas`.
+- **Logs:** todos los servicios escriben una línea JSON por evento en la salida estándar (`docker compose logs`), con `servicio` y, cuando hay una traza activa, `trace_id` y `span_id`. Cada solicitud HTTP deja una línea con `metodo`, `ruta`, `estado` y `duracion_ms`, y cada envío fallido de una notificación, una con `id`, `intento`, `resultado` y `error` (con los emails tapados). No se registran claves de API, claves de idempotencia, destinatarios ni contenidos de mails.
+- **Trazas:** OpenTelemetry en todos los servicios, exportadas por OTLP a Jaeger (http://localhost:16686). Una solicitud a `POST /notificaciones` por el gateway queda como una sola traza: api-gateway → reenvío HTTP → notificaciones → comandos de MongoDB. Los logs de esa solicitud llevan el mismo `trace_id`. Un `POST /pedidos` también queda como una sola traza, que sigue por RabbitMQ (el `traceparent` viaja en los headers del mensaje) hasta el consumidor de notificaciones. Si Jaeger está caído, los servicios siguen funcionando y solo se pierden las trazas.
+- **Métricas:** cada servicio publica `/metrics` en un puerto interno (9464) que no sale del compose; Prometheus lo lee cada 15 s. Todos tienen `solicitudes_http_total` por método, ruta y estado, y `duracion_solicitud_http_segundos` por método y ruta. El gateway suma `gateway_solicitudes_total` por instancia (reparto del balanceo, ADR-012), `gateway_instancia_sana` (1 si la instancia está en el balanceo, 0 si quedó afuera) y notificaciones suma `notificaciones_envios_total` por resultado (`enviada`, `reintento`, `fallida`) y `notificaciones_correo_circuito`, el estado del disyuntor del correo (0 cerrado, 1 semiabierto, 2 abierto), que la aplicación avisa por el puerto `Eventos`: el adaptador `eventos` decide qué contar y qué loguear, así la aplicación no depende de Prometheus ni de `slog`. Productos suma `cache_aciertos_total`, `cache_fallos_total` y `cache_errores_total` por tipo (la tasa de aciertos de [ADR-009](adr/ADR-009-cache.md)), `indice_sincronizaciones_total` e `indice_pendiente_antiguedad_segundos`, el retraso de la búsqueda (RNF1). Pedidos suma `pedidos_registrados_total`, `pedidos_eventos_publicados_total`, `pedidos_inventario_llamadas_total`, `pedidos_circuito_inventario`, `pedidos_consumos_pendientes`, `pedidos_conexiones_tiempo_real` y `pedidos_mensajes_tiempo_real_total`.
+- **Alertas** (`observabilidad/prometheus/alertas.yml`): `NotificacionesFallidas` (más de 5 en 10 minutos), `CorreoNoDisponible` (el disyuntor del correo lleva 1 minuto sin cerrarse), `InventarioRechazaReservas`, `CircuitoDelInventarioAbierto`, `ObjetivoDeLatenciaIncumplido` (menos del 99 % de los `POST /notificaciones` en menos de 300 ms en la última hora), `BusquedaAtrasada` (un cambio de producto lleva más de 10 s sin aparecer en la búsqueda, durante 1 minuto) y `ServicioSinMetricas`.
 - **Tablero:** Grafana (http://localhost:3000) con Prometheus y Jaeger como fuentes, cargados desde `observabilidad/grafana`: objetivo de latencia, solicitudes por segundo, errores 5xx, alertas disparadas, latencia p95, envíos por resultado, reparto por instancia, instancias en el balanceo, estado del disyuntor del correo y, mientras corre un test de carga, la latencia p95 y las solicitudes por segundo que mide k6 ([ADR-013](adr/ADR-013-capacidad-y-costos.md)).
 - **Acceso:** en desarrollo, las herramientas de observabilidad se ven solo desde la propia computadora (ADR-006).
 
@@ -184,7 +182,7 @@ Soluciones más simples que la ideal, elegidas a conciencia. Cada una dice qué 
 | **El límite de intentos de inicio de sesión cuenta por IP** (10 por minuto, [ADR-019](adr/ADR-019-sesion-en-cookie.md)). `servidor.ts` informa la IP real del navegador, con una clave compartida. | Detrás de otro proxy, como el de Vite en desarrollo o un balanceador en la nube, los clientes comparten la IP del proxy y el mismo límite. Quien ataque desde muchas IPs no queda frenado por cuenta. | En desarrollo hay una sola persona usando la app, y hoy no hay balanceador delante del servidor del frontend. | Detrás de un balanceador, leer la IP del header que ponga ese balanceador, confiando solo en él. Si hace falta frenar ataques desde muchas IPs, sumar un freno por email en `usuarios`. |
 | **Los avisos se entregan "al menos una vez".** Si el servidor de correo acepta un mail pero falla el guardado del estado `enviada`, la notificación se vuelve a tomar cuando vence el apartado (2 minutos) y el mail sale dos veces. | El destinatario puede recibir un mail repetido, solo cuando MongoDB falla justo después de un envío exitoso. | Entre duplicar un aviso y perderlo, es preferible duplicarlo. Garantizar "exactamente una vez" con un servidor SMTP externo no es posible: el servidor no participa de nuestras transacciones. | No hay una solución completa. Se puede reducir la ventana reintentando el guardado del estado antes de soltar la notificación. |
 | **El api-gateway reusa pocas conexiones hacia cada servicio.** Usa el transporte HTTP por defecto de Go, que guarda 2 conexiones libres por servicio. | En el test de carga de pedidos, con unas 860 solicitudes por segundo, el gateway se quedó sin puertos locales y respondió `503` al 2 a 4,5 % de las solicitudes ([ADR-013](adr/ADR-013-capacidad-y-costos.md#resultados)). A 300 por segundo no pasa. | Aparece a ~860 por segundo; la carga real es de hasta 5 pedidos por día y el techo hipotético, de 50 por segundo ([ADR-013](adr/ADR-013-capacidad-y-costos.md)). Aceptado como deuda técnica el 30/10/2026 (#79). | Subir `MaxIdleConnsPerHost` en el transporte del gateway. |
-| **Crear un pedido puede tardar más que el timeout del gateway.** Con `productos` lento, sus reintentos (3 × 1 s) más la reserva de insumos (1,5 s) superan los 3 s del gateway. | El comprador recibe `503` aunque el pedido se haya creado. | Si reintenta con la misma `Idempotency-Key`, recibe el pedido ya creado sin reservar de nuevo. | Ajustar los tiempos con los tests de carga ([ADR-013](adr/ADR-013-capacidad-y-costos.md)). |
+| **Crear un pedido puede tardar más que el timeout del gateway.** Con `productos` lento, sus 3 intentos de 1 s, con esperas de 100 y 200 ms, superan los 3 s del gateway. | El comprador recibe `503` aunque el pedido se haya creado. | Si reintenta con la misma `Idempotency-Key`, recibe el pedido ya creado sin reservar de nuevo. | Ajustar los tiempos con los tests de carga ([ADR-013](adr/ADR-013-capacidad-y-costos.md)). |
 | **Las fotos de los productos están en un volumen de una sola máquina.** | Con `productos` repartido en varias máquinas, cada una vería solo las fotos que recibió. | Se despliega en una sola máquina, y el volumen lo comparten todas las instancias de esa máquina. | Pasar las fotos a un almacenamiento compartido (por ejemplo, tipo S3) cambiando solo el adaptador `imagenes` ([ADR-002](adr/ADR-002-persistencia.md)). |
 | **Renombrar una categoría no borra de la caché el detalle de sus productos.** | El detalle de un producto puede mostrar el nombre viejo de la categoría hasta 60 s. El catálogo y la búsqueda se actualizan enseguida. | Invalidar uno por uno exige listar los productos de la categoría, y el nombre viejo se ve poco tiempo. | Invalidar cada producto de la categoría al renombrarla, si molesta. |
 | **Los listados de pedidos no tienen paginación.** | Un comprador o un día con cientos de pedidos devuelven todo junto. | Alcanza para el volumen de una pastelería. | Agregar paginación cuando haga falta. |

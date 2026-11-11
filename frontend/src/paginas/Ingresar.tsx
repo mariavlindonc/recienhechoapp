@@ -18,7 +18,7 @@ export default function Ingresar() {
   }
 
   return (
-    <form className="formulario" style={{ padding: 16 }} onSubmit={enviar}>
+    <form className="formulario acceso" style={{ padding: 16 }} onSubmit={enviar}>
       <h1>Ingresar</h1>
       <md-text-field label="Email" type="email" value={email} onInput={evento => setEmail(valorDe(evento))} required></md-text-field>
       <md-text-field label="Contraseña" type="password" value={clave} onInput={evento => setClave(valorDe(evento))} required></md-text-field>

@@ -12,7 +12,7 @@ El enunciado pide tests de carga con resultados documentados y analizados, el pr
 |---|---|
 | `POST /notificaciones`: 99 % en menos de 300 ms | SLO de [ADR-006](ADR-006-observabilidad.md) |
 | Consultar el catálogo: p95 menor a 300 ms con caché | RNF2 |
-| Crear un pedido: p95 menor a 2 s, incluida la llamada a inventario | RNF3 |
+| Crear un pedido: p95 menor a 2 s | RNF3 |
 | Un cambio de producto aparece en la búsqueda en menos de 10 s | RNF1 |
 
 ## Decisión
@@ -51,7 +51,7 @@ En cada corrida se registra: solicitudes por segundo, p50/p95/p99, tasa de error
 
 | Escenario | Qué incluye | Costo estimado |
 |---|---|---|
-| Demo (lo que se despliega) | Una VM chica (2 vCPU, 4 GB) con `api-gateway`, 2 × `notificaciones`, MongoDB, Jaeger, Prometheus y Grafana en Docker; Gmail | 15 a 30 |
+| VM (comparación; se despliega en Render) | Una VM chica (2 vCPU, 4 GB) con `api-gateway`, 2 × `notificaciones`, MongoDB, Jaeger, Prometheus y Grafana en Docker; Gmail | 15 a 30 |
 | Producción chica | 2 VMs para los servicios, MongoDB administrado de nivel básico, proveedor de mail transaccional | 60 a 120 |
 
 El costo crece por el envío de mails y por la base administrada; el cómputo de los servicios en Go es lo más barato.
@@ -64,7 +64,7 @@ El costo crece por el envío de mails y por la base administrada; el cómputo de
 
 La cátedra permitió reducir `notificaciones` a lo mínimo para que entre en el plan gratis, y alcanza con que funcione el día de la evaluación (06/11/2026). La versión en Render queda así:
 
-- Dos web services gratis: el api-gateway adelante, como pide [ADR-004](ADR-004-contrato-de-notificaciones.md) (aplica el límite de 60 por minuto del contrato), y una sola instancia de `notificaciones`. El balanceo sobre dos instancias ([ADR-012](ADR-012-balanceo-de-carga.md)) se muestra en el compose local.
+- Dos web services gratis para la capacidad: el api-gateway adelante, como pide [ADR-004](ADR-004-contrato-de-notificaciones.md) (aplica el límite de 60 por minuto del contrato), y una sola instancia de `notificaciones`. El balanceo sobre dos instancias ([ADR-012](ADR-012-balanceo-de-carga.md)) se muestra en el compose local.
 - Las notificaciones y las claves de idempotencia se guardan en el Key Value gratis de Render (`REDIS_URL` en lugar de `MONGO_URI`). Si Render lo reinicia, se pierden ([ADR-002](ADR-002-persistencia.md)).
 - Sin RabbitMQ: sin `RABBITMQ_URL`, `notificaciones` atiende solo la API pública y no consume eventos de `pedidos`.
 - El correo sale por Brevo en el puerto 2525, porque Render bloquea el SMTP en los puertos 25, 465 y 587 ([ADR-005](ADR-005-envio-de-email.md)).
@@ -127,5 +127,5 @@ Contra la carga real, el sistema sobra por muchos órdenes de magnitud. La arqui
 ## Consecuencias
 
 - k6 entra como herramienta de pruebas, fuera de los servicios.
-- Las estimaciones de "Límites esperados" quedan como estaban; lo medido está en [Resultados](#resultados). Los costos siguen siendo estimaciones hasta elegir dónde desplegar.
+- Las estimaciones de "Límites esperados" quedan como estaban; lo medido está en [Resultados](#resultados). Los costos son estimaciones; lo desplegado usa el plan gratis de Render.
 - Si el SLO o los timeouts no se cumplen, se ajustan en [ADR-003](ADR-003-comunicacion-entre-servicios.md) y [ADR-006](ADR-006-observabilidad.md).

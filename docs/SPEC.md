@@ -1,12 +1,12 @@
 # Especificación
 
-Alcance y requisitos de Recién hecho. Versión de la Entrega 2: suma los desafíos adicionales anunciados (B1 y B2). Las funcionalidades y reglas siguen siendo las de la Entrega 1; en esta entrega está implementada la capacidad de notificaciones.
+Alcance y requisitos de Recién hecho. Versión 1.0.0 (entrega final): todas las funcionalidades están implementadas, junto con el desafío adicional B2 (tiempo real). B1 (tests e2e) quedó sin implementar ([#76](https://github.com/mariavlindonc/recienhechoapp/issues/76)).
 
 ## Descripción
 
 Recién hecho es un e-commerce de pastelería a pedido. Los compradores buscan en el catálogo y encargan productos para ahora, para una fecha futura o a medida (pedido especial). La pastelería tiene una capacidad de producción limitada por día: el sistema solo acepta pedidos mientras quede cupo y organiza la producción en un calendario.
 
-La acción principal es **encargar un pedido**. No es un alta más: tiene que respetar la capacidad del día, la anticipación mínima de cada producto y la disponibilidad de insumos, y pasa por estados con consecuencias para el negocio.
+La acción principal es **encargar un pedido**. Tiene que respetar la capacidad del día, la anticipación mínima de cada producto y la disponibilidad de insumos, y pasa por estados con consecuencias para el negocio.
 
 ## Actores
 
@@ -47,7 +47,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 | Id | Regla |
 |---|---|
 | R1 | Un pedido se acepta solo si la capacidad del día alcanza. Dos pedidos simultáneos no pueden quedarse con el mismo cupo, y un pedido no puede reservar dos veces. |
-| R2 | Cada producto tiene una anticipación mínima (ej. una torta de casamiento, 7 días). No se aceptan pedidos con menos anticipación. |
+| R2 | Cada producto tiene una anticipación mínima (ej. una caja de budines para un evento, 7 días). No se aceptan pedidos con menos anticipación. |
 | R3 | Un pedido queda `pendiente_confirmacion` hasta que el vendedor lo confirma. Al encargarlo se reservan los insumos de la receta en el stock propio, aunque no alcancen: la reserva nunca rechaza un pedido, y el vendedor ve qué insumos faltan y decide. Los insumos se descuentan en el inventario del proveedor al pasar a `en_produccion` ([ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md)). |
 | R4 | El precio queda fijado al crear el pedido; cambios posteriores del catálogo no lo afectan. |
 | R5 | Los montos se manejan en centavos (enteros), nunca con decimales. |
@@ -65,7 +65,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 - Dado un comprador con sesión, cuando intenta una operación del vendedor (por ejemplo, definir la capacidad), entonces se rechaza.
 
 **C3. Buscar productos**
-- Dado un catálogo con productos de varias categorías, cuando el comprador filtra por "tortas" y ordena por precio ascendente, entonces ve solo tortas, de la más barata a la más cara, de a 20 por página.
+- Dado un catálogo con productos de varias categorías, cuando el comprador filtra por "budines" y ordena por precio ascendente, entonces ve solo budines, del más barato al más caro, de a 20 por página.
 - Dado que el vendedor cambia el precio de un producto, cuando pasa el retraso máximo tolerado (ver requisitos no funcionales), entonces la búsqueda muestra el precio nuevo.
 
 **C4 y C5. Hacer un pedido**
@@ -123,14 +123,14 @@ Valores preliminares; se ajustan con los tests de carga.
 
 ## Desafíos adicionales (bonus)
 
-Anunciados en la Entrega 2, como pide el enunciado (sección 7: hasta dos desafíos). Elegidos el 22/10/2026. Para que cuenten, cada uno tiene que estar integrado al sistema, documentado, testeado y defendido.
+Anunciados en la Entrega 2, como pide el enunciado (sección 7: hasta dos desafíos). Elegidos el 22/10/2026. B2 está implementado ([ADR-018](adr/ADR-018-tiempo-real.md)); B1 no llegó a implementarse ([#76](https://github.com/mariavlindonc/recienhechoapp/issues/76)). Para que cuenten, cada uno tiene que estar integrado al sistema, documentado, testeado y defendido.
 
 | Id | Desafío | Qué incluye |
 |---|---|---|
 | B1 | **Tests de punta a punta (e2e)** | Pruebas automáticas que recorren el sistema completo levantado con `docker compose`, entrando por el api-gateway como lo haría un usuario o el grupo consumidor |
 | B2 | **Actualizaciones en tiempo real con WebSocket** | El comprador ve los cambios de estado de su pedido en la interfaz sin recargar la página |
 
-La herramienta de los tests e2e y dónde vive el WebSocket (qué servicio mantiene la conexión con el navegador) se deciden en sus ADRs, antes de implementarlos (regla 5 de AGENTS.md).
+Dónde vive el WebSocket (qué servicio mantiene la conexión con el navegador) se decidió en [ADR-018](adr/ADR-018-tiempo-real.md).
 
 **Criterios de aceptación**
 
@@ -138,7 +138,7 @@ La herramienta de los tests e2e y dónde vive el WebSocket (qué servicio mantie
 - Dado el sistema levantado con un solo comando, cuando se corren los tests e2e, entonces recorren por el api-gateway al menos:
   - una notificación que se crea y queda `enviada`, con el mail en el buzón de prueba;
   - un reintento con la misma `Idempotency-Key`, que no crea otra notificación ni manda otro mail;
-  - el flujo principal del comprador (registrarse, encargar un pedido y recibir el aviso), cuando esos servicios estén implementados.
+  - el flujo principal del comprador (registrarse, encargar un pedido y recibir el aviso).
 - Dado que un test e2e falla, cuando se mira el resultado, entonces dice en qué paso falló.
 - Los tests e2e se corren antes de cada release.
 

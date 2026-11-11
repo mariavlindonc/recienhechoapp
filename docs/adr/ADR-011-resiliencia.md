@@ -4,11 +4,11 @@
 
 - **Aceptado** para `api-gateway` y `notificaciones`, Entrega 2.
 - **Aceptado** para `productos` con el plan aprobado el 26/10/2026; implementado el mismo día.
-- **Propuesto** para `pedidos`: se acepta al revisar su PR.
+- **Aceptado** para `pedidos` al revisar su PR.
 
-Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementado en la issue #33: el adaptador `internal/adaptadores/disyuntor` envuelve al remitente SMTP. Con el circuito abierto devuelve `ErrCorreoNoDisponible`, y la aplicación posterga la notificación sin gastar un intento. El disyuntor vive del lado de los adaptadores, como el de `pedidos` en ADR-010, porque la aplicación no importa tecnologías ([ADR-007](ADR-007-arquitectura-interna.md)). Falta la métrica y la alerta del estado del circuito (#33).
+Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementado en la issue #33: el adaptador `internal/adaptadores/disyuntor` envuelve al remitente SMTP. Con el circuito abierto devuelve `ErrCorreoNoDisponible`, y la aplicación posterga la notificación sin gastar un intento. El disyuntor vive del lado de los adaptadores, como el de `pedidos` en ADR-010, porque la aplicación no importa tecnologías ([ADR-007](ADR-007-arquitectura-interna.md)). El estado del circuito se ve en la métrica `notificaciones_correo_circuito` y dispara la alerta `CorreoNoDisponible`.
 
-Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB y envío en segundo plano con reintentos. El api-gateway ya tiene el proxy con timeout de 3 s, `503 no_disponible` y el límite de uso. Falta el balanceo con chequeos de `/vivo` ([ADR-012](ADR-012-balanceo-de-carga.md)).
+Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB y envío en segundo plano con reintentos. El api-gateway ya tiene el proxy con timeout de 3 s, `503 no_disponible`, el límite de uso y el balanceo con chequeos de `/vivo` ([ADR-012](ADR-012-balanceo-de-carga.md)).
 
 ## Contexto
 
@@ -39,7 +39,7 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 - **Reintentos con espera exponencial** solo en operaciones idempotentes y errores transitorios ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
 - **Circuit breaker** (`sony/gobreaker`) donde la dependencia es externa y no la controlamos. En los dos casos abre con 5 fallas seguidas, espera 30 s y deja pasar una llamada de prueba, y su estado se expone como métrica:
   - `pedidos` → inventario del otro grupo ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md));
-  - `notificaciones` → servidor de correo. Mientras el circuito está abierto, el proceso de envío no toma notificaciones: las pendientes esperan sin gastar sus reintentos, porque no fallaron ellas sino el servidor. Un rechazo definitivo (5xx al destinatario) no cuenta como falla: el servidor respondió.
+  - `notificaciones` → servidor de correo. Mientras el circuito está abierto, el proceso de envío no toma notificaciones: las pendientes esperan sin gastar sus reintentos, porque la falla es del servidor. Un rechazo definitivo (5xx al destinatario) no cuenta como falla: el servidor respondió.
 - **Trabajo en segundo plano** donde el usuario no necesita esperar: envío de mails, consumo de insumos de los pedidos en producción, actualización del índice.
 - **Health checks:** cada servicio expone `/health`, que verifica sus dependencias obligatorias (por ejemplo, `notificaciones` hace ping a MongoDB). Para sacar instancias caídas del balanceo, el gateway usa otro chequeo más liviano, `/vivo`, que no mira dependencias ([ADR-012](ADR-012-balanceo-de-carga.md)).
 - **Límite de uso** de `notificaciones`: 60 solicitudes por minuto por grupo (todas las claves de un grupo suman), para que un grupo consumidor no tumbe el servicio. Lo aplica el api-gateway, que ve todas las solicitudes antes de repartirlas, así que es exacto con varias instancias ([ADR-012](ADR-012-balanceo-de-carga.md)).
@@ -76,7 +76,7 @@ Como mientras el circuito está abierto no se gastan reintentos, una notificaci�
 
 1. **Servidor de correo caído** (`docker compose stop mailpit`):
    - El `POST /notificaciones` sigue respondiendo `202` y las notificaciones quedan `pendiente`.
-   - El circuito se abre después de 5 fallos seguidos y desde ahí hay como mucho un intento de prueba cada ~35 s (los 30 s del circuito más hasta 5 s del sondeo). Las pendientes no gastan reintentos. La alerta del estado del circuito se dispara en unos 2 minutos, sin importar cuántas pendientes haya (cuando esté la métrica).
+   - El circuito se abre después de 5 fallos seguidos y desde ahí hay como mucho un intento de prueba cada ~35 s (los 30 s del circuito más hasta 5 s del sondeo). Las pendientes no gastan reintentos. La alerta del estado del circuito se dispara en unos 2 minutos, sin importar cuántas pendientes haya.
    - Al volver Mailpit, la prueba del estado semiabierto cierra el circuito y salen todas las pendientes.
    - **Medido el 22/10/2026**, con 60 notificaciones (el límite de 60 por minuto rechazó con `429` las 40 restantes de una ráfaga de 100):
      - el circuito se abrió a los ~10 s;
@@ -96,7 +96,7 @@ Como mientras el circuito está abierto no se gastan reintentos, una notificaci�
      - al volver el inventario a `confirma`, el proceso en segundo plano confirmó los 500.
    - Falta un ensayo dedicado que mida el disyuntor del inventario y los reintentos del consumo.
 
-Los informes de los tres ensayos están en [POSTMORTEM](../POSTMORTEM.md). La caída del inventario real se ensaya cuando llegue el contrato del grupo proveedor (D9).
+Los informes de los tres ensayos están en [POSTMORTEM](../POSTMORTEM.md). La caída del inventario se puede ensayar con los modos del inventario falso o con `inventario-mock` ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)).
 
 ## Alternativas consideradas
 

@@ -25,8 +25,8 @@ El `dev` server reenvía `/api` al api-gateway en `API_GATEWAY_URL` (por defecto
 ## Estado
 
 - Todo pasa por `src/api.ts`, que llama a `usuarios`, `productos` y `pedidos` por `/api` (el api-gateway) y traduce sus respuestas a los tipos de `src/tipos.ts`.
-- Sesión: `POST /usuarios/sesion` deja una cookie `HttpOnly` que manda el navegador, y JavaScript no ve el token. En `sessionStorage` quedan solo los datos del usuario ([ADR-019](../docs/adr/ADR-019-sesion-en-cookie.md)). Un `401` borra la sesión y manda a ingresar. La navegación muestra las pantallas del vendedor solo con una sesión de vendedor (cuenta de desarrollo: `VENDEDOR_EMAIL` y `VENDEDOR_CLAVE` del `.env`).
-- Los **pedidos especiales** usan las rutas de `pedidos` de [ADR-017](../docs/adr/ADR-017-pedidos-especiales.md) (rama `feature/pedidos-especiales`). Mientras esperan cotización o respuesta se muestran aparte; aceptados, son un pedido más.
+- Sesión: `POST /usuarios/sesion` deja una cookie `HttpOnly` que manda el navegador, y el frontend no guarda el token. En `sessionStorage` quedan solo los datos del usuario ([ADR-019](../docs/adr/ADR-019-sesion-en-cookie.md)). Un `401` borra la sesión y manda a ingresar. La navegación muestra las pantallas del vendedor solo con una sesión de vendedor (cuenta de desarrollo: `VENDEDOR_EMAIL` y `VENDEDOR_CLAVE` del `.env`).
+- Los **pedidos especiales** usan las rutas de `pedidos` de [ADR-017](../docs/adr/ADR-017-pedidos-especiales.md). Mientras esperan cotización o respuesta se muestran aparte; aceptados, son un pedido más.
 - Las pantallas del vendedor miran desde una semana atrás hasta un mes adelante: `pedidos` lista por día, así que se piden solo los días con algo reservado.
 - La navegación es un `md-nav-rail` en todos los anchos. El plan original preveía `md-nav-bar` debajo de 600 px; se simplificó para no sumar un segundo componente de navegación.
 - Un pedido sin fecha es inmediato: `pedidos` busca el primer día con cupo que respete la anticipación del producto.

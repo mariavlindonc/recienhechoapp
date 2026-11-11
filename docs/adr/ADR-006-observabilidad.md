@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado (versión inicial, Entrega 2; se completa para la presentación con el tablero final y las alertas)
+Aceptado (versión inicial en la Entrega 2; completado con el tablero final y las alertas)
 
 ## Contexto
 

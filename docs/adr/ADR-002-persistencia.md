@@ -27,11 +27,11 @@ Patrones de acceso esperados:
 | pedidos | MongoDB | El pedido es un documento con sus ítems adentro y se lee entero, sin joins; los pedidos especiales tienen campos variables |
 | notificaciones | MongoDB | Documentos simples; la clave de idempotencia es única por (grupo, `Idempotency-Key`) para no duplicar envíos |
 
-**Motor relacional: MySQL.** Lo usamos en la materia y el grupo ya lo conoce, así que no suma curva de aprendizaje. Cubre lo que necesitan `usuarios` y `productos`: restricciones `UNIQUE`, índices compuestos para filtrar el catálogo por categoría y precio, y transacciones (InnoDB).
+**Motor relacional: MySQL.** Lo usamos en la materia y el grupo ya lo conoce, así que no suma curva de aprendizaje. Cubre lo que necesitan `usuarios` y `productos`: restricciones `UNIQUE`, índices compuestos para filtrar el catálogo por categoría y nombre (el precio lo filtra Meilisearch), y transacciones (InnoDB).
 
 Precios y montos se guardan como enteros en centavos (`int64`), nunca como decimales con coma flotante.
 
-**Cupo de producción.** Cada día tiene un documento en `pedidos` con la capacidad y lo ya reservado. La reserva se hace con un único update condicional atómico (`reservado + cantidad <= capacidad`): si no matchea, no hay cupo. Dentro de un documento MongoDB garantiza atomicidad. Crear el pedido junto con la reserva y su evento toca varios documentos: eso lo resuelve [ADR-015](ADR-015-consistencia-y-concurrencia.md) (D4) con transacciones.
+**Cupo de producción.** Cada día tiene un documento en `pedidos` con la capacidad y lo ya reservado. La reserva se hace con un único update condicional atómico (`reservados + cantidad <= capacidad`): si no coincide, no hay cupo. Dentro de un documento MongoDB garantiza atomicidad. Crear el pedido junto con la reserva y su evento toca varios documentos: eso lo resuelve [ADR-015](ADR-015-consistencia-y-concurrencia.md) (D4) con transacciones.
 
 **Stock y reservas.** `pedidos` guarda el stock propio de cada ingrediente en una base `inventario`, separada de la de `pedidos` pero en el mismo servidor MongoDB, para que una transacción abarque las dos ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)). La colección `existencias` tiene un documento por ingrediente y unidad, con el stock conocido, lo reservado y el `productId` del proveedor, que es único entre los ingredientes. Reservar y devolver son `$inc` sobre `reservado`, en la misma transacción que el pedido.
 
@@ -58,7 +58,7 @@ Precios y montos se guardan como enteros en centavos (`int64`), nunca como decim
 
 ## Consecuencias
 
-- Hay que operar tres motores (MySQL, MongoDB, Redis). Cada uno se suma al `docker-compose` cuando se acepta para su servicio: MongoDB de `notificaciones` entra en la Entrega 2.
+- Hay que operar tres motores (MySQL, MongoDB, Redis). Los tres están en el `docker-compose`.
 - No hay joins entre servicios; las vistas que cruzan datos aceptan consistencia eventual.
 - La caché de productos puede mostrar un precio viejo por unos segundos. El precio que vale es el que `pedidos` le pide a `productos` al crear el pedido, sin caché. La vigencia y la invalidación se definen en D7.
 - En MongoDB los esquemas no los controla la base: hay que validarlos en el código del servicio.
@@ -77,7 +77,7 @@ Lo que cambió respecto de lo escrito antes:
 - La unicidad sale del `_id` de la clave y no necesita un índice aparte. El par que se controla es (grupo, `Idempotency-Key`); antes decíamos (clave de API, `Idempotency-Key`). Dos claves de API del mismo grupo comparten idempotencia y visibilidad.
 - Se sumó el índice `pendientes_por_fecha`, que este ADR no preveía.
 
-Cada operación contra MongoDB se corta a los 2 s ([ADR-011](ADR-011-resiliencia.md)); sin ese límite el driver esperaba 30 s. MongoDB ya corre en el compose (`mongo-notificaciones`), y las decisiones de `usuarios`, `productos` y `pedidos` siguen propuestas hasta implementar cada servicio.
+Cada operación contra MongoDB se corta a los 2 s ([ADR-011](ADR-011-resiliencia.md)); sin ese límite el driver esperaba 30 s. MongoDB corre en el compose (`mongo-notificaciones`).
 
 **En Render** ([ADR-013](ADR-013-capacidad-y-costos.md)), `notificaciones` guarda en el Key Value gratis (Redis) porque Render no tiene MongoDB gratis. Con `REDIS_URL` en lugar de `MONGO_URI` se usa el adaptador de Redis, que cumple el mismo puerto `Repositorio`: cada notificación en JSON, las pendientes en un conjunto ordenado por próximo intento y las claves de idempotencia con vencimiento de 24 h. Tomar una pendiente y actualizarla se hacen con scripts de Lua, así que son atómicos como en MongoDB. Ese Key Value no persiste: si Render lo reinicia, se pierde todo. Alcanza porque la capacidad solo tiene que funcionar el día de la evaluación.
 

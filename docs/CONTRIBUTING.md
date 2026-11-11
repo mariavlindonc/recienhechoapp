@@ -37,6 +37,8 @@ Cuerpo opcional explicando el porqué.
   | Alcance | Para qué |
   |---|---|
   | `usuarios`, `productos`, `pedidos`, `notificaciones`, `api-gateway` | Código de ese servicio |
+  | `frontend` | Código de `frontend/` |
+  | `carga` | Tests de carga (`tests/carga/`) |
   | `infra` | `docker-compose.yml`, Dockerfiles, `.env.example` |
   | `observabilidad` | Logs, trazas, métricas, alertas y tableros, incluida la carpeta `observabilidad/` |
   | `adr` | Registros de decisiones (`docs/adr/`) |

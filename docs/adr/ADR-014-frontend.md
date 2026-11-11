@@ -12,14 +12,14 @@ Requisitos que condicionan la elección:
 - Material 3 Expressive para el diseño visual (pedido del grupo).
 - Bun como gestor de paquetes y runtime, en lugar de npm (regla de la cátedra del grupo; ver `AGENTS.md`).
 - El frontend no habla con otros grupos ni con los servicios directamente: todo entra por el api-gateway ([ADR-001](ADR-001-limites-de-los-servicios.md)).
-- Hoy `usuarios`, `productos` y `pedidos` son esqueletos, así que el MVP usa datos de ejemplo detrás de un único módulo (`frontend/src/api.js`).
+- Cuando se decidió, `usuarios`, `productos` y `pedidos` eran esqueletos, así que el MVP usó datos de ejemplo detrás de un único módulo (hoy `frontend/src/api.ts`, que ya llama al gateway).
 
 No hay una librería oficial de Google con Material 3 Expressive para web. `material-web` de Google está en pausa y solo cubre Material 3 base. Por eso la elección de librería tiene un costo: depende de un tercero.
 
 ## Decisión
 
 - **Framework:** React 19.3.0, con React Router 8.4.0 para las rutas. Construido con Vite 8.3.4.
-- **Componentes:** [material-esm](https://github.com/material-esm/material) (fork de `material-web`), fijado al tag `v3.3.11` en `frontend/package.json`. Se importan los componentes que se usan, uno por uno, desde `main.jsx`.
+- **Componentes:** [material-esm](https://github.com/material-esm/material) (fork de `material-web`), fijado al tag `v3.3.11` en `frontend/package.json`. Se importan los componentes que se usan, uno por uno, desde `main.tsx`.
 - **Gestor y runtime:** Bun 1.4.3. `bun.lock` queda versionado.
 - **Servidor de producción:** un servidor de Bun (`frontend/servidor.ts`) que sirve la app compilada y reenvía `/api/*` al api-gateway. Con esto el navegador habla con un solo origen y no hace falta CORS.
 - **Datos:** `src/api.ts` es el único punto de acceso a datos. Llama a los servicios por `/api` y traduce sus respuestas a los tipos de las pantallas.
@@ -41,10 +41,10 @@ No hay una librería oficial de Google con Material 3 Expressive para web. `mate
 
 - Dependemos de un fork de material-esm sin respaldo de Google. Lo fijamos a un tag. Si el fork se abandona, se pasa a la alternativa de tokens propios: se cambian los componentes, no el framework ni las pantallas.
 - Algunos componentes de material-esm tienen APIs distintas a las de Material Web original (por ejemplo, `md-button` reemplaza a los botones por variante). Se documentan en el código donde se usan.
-- Los datos de ejemplo significan que el MVP no valida la integración real. Eso se demuestra cuando `pedidos` y `productos` tengan implementación.
+- Los datos de ejemplo del MVP no validaban la integración real. Se reemplazaron por las llamadas al gateway cuando `pedidos` y `productos` estuvieron implementados.
 - Las llamadas a la API pasan por el api-gateway, como pide el enunciado (sección 4.1).
 - Las imágenes Docker del frontend (`oven/bun`) y las dependencias del tag se fijan con versión exacta; antes de elegir cada tag se verifica que tenga al menos dos semanas publicado (`AGENTS.md`).
 
 ## Limitaciones conocidas
 
-- Sin WebSocket (B2) ni tests e2e (B1).
+- Sin tests e2e (B1). El tiempo real (B2) está en [ADR-018](ADR-018-tiempo-real.md).
