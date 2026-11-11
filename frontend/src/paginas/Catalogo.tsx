@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { buscarProductos, listarCategorias } from '../api.ts'
+import { buscarProductos, ErrorDeApi, listarCatalogo, listarCategorias } from '../api.ts'
 import TarjetaProducto from '../componentes/TarjetaProducto.tsx'
 import type { Categoria, FiltrosCatalogo, PaginaDeProductos } from '../tipos.ts'
 import { mensajeDe, valorDe } from '../ayudas.ts'
@@ -12,6 +12,7 @@ export default function Catalogo() {
   const [resultado, setResultado] = useState<PaginaDeProductos>({ items: [], total: 0, pagina: 1, porPagina: 20 })
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [error, setError] = useState('')
+  const [sinBusqueda, setSinBusqueda] = useState(false)
   const [cargando, setCargando] = useState(true)
 
   useEffect(() => {
@@ -23,9 +24,17 @@ export default function Catalogo() {
     let vigente = true
     setCargando(true)
     buscarProductos(filtros)
-      .then(encontrados => {
+      .then(encontrados => ({ encontrados, desdeBusqueda: true }))
+      .catch(async errorBusqueda => {
+        // Si Meilisearch no responde, se sigue comprando con el listado por categoría (ADR-008).
+        if (!(errorBusqueda instanceof ErrorDeApi) || errorBusqueda.codigo !== 'busqueda_no_disponible') throw errorBusqueda
+        const categoriaId = categorias.find(categoria => categoria.nombre === filtros.categoria)?.id ?? ''
+        return { encontrados: await listarCatalogo(categoriaId, filtros.pagina), desdeBusqueda: false }
+      })
+      .then(({ encontrados, desdeBusqueda }) => {
         if (!vigente) return
         setError('')
+        setSinBusqueda(!desdeBusqueda)
         setResultado(encontrados)
       })
       .catch(errorBusqueda => vigente && setError(mensajeDe(errorBusqueda)))
@@ -33,7 +42,7 @@ export default function Catalogo() {
     return () => {
       vigente = false
     }
-  }, [filtros])
+  }, [filtros, categorias])
 
   const cambiar = (cambios: Partial<Filtros>) => setFiltros(anteriores => ({ ...anteriores, ...cambios, pagina: 1 }))
   const hayMasPaginas = filtros.pagina * resultado.porPagina < resultado.total
@@ -66,6 +75,7 @@ export default function Catalogo() {
       </div>
 
       {error && <p className="aviso-error">{error}</p>}
+      {sinBusqueda && <p role="status">La búsqueda no está disponible por ahora: se muestra el catálogo por categoría, sin los demás filtros.</p>}
       {!cargando && resultado.items.length === 0 && !error && <p>No hay productos con esos filtros.</p>}
 
       {/* Esqueletos solo en la primera carga: al buscar quedan las tarjetas anteriores hasta que llega el resultado. */}

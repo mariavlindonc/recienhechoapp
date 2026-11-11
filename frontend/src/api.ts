@@ -128,6 +128,14 @@ export async function buscarProductos({ texto = '', categoria = '', precioMaximo
   return { items: respuesta.productos.map(aProducto), total: respuesta.total, pagina: respuesta.pagina, porPagina: respuesta.porPagina }
 }
 
+// Listado del catálogo desde MySQL, para cuando la búsqueda no responde (ADR-008).
+export async function listarCatalogo(categoriaId = '', pagina = 1): Promise<PaginaDeProductos> {
+  const parametros = new URLSearchParams({ pagina: String(pagina) })
+  if (categoriaId) parametros.set('categoria', categoriaId)
+  const respuesta = await pedir<PaginaDeApi>(`/productos?${parametros}`)
+  return { items: respuesta.productos.map(aProducto), total: respuesta.total, pagina: respuesta.pagina, porPagina: respuesta.porPagina }
+}
+
 export async function obtenerProducto(id: string): Promise<Producto | null> {
   try {
     return aProducto(await pedir<ProductoDeApi>(`/productos/${encodeURIComponent(id)}`))

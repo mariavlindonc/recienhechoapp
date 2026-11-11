@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { aPedido, aProducto, buscarProductos, cancelarPedido, cargarStock, crearPedido, ErrorDeApi, esperaParaReconectar, ingresar, listarEspeciales, listarMisPedidos, listarPendientes, cerrarSesion, rechazarEspecial, responderCotizacion, seguirPedidos, TRANSICIONES } from './api.ts'
+import { aPedido, aProducto, buscarProductos, listarCatalogo,cancelarPedido, cargarStock, crearPedido, ErrorDeApi, esperaParaReconectar, ingresar, listarEspeciales, listarMisPedidos, listarPendientes, cerrarSesion, rechazarEspecial, responderCotizacion, seguirPedidos, TRANSICIONES } from './api.ts'
 
 // sessionStorage no existe en bun test: alcanza con un mapa.
 const guardado = new Map<string, string>()
@@ -54,6 +54,17 @@ test('la búsqueda manda los filtros como los espera productos (ADR-008)', async
   const url = new URL(pedidos[0]!.url, 'http://local')
   expect(url.pathname).toBe('/api/productos/busqueda')
   expect(Object.fromEntries(url.searchParams)).toEqual({ q: 'limón', pagina: '1', disponible: 'true', categoria: 'Cítricos', precioMax: '900000', aptoCeliacos: 'true', orden: 'precio_asc' })
+  expect(pagina.items[0]!.nombre).toBe('Budín de limón')
+})
+
+test('sin búsqueda, el catálogo se lista por categoría desde productos (ADR-008)', async () => {
+  const pedidos = responder(200, { productos: [productoDeApi], pagina: 2, porPagina: 20, total: 21 })
+
+  const pagina = await listarCatalogo('7', 2)
+
+  const url = new URL(pedidos[0]!.url, 'http://local')
+  expect(url.pathname).toBe('/api/productos')
+  expect(Object.fromEntries(url.searchParams)).toEqual({ pagina: '2', categoria: '7' })
   expect(pagina.items[0]!.nombre).toBe('Budín de limón')
 })
 
