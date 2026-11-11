@@ -18,7 +18,7 @@ Separamos por capacidad de negocio. Cada servicio es el único dueño de sus dat
 |---|---|---|
 | usuarios | Registro, login y roles (comprador o vendedor) | Cuentas, roles, contraseñas hasheadas |
 | productos | Catálogo, búsqueda y recetario | Productos, precios en centavos, imágenes, recetas |
-| pedidos | Pedidos inmediatos, programados y especiales; calendario y capacidad de producción | Pedidos y sus estados, cupos por día |
+| pedidos | Pedidos inmediatos, programados y especiales; calendario y capacidad de producción | Pedidos y sus estados, cupos por día, stock propio y reservas de insumos |
 | notificaciones | Envío de avisos a compradores y a usuarios de otros grupos | Notificaciones, estados de envío, claves de idempotencia |
 | api-gateway | Punto de entrada, autenticación y ruteo | Ninguno |
 
@@ -27,13 +27,13 @@ Criterios:
 - **La capacidad de producción va en `pedidos`.** Reservar el cupo del día y crear el pedido tienen que pasar juntos o no pasar: si estuvieran en servicios distintos haría falta una transacción distribuida. Por eso el calendario vive donde se crean los pedidos.
 - **El pedido guarda una copia del producto (nombre y precio).** Cambiar un precio no puede alterar pedidos ya hechos, y así mostrar un pedido no depende de `productos`.
 - **Notificaciones es un servicio propio.** Lo usan `pedidos` y otros grupos, tiene otro ritmo (envío en segundo plano, reintentos contra un servidor de correo) y otro contrato público. Si estuviera adentro de `pedidos`, una caída del correo o un pico de pedidos externos afectaría la venta.
-- **El consumo de inventario lo hace `pedidos`**, porque es quien confirma pedidos y necesita reservar insumos. No pasa por el gateway ni por el frontend.
+- **El consumo de inventario lo hace `pedidos`**, porque es quien reserva los insumos de cada pedido y los consume al pasar a producción ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)). No pasa por el gateway ni por el frontend.
 
 Relaciones:
 
 - Frontend → api-gateway → usuarios, productos, pedidos.
 - pedidos → productos (síncrono: precio y receta al crear el pedido).
-- pedidos → inventario del otro grupo (síncrono, al confirmar).
+- pedidos → inventario del otro grupo (consumo en segundo plano al pasar a producción; carga de stock síncrona).
 - pedidos → notificaciones (asíncrono, por eventos de cambio de estado).
 - Otros grupos → api-gateway → notificaciones.
 
@@ -58,4 +58,4 @@ Con `notificaciones` implementado, los límites se sostienen:
 - Escribir búsqueda, caché e inventario ([ADR-008](ADR-008-busqueda.md), [ADR-009](ADR-009-cache.md), [ADR-010](ADR-010-consumo-de-inventario.md)) no obligó a compartir datos: el índice y la caché son de `productos`, y el consumo de inventario queda en `pedidos`.
 - Lo que cambia: este ADR anticipaba a `pedidos` como candidato al balanceo de carga. Se balancea `notificaciones`, porque es el servicio que ya está implementado y el que va a recibir tráfico externo; los motivos están en [ADR-012](ADR-012-balanceo-de-carga.md).
 
-Queda por validar con `pedidos` funcionando que el calendario de producción no necesite separarse.
+Con `pedidos` funcionando, el calendario de producción no necesitó separarse.

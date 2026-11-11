@@ -33,7 +33,7 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 
 1. **El chequeo pasivo solo saca una instancia si el servicio tiene dos o más.** Con una sola no hay otra a la cual mandar el tráfico, y como esa instancia no tiene chequeo activo, una vez afuera no volvería a entrar aunque el servicio se recupere. Con una sola instancia caída, las solicitudes esperan el timeout de 3 s y responden `503`, y cuando el servicio vuelve se atiende solo. Se descartó sumar chequeo activo a todos los servicios: con una sola instancia, la ganancia es fallar 3 s antes.
 2. **El chequeo activo corre solo para los servicios con dos o más instancias:** hoy, `notificaciones`. **Regla:** el servicio que pase a tener dos o más instancias tiene que exponer `/vivo` y entrar al chequeo activo.
-3. **El intervalo (5 s) y el timeout (1 s) del chequeo van como variables de entorno en `configuracion.go`**, con esos valores por defecto, como pide la convención de AGENTS.md. Hoy son constantes en `main.go`; el cambio de código queda en una issue aparte.
+3. **El intervalo (5 s) y el timeout (1 s) del chequeo van como variables de entorno en `configuracion.go`**, como pide la convención de AGENTS.md: `CHEQUEO_INTERVALO` y `CHEQUEO_TIEMPO_MAXIMO`. En Render el timeout sube a 60 s (`render.yaml`), para esperar a que notificaciones despierte.
 
 **Observabilidad:**
 
@@ -64,7 +64,7 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 | **Afinidad por grupo o IP** (*hash*) | Cada grupo siempre a la misma instancia | Haría exacto el límite de 60 solicitudes por minuto | Con un solo grupo consumidor, todo el tráfico externo iría a una sola instancia: no habría balanceo |
 | **Por latencia** | A la instancia que viene respondiendo más rápido | La que mejor se adapta | Compleja de implementar y de explicar; no la justifica el volumen esperado |
 
-Lo que más protege no es la estrategia sino la verificación de disponibilidad: con cualquiera de ellas, sin los chequeos de `/vivo`, una instancia caída se lleva su parte del tráfico.
+Lo que más protege es la verificación de disponibilidad, más que la estrategia: con cualquiera de ellas, sin los chequeos de `/vivo`, una instancia caída se lleva su parte del tráfico.
 
 ## Consecuencias
 

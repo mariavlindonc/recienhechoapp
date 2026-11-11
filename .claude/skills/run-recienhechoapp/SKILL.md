@@ -10,7 +10,7 @@ Todas las rutas son relativas a la raíz del repo. Los comandos son para Git Bas
 ## Prerequisitos
 
 - Go 1.27, Bun 1.4 y Chrome o Edge instalados (`navegador.ts` los busca solos; si no, `NAVEGADOR=/ruta/al/chrome`).
-- Docker Desktop (`docker` en el PATH de Git Bash, con la integración con Ubuntu apagada, como en [DEMO.md](../../../docs/DEMO.md)). Los scripts usan `docker` si existe y, si no, caen a `wsl -e docker`; ese Docker de Ubuntu es otro motor, con otros contenedores y volúmenes.
+- Docker Desktop (`docker` en el PATH de Git Bash, con la integración con Ubuntu apagada). Los scripts usan `docker` si existe y, si no, caen a `wsl -e docker`; ese Docker de Ubuntu es otro motor, con otros contenedores y volúmenes.
 
 ## Correr la app completa (camino para agentes)
 

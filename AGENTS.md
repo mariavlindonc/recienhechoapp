@@ -11,6 +11,8 @@ backend/    api-gateway, usuarios, productos, pedidos, notificaciones (cada uno 
 frontend/   interfaz web en React 19, TypeScript, material-esm y Bun (ADR-014); habla con los servicios solo por el api-gateway
 docs/       arquitectura, ADRs, contratos, postmortems
 observabilidad/  configuración de Prometheus (lectura de métricas y alertas) y de Grafana (fuentes y tablero)
+tests/carga/     tests de carga con k6 y sus resultados (ADR-013)
+render.yaml      despliegue de la capacidad de notificaciones en Render (ADR-013)
 ```
 
 ## Comandos
@@ -55,7 +57,7 @@ Las herramientas de desarrollo (MongoDB, MySQL, Redis, Meilisearch, RabbitMQ, Ma
 | Mailpit (`axllent/mailpit`) | Buzón falso para desarrollo ([ADR-005](docs/adr/ADR-005-envio-de-email.md)) | `MAILPIT_SMTP_PORT` (1025) y `MAILPIT_WEB_PORT` (8025) | http://localhost:8025 |
 | Prometheus (`prom/prometheus:v3.15.0`) | Lee `/metrics` de los servicios (puerto interno 9464) y evalúa las alertas ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `PROMETHEUS_WEB_PORT` (9090) | http://localhost:9090 |
 | Grafana (`grafana/grafana:13.2.3`) | Tablero de métricas y acceso a las trazas ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `GRAFANA_WEB_PORT` (3000) | http://localhost:3000 (sin usuario, solo lectura; admin con `GRAFANA_ADMIN_CLAVE`) |
-| Jaeger (`jaegertracing/jaeger:2.22.0`) | Trazas de api-gateway y notificaciones por OTLP ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `JAEGER_WEB_PORT` (16686) | http://localhost:16686 |
+| Jaeger (`jaegertracing/jaeger:2.22.0`) | Trazas de todos los servicios por OTLP ([ADR-006](docs/adr/ADR-006-observabilidad.md)) | `JAEGER_WEB_PORT` (16686) | http://localhost:16686 |
 | k6 (`grafana/k6:2.2.0`) | Tests de carga contra el api-gateway, con el perfil `carga` del compose; manda los resultados a Prometheus ([ADR-013](docs/adr/ADR-013-capacidad-y-costos.md), [tests/carga](tests/carga/README.md)) | Sin puerto | — |
 | Prism (`stoplight/prism:5`) | Mock del contrato de notificaciones ([ADR-004](docs/adr/ADR-004-contrato-de-notificaciones.md)) | `NOTIFICACIONES_MOCK_PORT` (4010) | http://localhost:4010/notificaciones |
 | Prism (`stoplight/prism:5`) | Mock del contrato del proveedor de inventario ([ADR-020](docs/adr/ADR-020-reserva-y-consumo-de-insumos.md)) | `INVENTARIO_MOCK_PORT` (4011) | http://localhost:4011/api/products (cualquier `X-API-Key`) |

@@ -4,13 +4,13 @@
 
 Reemplazado por [ADR-020](ADR-020-reserva-y-consumo-de-insumos.md) el 06/11/2026.
 
-Propuesto (Entrega 2). Todavía no tenemos el contrato del grupo proveedor: la parte que depende de él se completa cuando llegue.
+Lo que sigue es el modelo anterior, que queda como registro.
 
 Las tres decisiones sobre los pedidos que el inventario no llega a confirmar se tomaron el 22/10/2026 en [#23](https://github.com/mariavlindonc/recienhechoapp/issues/23).
 
 **Operaciones del proveedor** (30/10/2026, [#77](https://github.com/mariavlindonc/recienhechoapp/issues/77)): consumimos dos operaciones, **reducir stock** y **aumentar stock**. La versión 2.0.0 de su contrato ([copia](../contracts/inventario/README.md)) es solo de lectura, así que esperamos la versión nueva que las agregue. Lo que depende de esa versión queda en [Pendientes hasta el contrato nuevo](#pendientes-hasta-el-contrato-nuevo).
 
-> **En revisión ([#84](https://github.com/mariavlindonc/recienhechoapp/issues/84)):** traducir reservar a reducir y liberar a aumentar mezcla la reserva de insumos con su consumo efectivo. Se está repensando el flujo para separarlos (reservar y liberar al confirmar y cancelar, reducir cuando el pedido entra en producción), y depende de cómo quede el contrato nuevo. Cuando se decida, este ADR se reemplaza.
+> **Revisado en [#84](https://github.com/mariavlindonc/recienhechoapp/issues/84):** traducir reservar a reducir y liberar a aumentar mezclaba la reserva de insumos con su consumo efectivo. El flujo nuevo los separa y está en [ADR-020](ADR-020-reserva-y-consumo-de-insumos.md).
 
 ## Contexto
 

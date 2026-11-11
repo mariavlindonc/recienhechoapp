@@ -72,7 +72,7 @@ Más adelante, el mapa del delivery sería otro tipo (por ejemplo, `{ "tipo": "u
 - El tiempo real no depende de RabbitMQ: con el broker caído, el comprador igual ve los cambios en vivo, y los mails salen cuando vuelve.
 - Los compradores conectados viven en la memoria de `pedidos`: un reinicio corta las conexiones, y la pantalla se reconecta sola y vuelve a pedir el estado por HTTP.
 - El gateway y el servidor del frontend necesitan un caso especial para esta ruta: sin el corte de 3 s y con el puente de WebSocket.
-- Con el formato con `tipo`, sumar el mapa del delivery no cambia el protocolo. El estado `en_camino` (entre `listo` y `entregado`, opcional, lo provoca el vendedor) se agrega aparte: es el momento en que tendría sentido mandar la ubicación.
+- Con el formato con `tipo`, sumar el mapa del delivery no cambia el protocolo. El estado `en_camino` (entre `listo` y `entregado`, opcional, lo provoca el vendedor) ya existe: es el momento en que tendría sentido mandar la ubicación.
 - Para los tests: el adaptador se prueba con un servidor de prueba y un cliente de `coder/websocket`, y el filtro por comprador, con eventos de dos compradores distintos.
 
 ## Validación (implementación, 06/11/2026)
