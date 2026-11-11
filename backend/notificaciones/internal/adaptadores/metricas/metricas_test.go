@@ -64,6 +64,20 @@ func TestLosEnviosSeCuentanPorResultado(prueba *testing.T) {
 	}
 }
 
+func TestElCircuitoDelCorreoSePublicaComoNumero(prueba *testing.T) {
+	registro := metricas.Nuevas()
+	if publicado := leerMetricas(prueba, registro); !strings.Contains(publicado, "notificaciones_correo_circuito 0") {
+		prueba.Fatal("el gauge tiene que existir en 0 (cerrado) desde el arranque")
+	}
+
+	for estado, esperado := range map[puertos.EstadoCircuito]string{puertos.CircuitoSemiabierto: "1", puertos.CircuitoAbierto: "2", puertos.CircuitoCerrado: "0"} {
+		registro.MarcarCircuitoDelCorreo(estado)
+		if publicado := leerMetricas(prueba, registro); !strings.Contains(publicado, "notificaciones_correo_circuito "+esperado) {
+			prueba.Errorf("con el circuito %s, el gauge tenía que valer %s", estado, esperado)
+		}
+	}
+}
+
 func TestElMiddlewareMideCadaSolicitudPorRuta(prueba *testing.T) {
 	gin.SetMode(gin.TestMode)
 	registro := metricas.Nuevas()

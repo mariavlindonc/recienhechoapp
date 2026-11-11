@@ -1,0 +1,42 @@
+  █ THRESHOLDS 
+
+    http_req_duration{name:GET /productos?categoria}
+    ✓ 'p(95)<300' p(95)=2.88ms
+
+    http_req_duration{name:GET /productos/:id}
+    ✓ 'p(95)<300' p(95)=2.33ms
+
+    http_req_failed
+    ✓ 'rate<0.01' rate=0.00%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 182232  303.283721/s
+    checks_succeeded...: 100.00% 182232 out of 182232
+    checks_failed......: 0.00%   0 out of 182232
+
+    ✓ listado 200
+    ✓ detalle 200
+
+    HTTP
+    http_req_duration.....................: avg=1.42ms min=410.57µs med=1.29ms max=14.71ms p(90)=2.24ms p(95)=2.65ms
+      { expected_response:true }..........: avg=1.42ms min=410.57µs med=1.29ms max=14.71ms p(90)=2.24ms p(95)=2.65ms
+      { name:GET /productos?categoria }...: avg=1.65ms min=524.89µs med=1.5ms  max=9.57ms  p(90)=2.45ms p(95)=2.88ms
+      { name:GET /productos/:id }.........: avg=1.19ms min=410.57µs med=1.01ms max=14.71ms p(90)=1.93ms p(95)=2.33ms
+    http_req_failed.......................: 0.00%  0 out of 182234
+    http_reqs.............................: 182234 303.28705/s
+
+    EXECUTION
+    iteration_duration....................: avg=1s     min=1s       med=1s     max=1.02s   p(90)=1s     p(95)=1s    
+    iterations............................: 91116  151.641861/s
+    vus...................................: 200    min=10          max=200
+    vus_max...............................: 200    min=200         max=200
+
+    NETWORK
+    data_received.........................: 93 MB  154 kB/s
+    data_sent.............................: 22 MB  37 kB/s
+
+
+
+

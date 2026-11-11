@@ -18,6 +18,7 @@ Hay que decidir contra qué servidor de correo habla `notificaciones` en desarro
 - **Protocolo:** SMTP genérico, con `net/smtp` de la librería estándar de Go. Servidor, puerto, usuario, clave y remitente salen de variables de entorno (`SMTP_HOST`, `SMTP_PUERTO`, `SMTP_USUARIO`, `SMTP_CLAVE`, `SMTP_REMITENTE`): cambiar de servidor no toca código.
 - **Desarrollo y tests: Mailpit** (`axllent/mailpit`), un buzón falso que atrapa los mails y los muestra en una web. Es el valor por defecto del `docker-compose` y de `.env.example`.
 - **Demo con entrega real: Gmail** (`smtp.gmail.com:587`, STARTTLS) con una cuenta creada para el proyecto y una **contraseña de aplicación** (requiere verificación en 2 pasos). Para usarlo se cambian las variables `SMTP_*` en el `.env` de quien hace la demo. La contraseña nunca entra al repositorio.
+- **Render: Brevo** (`smtp-relay.brevo.com:2525`, STARTTLS) con una *SMTP key* de Brevo en `SMTP_CLAVE`. Los web services gratis de Render no pueden conectarse a los puertos 25, 465 ni 587, así que Gmail no anda ahí; Brevo acepta el 2525 ([ADR-013](ADR-013-capacidad-y-costos.md)). El plan gratis manda 300 mails por día. Solo cambian las variables `SMTP_*`: el código es el mismo. Falta probar desde Render que el 2525 sale.
 - Los tests unitarios no usan ningún servidor: prueban el envío contra un remitente falso (el puerto `Remitente` del servicio).
 
 ## Alternativas consideradas

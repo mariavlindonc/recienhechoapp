@@ -15,9 +15,10 @@ type configuracion struct {
 	puerto           string
 	puertoMetricas   string
 	direccionMongo   string
+	direccionRedis   string // en lugar de MongoDB, para el plan gratis de Render (ADR-013)
+	direccionRabbit  string // vacía: no consume eventos de pedidos (ADR-013)
 	baseMongo        string
 	clavesAPI        map[string]string
-	limitePorMinuto  int
 	intervaloDeEnvio time.Duration
 	smtp             smtp.Configuracion
 }
@@ -58,18 +59,24 @@ func leerConfiguracion(buscar func(nombre string) string) (configuracion, error)
 	leida := configuracion{
 		puerto:           conValorPorDefecto("PORT", "8084"),
 		puertoMetricas:   conValorPorDefecto("METRICAS_PORT", "9464"),
-		direccionMongo:   obligatoria("MONGO_URI"),
+		direccionMongo:   buscar("MONGO_URI"),
+		direccionRedis:   buscar("REDIS_URL"),
 		baseMongo:        conValorPorDefecto("MONGO_BASE", "notificaciones"),
-		limitePorMinuto:  entero("NOTIFICACIONES_LIMITE_POR_MINUTO", "60"),
+		direccionRabbit:  buscar("RABBITMQ_URL"),
 		intervaloDeEnvio: duracion("NOTIFICACIONES_INTERVALO_DE_ENVIO", "5s"),
 		smtp: smtp.Configuracion{
-			Host:         obligatoria("SMTP_HOST"),
-			Puerto:       entero("SMTP_PUERTO", "587"),
-			Usuario:      buscar("SMTP_USUARIO"),
-			Clave:        buscar("SMTP_CLAVE"),
-			Remitente:    obligatoria("SMTP_REMITENTE"),
-			TiempoMaximo: duracion("SMTP_TIEMPO_MAXIMO", "10s"),
+			Host:                 obligatoria("SMTP_HOST"),
+			Puerto:               entero("SMTP_PUERTO", "587"),
+			Usuario:              buscar("SMTP_USUARIO"),
+			Clave:                buscar("SMTP_CLAVE"),
+			Remitente:            obligatoria("SMTP_REMITENTE"),
+			TiempoMaximo:         duracion("SMTP_TIEMPO_MAXIMO", "10s"),
+			TiempoMaximoConexion: duracion("SMTP_TIEMPO_MAXIMO_CONEXION", "2s"),
 		},
+	}
+
+	if (leida.direccionMongo == "") == (leida.direccionRedis == "") {
+		problemas = append(problemas, errors.New("hay que definir MONGO_URI o REDIS_URL, una sola de las dos"))
 	}
 
 	if textoClaves := obligatoria("NOTIFICACIONES_CLAVES_API"); textoClaves != "" {

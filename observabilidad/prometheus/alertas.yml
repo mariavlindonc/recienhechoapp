@@ -19,6 +19,18 @@ groups:
           resumen: Más de 5 notificaciones fallidas en 10 minutos
           descripcion: El servidor de correo está caído o rechazando envíos. Revisar Mailpit/Gmail y los logs "envío de notificación fallido".
 
+      # ADR-011: el disyuntor cambia solo al intentar un envío, así que se apaga con la
+      # primera notificación que sale después de que vuelve el correo. Hay dos
+      # instancias, por eso max.
+      - alert: CorreoNoDisponible
+        expr: max(notificaciones_correo_circuito) > 0
+        for: 1m
+        labels:
+          severidad: aviso
+        annotations:
+          resumen: El disyuntor del servidor de correo no está cerrado
+          descripcion: El servidor de correo no responde y los envíos esperan. Revisar Mailpit/Gmail y el log "cambió el estado del disyuntor del servidor de correo".
+
       - alert: ObjetivoDeLatenciaIncumplido
         expr: slo:notificaciones_post_rapidas:ratio_1h < 0.99
         for: 5m
@@ -36,3 +48,36 @@ groups:
         annotations:
           resumen: "Prometheus no puede leer las métricas de {{ $labels.job }}"
           descripcion: El servicio está caído o no responde en el puerto de métricas.
+
+  - name: pedidos
+    rules:
+      # ADR-020: un rechazo por formato es un error nuestro o un cambio del contrato
+      # del proveedor; reintentar no lo arregla.
+      - alert: InventarioRechazaReservas
+        expr: sum(increase(pedidos_inventario_llamadas_total{resultado="rechazada"}[10m])) > 0
+        labels:
+          severidad: critica
+        annotations:
+          resumen: El inventario del proveedor rechazó una operación por un error de formato
+          descripcion: Revisar el log "llamada al inventario fallida" y el contrato en docs/contracts. Los pedidos afectados quedan marcados para el vendedor.
+
+      - alert: CircuitoDelInventarioAbierto
+        expr: pedidos_circuito_inventario{estado="abierto"} == 1
+        for: 1m
+        labels:
+          severidad: aviso
+        annotations:
+          resumen: El disyuntor del inventario está abierto
+          descripcion: El proveedor de inventario no responde. Crear pedidos sigue andando; los insumos de los pedidos en producción se descuentan cuando vuelva (ADR-020).
+
+  - name: productos
+    rules:
+      # RNF1: un cambio en un producto aparece en la búsqueda en menos de 10 s (ADR-008).
+      - alert: BusquedaAtrasada
+        expr: indice_pendiente_antiguedad_segundos > 10
+        for: 1m
+        labels:
+          severidad: aviso
+        annotations:
+          resumen: Hay cambios de productos que tardan más de 10 s en aparecer en la búsqueda
+          descripcion: Meilisearch está caído o lento. Los cambios esperan en la bandeja indice_pendiente y se aplican solos cuando vuelve; revisar el log "no se pudo reflejar cambios en la búsqueda".

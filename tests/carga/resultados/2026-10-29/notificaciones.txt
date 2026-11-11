@@ -1,0 +1,38 @@
+  █ THRESHOLDS 
+
+    http_req_duration{name:POST /notificaciones}
+    ✓ 'p(99)<300' p(99)=4.64ms
+
+    http_req_failed
+    ✓ 'rate<0.01' rate=0.00%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 182126  303.067601/s
+    checks_succeeded...: 100.00% 182126 out of 182126
+    checks_failed......: 0.00%   0 out of 182126
+
+    ✓ POST 202
+    ✓ GET 200
+
+    HTTP
+    http_req_duration.................: avg=1.78ms min=534.57µs med=1.66ms max=44.89ms p(90)=2.64ms p(95)=3.08ms
+      { expected_response:true }......: avg=1.78ms min=534.57µs med=1.66ms max=44.89ms p(90)=2.64ms p(95)=3.08ms
+      { name:POST /notificaciones }...: avg=2.08ms min=838.06µs med=1.92ms max=44.89ms p(90)=2.91ms p(95)=3.39ms
+    http_req_failed...................: 0.00%  0 out of 182126
+    http_reqs.........................: 182126 303.067601/s
+
+    EXECUTION
+    iteration_duration................: avg=1s     min=1s       med=1s     max=1.04s   p(90)=1s     p(95)=1s    
+    iterations........................: 91063  151.5338/s
+    vus...............................: 200    min=10          max=200
+    vus_max...........................: 200    min=200         max=200
+
+    NETWORK
+    data_received.....................: 62 MB  104 kB/s
+    data_sent.........................: 46 MB  77 kB/s
+
+
+
+

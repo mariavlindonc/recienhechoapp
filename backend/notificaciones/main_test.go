@@ -10,6 +10,7 @@ import (
 func variablesMinimas() map[string]string {
 	return map[string]string{
 		"MONGO_URI":                 "mongodb://localhost:27017",
+		"RABBITMQ_URL":              "amqp://localhost:5672",
 		"SMTP_HOST":                 "mailpit",
 		"SMTP_REMITENTE":            "Recién hecho <avisos@recienhecho.test>",
 		"NOTIFICACIONES_CLAVES_API": "grupo-a:clave-a",
@@ -24,10 +25,10 @@ func TestLeerConfiguracionUsaValoresPorDefecto(prueba *testing.T) {
 	if err != nil {
 		prueba.Fatalf("error inesperado: %v", err)
 	}
-	if leida.puerto != "8084" || leida.puertoMetricas != "9464" || leida.baseMongo != "notificaciones" || leida.limitePorMinuto != 60 {
+	if leida.puerto != "8084" || leida.puertoMetricas != "9464" || leida.baseMongo != "notificaciones" {
 		prueba.Errorf("valores por defecto incorrectos: %+v", leida)
 	}
-	if leida.intervaloDeEnvio != 5*time.Second || leida.smtp.Puerto != 587 || leida.smtp.TiempoMaximo != 10*time.Second {
+	if leida.intervaloDeEnvio != 5*time.Second || leida.smtp.Puerto != 587 || leida.smtp.TiempoMaximo != 10*time.Second || leida.smtp.TiempoMaximoConexion != 2*time.Second {
 		prueba.Errorf("valores por defecto incorrectos: %+v", leida)
 	}
 	if leida.clavesAPI["clave-a"] != "grupo-a" {
@@ -43,10 +44,37 @@ func TestLeerConfiguracionInformaTodosLosProblemas(prueba *testing.T) {
 	if err == nil {
 		prueba.Fatal("se esperaba un error")
 	}
-	for _, problema := range []string{"MONGO_URI", "SMTP_HOST", "SMTP_REMITENTE", "NOTIFICACIONES_CLAVES_API", "SMTP_PUERTO", "NOTIFICACIONES_INTERVALO_DE_ENVIO"} {
+	for _, problema := range []string{"MONGO_URI o REDIS_URL", "SMTP_HOST", "SMTP_REMITENTE", "NOTIFICACIONES_CLAVES_API", "SMTP_PUERTO", "NOTIFICACIONES_INTERVALO_DE_ENVIO"} {
 		if !strings.Contains(err.Error(), problema) {
 			prueba.Errorf("el error no menciona %s: %v", problema, err)
 		}
+	}
+}
+
+func TestLeerConfiguracionSinRabbitMQYConRedis(prueba *testing.T) {
+	variables := variablesMinimas()
+	delete(variables, "MONGO_URI")
+	delete(variables, "RABBITMQ_URL")
+	variables["REDIS_URL"] = "redis://localhost:6379/0"
+
+	leida, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
+
+	if err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+	if leida.direccionRedis == "" || leida.direccionRabbit != "" {
+		prueba.Errorf("configuración leída: %+v", leida)
+	}
+}
+
+func TestLeerConfiguracionNoAceptaMongoYRedisALaVez(prueba *testing.T) {
+	variables := variablesMinimas()
+	variables["REDIS_URL"] = "redis://localhost:6379/0"
+
+	_, err := leerConfiguracion(func(nombre string) string { return variables[nombre] })
+
+	if err == nil || !strings.Contains(err.Error(), "una sola de las dos") {
+		prueba.Errorf("se esperaba el error de almacenamiento doble, dio: %v", err)
 	}
 }
 

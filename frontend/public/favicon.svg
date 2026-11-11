@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>Recién hecho</title>
+  <style>
+    .papel { fill: #C8A97E; stroke: #2B2117; }
+    .tinta { fill: #2B2117; }
+    @media (prefers-color-scheme: dark) {
+      .papel { stroke: #E3C9A2; }
+    }
+  </style>
+  <!-- Etiqueta de papel madera con la punta cortada, como las que atan a cada budín. -->
+  <path class="papel" d="M1.5 16 L9 3.5 H30.5 V28.5 H9 Z" stroke-width="1.5" stroke-linejoin="round" />
+  <text class="tinta" x="19" y="24" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="22" font-weight="700">R</text>
+</svg>

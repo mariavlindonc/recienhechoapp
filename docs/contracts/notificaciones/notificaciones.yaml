@@ -1,19 +1,23 @@
 openapi: 3.1.0
 info:
   title: Recién hecho - Notificaciones
-  version: 1.0.0
+  version: 1.0.1
   description: |
     Capacidad publicada por Recién hecho para que otros sistemas envíen notificaciones
     por email a sus usuarios. El envío es asíncrono: el POST acepta la notificación
     (202) y el resultado se consulta con el GET.
 
-    Documentación de uso, errores y versionado en docs/contracts/README.md.
+    Documentación de uso, errores y versionado en docs/contracts/notificaciones/README.md.
     La versión vigente es la de `info.version` (versionado semántico).
 servers:
-  - url: http://localhost:4010
-    description: Mock local (Prism, `docker compose up`)
+  - url: https://recienhecho-api-gateway.onrender.com
+    description: Implementación real (Render, plan gratis; se duerme a los 15 minutos sin uso)
+  - url: https://recienhecho-notificaciones-mock.onrender.com
+    description: Mock público (Prism), sin estado
   - url: http://localhost:8080
-    description: API Gateway local (implementación real)
+    description: API Gateway local (desarrollo del equipo de Recién hecho)
+  - url: http://localhost:4010
+    description: Mock local (desarrollo del equipo de Recién hecho)
 
 security:
   - claveApi: []
@@ -264,7 +268,7 @@ components:
             codigo: limite_superado
             mensaje: Límite de 60 solicitudes por minuto superado.
     NoDisponible:
-      description: El servicio no está disponible. Reintentar con espera exponencial usando la misma `Idempotency-Key`.
+      description: El servicio no está disponible, o está arrancando después de estar dormido. Reintentar con espera exponencial usando la misma `Idempotency-Key`.
       content:
         application/json:
           schema:

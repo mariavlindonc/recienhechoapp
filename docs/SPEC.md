@@ -15,7 +15,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 | Comprador | Persona que encarga productos y sigue sus pedidos |
 | Vendedor | La pastelería: administra el catálogo, el recetario y la producción |
 | Grupo consumidor | Sistema de otro grupo que usa nuestra capacidad de notificaciones |
-| Grupo proveedor de inventario | Sistema de otro grupo que nos informa y reserva el stock de insumos |
+| Grupo proveedor de inventario | Sistema de otro grupo con el stock de insumos, que podemos aumentar y reducir |
 
 ## Funcionalidades del comprador
 
@@ -40,7 +40,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 | VE3 | Definir la capacidad de producción de cada día |
 | VE4 | Ver el calendario de producción: qué hay que hacer cada día |
 | VE5 | Cotizar, aceptar o rechazar pedidos especiales |
-| VE6 | Avanzar el estado de los pedidos (en producción, listo, entregado) |
+| VE6 | Avanzar el estado de los pedidos (en producción, listo, en camino si se envía a domicilio, entregado) |
 
 ## Reglas de negocio
 
@@ -48,14 +48,21 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 |---|---|
 | R1 | Un pedido se acepta solo si la capacidad del día alcanza. Dos pedidos simultáneos no pueden quedarse con el mismo cupo, y un pedido no puede reservar dos veces. |
 | R2 | Cada producto tiene una anticipación mínima (ej. una torta de casamiento, 7 días). No se aceptan pedidos con menos anticipación. |
-| R3 | Un pedido se confirma cuando el inventario del proveedor reserva los insumos de la receta. Si el proveedor no responde, el pedido queda `pendiente_confirmacion` y no se rechaza. |
+| R3 | Un pedido queda `pendiente_confirmacion` hasta que el vendedor lo confirma. Al encargarlo se reservan los insumos de la receta en el stock propio, aunque no alcancen: la reserva nunca rechaza un pedido, y el vendedor ve qué insumos faltan y decide. Los insumos se descuentan en el inventario del proveedor al pasar a `en_produccion` ([ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md)). |
 | R4 | El precio queda fijado al crear el pedido; cambios posteriores del catálogo no lo afectan. |
 | R5 | Los montos se manejan en centavos (enteros), nunca con decimales. |
 | R6 | Un pedido solo pasa por las transiciones válidas (ver [estados de un pedido](ARCHITECTURE.md#estados-de-un-pedido)). No se puede cancelar en producción ni entregar algo que no está listo. |
-| R7 | Cancelar libera el cupo del día y los insumos reservados. |
+| R7 | Cancelar devuelve el cupo del día y la reserva de insumos, sin llamar al proveedor. |
 | R8 | Una cotización de pedido especial vence a las 48 h si el comprador no la acepta. |
 
 ## Criterios de aceptación
+
+**C1. Registrarse e iniciar sesión** (confirmados el 28/10/2026 con [ADR-016](adr/ADR-016-autenticacion.md))
+- Dado un email ya registrado, cuando alguien se registra con ese email, entonces se rechaza el registro.
+- Dada una contraseña incorrecta, cuando el usuario intenta iniciar sesión, entonces no entra, y el mensaje no dice si el email existe.
+- Dado un usuario sin sesión, cuando intenta ver sus pedidos o encargar, entonces se le pide iniciar sesión.
+- Dado un comprador con sesión, cuando pide el pedido de otro comprador, entonces el sistema responde como si no existiera.
+- Dado un comprador con sesión, cuando intenta una operación del vendedor (por ejemplo, definir la capacidad), entonces se rechaza.
 
 **C3. Buscar productos**
 - Dado un catálogo con productos de varias categorías, cuando el comprador filtra por "tortas" y ordena por precio ascendente, entonces ve solo tortas, de la más barata a la más cara, de a 20 por página.
@@ -65,15 +72,26 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 - Dado un día con capacidad 10 y 9 reservados, cuando dos compradores piden 1 unidad al mismo tiempo, entonces se acepta uno solo y el otro recibe "sin cupo para ese día".
 - Dado un producto con anticipación mínima de 3 días, cuando el comprador lo pide para mañana, entonces el pedido se rechaza indicando la primera fecha posible.
 - Dado que el comprador reintenta el mismo pedido porque se cortó la conexión, cuando llega el segundo intento, entonces no se crea un pedido duplicado ni se reserva el cupo dos veces.
-- Dado que el inventario del proveedor no responde, cuando el comprador hace un pedido, entonces el pedido queda `pendiente_confirmacion` y el comprador lo ve así.
+- Dado un pedido cuyos insumos no alcanzan en el stock propio, cuando el comprador lo hace, entonces el pedido se toma igual, queda `pendiente_confirmacion` y el vendedor lo ve con una nota de lo que falta.
+- Dado que el inventario del proveedor no responde, cuando el comprador hace un pedido, entonces el pedido se toma igual y queda `pendiente_confirmacion`: crear un pedido no llama al proveedor.
+- Dado un pedido `pendiente_confirmacion`, cuando el vendedor lo confirma, entonces pasa a `confirmado`, aunque falten insumos.
+- Dado un pedido `confirmado`, cuando el vendedor lo pasa a `en_produccion`, entonces el cambio no espera al proveedor y sus insumos se descuentan en segundo plano; si el proveedor no responde, se reintenta sin descontar dos veces.
 
 **C6 y VE5. Pedido especial**
 - Dado un pedido especial solicitado, cuando el vendedor lo cotiza, entonces el comprador recibe un email con el precio y puede aceptarlo dentro de las 48 h.
 - Dado un pedido especial cotizado hace más de 48 h, cuando el comprador intenta aceptarlo, entonces se le informa que la cotización venció.
+- Dado un pedido especial cotizado para una fecha que ya pasó, cuando el comprador intenta aceptarlo, entonces se le informa que la cotización venció y no se reserva cupo.
+- Dado un pedido especial solicitado y todavía sin cotizar, cuando el comprador lo cancela, entonces pasa a `cancelado` y deja de figurar entre los especiales del vendedor.
+- Dado un pedido especial solicitado que la pastelería no puede hacer, cuando el vendedor lo rechaza con un mensaje, entonces pasa a `cancelado` y el comprador recibe un email con ese mensaje.
 
 **C8. Cancelar**
-- Dado un pedido `confirmado`, cuando el comprador lo cancela, entonces pasa a `cancelado` y el cupo del día vuelve a estar disponible.
+- Dado un pedido `confirmado`, cuando el comprador lo cancela, entonces pasa a `cancelado`, el cupo del día vuelve a estar disponible y los insumos reservados vuelven al stock propio sin llamar al proveedor.
 - Dado un pedido `en_produccion`, cuando el comprador intenta cancelarlo, entonces se le informa que ya no se puede.
+
+**VE6. Avanzar estados**
+- Dado un pedido `listo` que se envía a domicilio, cuando el vendedor lo marca `en_camino`, entonces el comprador recibe un email avisándole que salió, y después el vendedor lo puede marcar `entregado`.
+- Dado un pedido `listo` que se retira en el local, cuando el vendedor lo marca `entregado`, entonces pasa directo, sin pasar por `en_camino`.
+- Dado un pedido `en_camino`, cuando alguien intenta cancelarlo, entonces se le informa que ya no se puede.
 
 **C9. Avisos**
 - Dado un pedido que pasa a `listo`, cuando el cambio se guarda, entonces el comprador recibe un único email aunque el evento se entregue más de una vez.
@@ -86,7 +104,7 @@ La acción principal es **encargar un pedido**. No es un alta más: tiene que re
 | Integración | Rol | Uso |
 |---|---|---|
 | Notificaciones | **Publicamos** | Otros sistemas nos piden enviar emails a sus usuarios. Contrato y documentación en [contracts](contracts/README.md). |
-| Inventario | **Consumimos** | Al confirmar un pedido, `pedidos` consulta y reserva los insumos de la receta. Detalle en D9 cuando el otro grupo publique su contrato. |
+| Inventario | **Consumimos** | Al pasar un pedido a `en_produccion`, `pedidos` descuenta los insumos de la receta con `decrease`, y al cargar stock suma con `increase`. Las reservas son propias. Detalle en [ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md). |
 
 ## Requisitos no funcionales
 
@@ -96,16 +114,16 @@ Valores preliminares; se ajustan con los tests de carga.
 |---|---|
 | RNF1 | Un cambio en un producto aparece en la búsqueda en menos de 10 segundos. |
 | RNF2 | Consultar el catálogo responde en menos de 300 ms (p95) con caché. |
-| RNF3 | Crear un pedido responde en menos de 2 s (p95), incluida la llamada a inventario. |
+| RNF3 | Crear un pedido responde en menos de 2 s (p95). No llama al inventario del proveedor. |
 | RNF4 | Si inventario o notificaciones fallan, el resto del sistema sigue tomando pedidos (degradación controlada). |
 | RNF5 | Al menos un servicio corre con dos o más instancias balanceadas. |
 | RNF6 | Logs estructurados, métricas y un tablero permiten seguir un pedido de punta a punta. |
-| RNF7 | Todo el sistema se levanta con un solo comando (`docker compose up`), sin configuración manual. |
+| RNF7 | Todo el sistema se levanta con un solo comando (`cp .env.example .env && docker compose up`), sin otra configuración manual. |
 | RNF8 | Las contraseñas se guardan hasheadas y nunca se devuelven en una respuesta. Los secretos van en variables de entorno, fuera del repositorio. |
 
 ## Desafíos adicionales (bonus)
 
-Anunciados en la Entrega 2, como pide el enunciado (sección 7: hasta dos desafíos). Decisión del grupo (María, Athina y Agustín, 22/10/2026). Para que cuenten, cada uno tiene que estar integrado al sistema, documentado, testeado y defendido.
+Anunciados en la Entrega 2, como pide el enunciado (sección 7: hasta dos desafíos). Elegidos el 22/10/2026. Para que cuenten, cada uno tiene que estar integrado al sistema, documentado, testeado y defendido.
 
 | Id | Desafío | Qué incluye |
 |---|---|---|

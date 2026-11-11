@@ -2,9 +2,7 @@
 
 ## Estado
 
-Aceptado (Entrega 2; se implementa para la presentación)
-
-Implementación: todavía no hay balanceo. El api-gateway solo expone `/health` y el compose tiene una sola instancia de `notificaciones`. A `notificaciones` le falta el endpoint `/vivo` que el gateway va a consultar.
+Aceptado (Entrega 2). Implementado el 29/10/2026 (PR #67, en `develop`): el compose levanta `notificaciones-1` y `notificaciones-2`, y el gateway las chequea con `/vivo` y reparte solo entre las sanas, como dice la Decisión.
 
 ## Contexto
 
@@ -13,7 +11,7 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 [ADR-001](ADR-001-limites-de-los-servicios.md) anticipaba a `pedidos` como candidato. Al validar los límites en la Entrega 2 cambiamos a `notificaciones`:
 
 - Es el servicio que ya está implementado y probado con tests, y el único que va a recibir tráfico de otro grupo, que no controlamos.
-- Ya es apto para varias instancias: no guarda estado en memoria que importe (salvo el límite de uso, ver Consecuencias) y el proceso de envío toma cada notificación con un `findOneAndUpdate` atómico que la aparta por 2 minutos, así que dos instancias no envían el mismo mail. La excepción es que venza el apartado antes de guardar el resultado: el mail puede salir dos veces ([limitaciones conocidas](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
+- Ya es apto para varias instancias: no guarda estado en memoria que importe (el límite de uso está en el gateway, ver Consecuencias) y el proceso de envío toma cada notificación con un `findOneAndUpdate` atómico que la aparta por 2 minutos, así que dos instancias no envían el mismo mail. La excepción es que venza el apartado antes de guardar el resultado: el mail puede salir dos veces ([limitaciones conocidas](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
 - `pedidos` todavía es un esqueleto que solo expone `/health`. Se puede balancear también cuando esté implementado, con el mismo mecanismo.
 
 ## Decisión
@@ -22,7 +20,7 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 
 **Quién balancea:** el **api-gateway**, que va a ser el proxy de `/notificaciones*`. Recibe la lista de instancias por variable de entorno (`NOTIFICACIONES_URLS=http://notificaciones-1:8084,http://notificaciones-2:8084`).
 
-**Estrategia:** round-robin entre las instancias sanas. Decisión del grupo (María, Athina y Agustín, 22/10/2026), después de comparar las estrategias de reparto (ver "Estrategias de reparto consideradas"): round-robin es simple y alcanza para el sistema actual y su alcance. Hay dos instancias iguales, las solicitudes son cortas y parecidas (p95 de ~5 ms en notificaciones) y no hay estado entre solicitudes. Además, reparte parejo y predecible, que es la evidencia más clara de distribución en el tablero. **Se considera pasar a "menos conexiones"** si los tests de carga ([ADR-013](ADR-013-capacidad-y-costos.md)) muestran que una instancia se pone lenta bajo carga: es la situación en la que round-robin le sigue mandando la mitad del tráfico y "menos conexiones" se adapta sola.
+**Estrategia:** round-robin entre las instancias sanas. Elegida el 22/10/2026, después de comparar las estrategias de reparto (ver "Estrategias de reparto consideradas"): round-robin es simple y alcanza para el sistema actual y su alcance. Hay dos instancias iguales, las solicitudes son cortas y parecidas (p95 de ~5 ms en notificaciones) y no hay estado entre solicitudes. Además, reparte parejo y predecible, que es la evidencia más clara de distribución en el tablero. **Se considera pasar a "menos conexiones"** si los tests de carga ([ADR-013](ADR-013-capacidad-y-costos.md)) muestran que una instancia se pone lenta bajo carga: es la situación en la que round-robin le sigue mandando la mitad del tráfico y "menos conexiones" se adapta sola.
 
 **Verificación de disponibilidad:**
 
@@ -30,6 +28,12 @@ El enunciado pide balanceo de carga sobre al menos un servicio con dos o más in
 - `/vivo` es un chequeo liviano: responde `200` si el proceso atiende, sin consultar MongoDB. `/health`, que sí hace ping a MongoDB, queda para personas y para el compose. Las dos instancias comparten el mismo MongoDB: si el gateway usara `/health`, una falla de MongoDB sacaría a las dos a la vez, y con MongoDB lento podrían entrar y salir del balanceo sin parar. El balanceo solo tiene que sacar la instancia que se cayó; la caída de MongoDB ya está tratada en [ADR-011](ADR-011-resiliencia.md).
 - Pasiva: si una solicitud a una instancia falla por conexión o timeout, se marca como caída sin esperar al próximo chequeo. El gateway no reintenta ([ADR-003](ADR-003-comunicacion-entre-servicios.md)): esa solicitud responde `503` y el consumidor reintenta con la misma `Idempotency-Key`, como indica el contrato, y el reintento ya va a la otra instancia.
 - Sin instancias sanas: `503 no_disponible`.
+
+**Detalles de los chequeos** (30/10/2026, [#79](https://github.com/mariavlindonc/recienhechoapp/issues/79)):
+
+1. **El chequeo pasivo solo saca una instancia si el servicio tiene dos o más.** Con una sola no hay otra a la cual mandar el tráfico, y como esa instancia no tiene chequeo activo, una vez afuera no volvería a entrar aunque el servicio se recupere. Con una sola instancia caída, las solicitudes esperan el timeout de 3 s y responden `503`, y cuando el servicio vuelve se atiende solo. Se descartó sumar chequeo activo a todos los servicios: con una sola instancia, la ganancia es fallar 3 s antes.
+2. **El chequeo activo corre solo para los servicios con dos o más instancias:** hoy, `notificaciones`. **Regla:** el servicio que pase a tener dos o más instancias tiene que exponer `/vivo` y entrar al chequeo activo.
+3. **El intervalo (5 s) y el timeout (1 s) del chequeo van como variables de entorno en `configuracion.go`**, con esos valores por defecto, como pide la convención de AGENTS.md. Hoy son constantes en `main.go`; el cambio de código queda en una issue aparte.
 
 **Observabilidad:**
 
@@ -65,6 +69,7 @@ Lo que más protege no es la estrategia sino la verificación de disponibilidad:
 ## Consecuencias
 
 - Cambia lo que anticipaba [ADR-001](ADR-001-limites-de-los-servicios.md) (se actualiza ahí).
-- El límite de 60 solicitudes por minuto vive en memoria de cada instancia: con 2 instancias un grupo podría llegar a 120. Se acepta por ahora; si hace falta un límite exacto, el control de tráfico pasa al api-gateway, que ve todas las solicitudes antes de repartirlas (como ya dice [ARCHITECTURE](../ARCHITECTURE.md#limitaciones-conocidas-y-deuda-técnica)).
-- Para la caída controlada alcanza con `docker compose stop notificaciones-1`: el tráfico pasa a la otra instancia y se ve en el tablero.
+- El límite de 60 solicitudes por minuto vivía en memoria de cada instancia: con 2 instancias un grupo podía llegar a 120. Pasó al api-gateway, que ve todas las solicitudes antes de repartirlas, así que ahora es exacto. Si algún día hay más de una instancia del gateway, vuelve el mismo problema.
+- Para la caída controlada alcanza con `docker compose stop notificaciones-1`: el tráfico pasa a la otra instancia y se ve en el tablero, en "Reparto del tráfico entre instancias" e "Instancias de notificaciones en el balanceo". Solo las solicitudes que estaban en curso en la instancia caída pueden dar `503`. Con `docker compose start notificaciones-1` vuelve en el próximo chequeo.
+- Cada vez que una instancia sale del balanceo o vuelve, el gateway lo deja en el log (`instancia fuera del balanceo` o `instancia de vuelta en el balanceo`, con `destino`, `instancia` y `motivo`).
 - Si se suman instancias, solo cambia `NOTIFICACIONES_URLS`.

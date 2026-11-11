@@ -3,11 +3,12 @@
 ## Estado
 
 - **Aceptado** para `api-gateway` y `notificaciones`, Entrega 2.
-- **Propuesto** para `pedidos` y `productos`: se acepta al implementar cada servicio.
+- **Aceptado** para `productos` con el plan aprobado el 26/10/2026; implementado el mismo día.
+- **Propuesto** para `pedidos`: se acepta al revisar su PR.
 
-Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementación pendiente en la issue #33.
+Revisión del 22/10/2026: se suma un circuit breaker en `notificaciones` hacia el servidor de correo, con `sony/gobreaker`, y un tiempo máximo de 24 h para las notificaciones pendientes. Sale de un ensayo de caída (ver "Por qué un circuit breaker también para el servidor de correo"). Implementado en la issue #33: el adaptador `internal/adaptadores/disyuntor` envuelve al remitente SMTP. Con el circuito abierto devuelve `ErrCorreoNoDisponible`, y la aplicación posterga la notificación sin gastar un intento. El disyuntor vive del lado de los adaptadores, como el de `pedidos` en ADR-010, porque la aplicación no importa tecnologías ([ADR-007](ADR-007-arquitectura-interna.md)). Falta la métrica y la alerta del estado del circuito (#33).
 
-Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB, límite de uso y envío en segundo plano con reintentos. El api-gateway ya tiene el proxy con timeout de 3 s y `503 no_disponible`. Falta el balanceo con chequeos de `/vivo` ([ADR-012](ADR-012-balanceo-de-carga.md)).
+Implementación: `notificaciones` ya tiene `/health` con ping a MongoDB, timeout de 2 s por operación contra MongoDB y envío en segundo plano con reintentos. El api-gateway ya tiene el proxy con timeout de 3 s, `503 no_disponible` y el límite de uso. Falta el balanceo con chequeos de `/vivo` ([ADR-012](ADR-012-balanceo-de-carga.md)).
 
 ## Contexto
 
@@ -24,23 +25,24 @@ El enunciado pide identificar las dependencias de cada servicio, definir qué pa
 | notificaciones | MongoDB | `POST` y `GET` responden `503`; nada se acepta sin guardarse | Timeout de 2 s por operación; `/health` informa la falla |
 | notificaciones | Servidor de correo (SMTP) | El `POST` sigue respondiendo `202`; las notificaciones quedan `pendiente` | Envío en segundo plano con timeout de conexión de 2 s y de 10 s por envío; tras el primer intento, 3 reintentos con espera exponencial (30, 60 y 120 s) y después `fallida`; si el servidor rechaza el mensaje o el destinatario de forma definitiva (5xx), pasa a `fallida` sin reintentos. Circuit breaker (`sony/gobreaker`): con 5 fallos transitorios seguidos deja de enviar 30 s, sin gastar los reintentos de las pendientes; una pendiente que no se pudo enviar en 24 h pasa a `fallida`. Alerta sobre el estado del circuito ([ADR-006](ADR-006-observabilidad.md)) |
 | pedidos | productos | No se crea el pedido: "no pudimos tomar el pedido, probá en un rato" | Timeout de 1 s y 2 reintentos ([ADR-003](ADR-003-comunicacion-entre-servicios.md)) |
-| pedidos | inventario (otro grupo) | El pedido queda `pendiente_confirmacion` | Timeout de 1,5 s y circuit breaker ([ADR-010](ADR-010-consumo-de-inventario.md)) |
-| pedidos | RabbitMQ | El cambio de estado se guarda igual; el evento sale cuando vuelve | Outbox (D4) |
+| pedidos | inventario (otro grupo) | Crear y cancelar pedidos no cambian. El consumo de los insumos de un pedido en producción espera y se reintenta; cargar stock responde `503` | Timeout de 1,5 s y circuit breaker; reintentos del consumo con esperas de 1, 2, 4, 8 y 10 minutos, consultando el stock antes de repetir ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)) |
+| pedidos | RabbitMQ | El cambio de estado se guarda igual; el evento sale cuando vuelve | Bandeja de salida (outbox, [ADR-015](ADR-015-consistencia-y-concurrencia.md)) |
 | pedidos | MongoDB | No se toman pedidos (`503`) | Timeout; no hay degradación posible sin perder la garantía de cupo |
-| productos | Redis | Se lee de MySQL, más lento | Timeout de 50 ms ([ADR-009](ADR-009-cache.md)) |
-| productos | Meilisearch | Sin búsqueda de texto; queda el listado por categoría | Outbox del índice ([ADR-008](ADR-008-busqueda.md)) |
-| productos | MySQL | `503` | Timeout |
+| productos | Redis | Se lee de MySQL, más lento | Timeout de 50 ms y sin reintentos ([ADR-009](ADR-009-cache.md)); no frena el arranque |
+| productos | Meilisearch | `GET /productos/busqueda` responde `503 busqueda_no_disponible`; el catálogo por categoría sigue. Los cambios esperan en la bandeja y se aplican solos al volver | Outbox del índice ([ADR-008](ADR-008-busqueda.md)); 2 s por búsqueda; no frena el arranque |
+| productos | MySQL | `503 no_disponible`; `/health` informa la falla | Timeout de 2 s por operación (en el DSN); el servicio no arranca sin MySQL |
+| usuarios | MySQL | Registro, inicio de sesión y perfil responden `503 no_disponible`; `/health` informa la falla. Las sesiones abiertas siguen andando hasta que vence el token, porque el gateway no consulta a `usuarios` ([ADR-019](ADR-019-sesion-en-cookie.md)) | Timeout de 2 s por operación (en el DSN); el servicio no arranca sin MySQL |
 
 **Mecanismos:**
 
 - **Timeouts en toda llamada saliente**, sin excepción. Una dependencia lenta no puede dejar solicitudes colgadas. Los valores de la tabla son los ya definidos; donde dice solo «Timeout», el valor se fija al implementar el servicio.
 - **Reintentos con espera exponencial** solo en operaciones idempotentes y errores transitorios ([ADR-003](ADR-003-comunicacion-entre-servicios.md)).
 - **Circuit breaker** (`sony/gobreaker`) donde la dependencia es externa y no la controlamos. En los dos casos abre con 5 fallas seguidas, espera 30 s y deja pasar una llamada de prueba, y su estado se expone como métrica:
-  - `pedidos` → inventario del otro grupo ([ADR-010](ADR-010-consumo-de-inventario.md));
+  - `pedidos` → inventario del otro grupo ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md));
   - `notificaciones` → servidor de correo. Mientras el circuito está abierto, el proceso de envío no toma notificaciones: las pendientes esperan sin gastar sus reintentos, porque no fallaron ellas sino el servidor. Un rechazo definitivo (5xx al destinatario) no cuenta como falla: el servidor respondió.
-- **Trabajo en segundo plano** donde el usuario no necesita esperar: envío de mails, reconfirmación de pedidos, actualización del índice.
+- **Trabajo en segundo plano** donde el usuario no necesita esperar: envío de mails, consumo de insumos de los pedidos en producción, actualización del índice.
 - **Health checks:** cada servicio expone `/health`, que verifica sus dependencias obligatorias (por ejemplo, `notificaciones` hace ping a MongoDB). Para sacar instancias caídas del balanceo, el gateway usa otro chequeo más liviano, `/vivo`, que no mira dependencias ([ADR-012](ADR-012-balanceo-de-carga.md)).
-- **Límite de uso** en `notificaciones`: 60 solicitudes por minuto por grupo (todas las claves de un grupo suman), para que un grupo consumidor no tumbe el servicio. El contador está en la memoria de cada instancia ([ADR-012](ADR-012-balanceo-de-carga.md)).
+- **Límite de uso** de `notificaciones`: 60 solicitudes por minuto por grupo (todas las claves de un grupo suman), para que un grupo consumidor no tumbe el servicio. Lo aplica el api-gateway, que ve todas las solicitudes antes de repartirlas, así que es exacto con varias instancias ([ADR-012](ADR-012-balanceo-de-carga.md)).
 
 **Por qué un circuit breaker también para el servidor de correo (revisión del 22/10/2026).** En un ensayo con Mailpit apagado y ~95 notificaciones pendientes:
 
@@ -74,12 +76,27 @@ Como mientras el circuito está abierto no se gastan reintentos, una notificaci�
 
 1. **Servidor de correo caído** (`docker compose stop mailpit`):
    - El `POST /notificaciones` sigue respondiendo `202` y las notificaciones quedan `pendiente`.
-   - Con el circuit breaker (issue #33), el circuito se abre en unos 20 s y después hay como mucho un intento de prueba cada 30 s. La alerta del estado del circuito se dispara en unos 2 minutos, sin importar cuántas pendientes haya, y las pendientes no gastan reintentos.
-   - Al volver Mailpit, las pendientes salen en alrededor de un minuto.
-   - Mientras no esté implementado, el comportamiento es el del ensayo: `fallida` a los 3,5 minutos solo con pocas pendientes, y bastante más con una cola grande.
-2. **Una instancia de notificaciones caída** (`docker compose stop notificaciones-1`): el gateway la saca del balanceo y todo el tráfico va a la otra; con las dos caídas, `503 no_disponible`.
+   - El circuito se abre después de 5 fallos seguidos y desde ahí hay como mucho un intento de prueba cada ~35 s (los 30 s del circuito más hasta 5 s del sondeo). Las pendientes no gastan reintentos. La alerta del estado del circuito se dispara en unos 2 minutos, sin importar cuántas pendientes haya (cuando esté la métrica).
+   - Al volver Mailpit, la prueba del estado semiabierto cierra el circuito y salen todas las pendientes.
+   - **Medido el 22/10/2026**, con 60 notificaciones (el límite de 60 por minuto rechazó con `429` las 40 restantes de una ráfaga de 100):
+     - el circuito se abrió a los ~10 s;
+     - hubo 6 intentos SMTP en total (5 que lo abrieron y 1 prueba), contra uno cada ~3 s sin el disyuntor;
+     - al volver Mailpit, las 59 pendientes salieron en 32 s y ninguna quedó `fallida`.
 
-Para la presentación se suma la caída del inventario del proveedor (circuit breaker y `pendiente_confirmacion`).
+     En el ensayo anterior, sin el disyuntor, la alerta tardaba 15 a 20 minutos y la cola, varios minutos más.
+2. **Una instancia de notificaciones caída** (`docker compose stop notificaciones-1`): el gateway la saca del balanceo y todo el tráfico va a la otra; con las dos caídas, `503 no_disponible`.
+   - **Medido el 29/10/2026**, con un `POST /notificaciones` cada 0,25 s:
+     - con `notificaciones-1` detenida, 19 de 20 respondieron `202`; el único `503` fue el reenvío que detectó la caída y la sacó del balanceo;
+     - con `docker compose start notificaciones-1`, volvió en el chequeo siguiente (menos de 8 s) y otra vez recibió tráfico;
+     - con las dos detenidas, las 4 solicitudes respondieron `503 no_disponible`.
+
+3. **Inventario del proveedor lento** (`INVENTARIO_MODO=lento`, durante el test de carga de pedidos de [ADR-013](ADR-013-capacidad-y-costos.md#resultados)):
+   - **Medido el 29/10/2026** con el modelo de [ADR-010](ADR-010-consumo-de-inventario.md), en el que crear un pedido llamaba al inventario, con 50 usuarios virtuales creando pedidos para un mismo día:
+     - `pedidos` siguió tomando pedidos (RNF4): se crearon los 500 del cupo, en `pendiente_confirmacion`, con un p95 de 1,6 s;
+     - al volver el inventario a `confirma`, el proceso en segundo plano confirmó los 500.
+   - Falta un ensayo dedicado que mida el disyuntor del inventario y los reintentos del consumo.
+
+Los informes de los tres ensayos están en [POSTMORTEM](../POSTMORTEM.md). La caída del inventario real se ensaya cuando llegue el contrato del grupo proveedor (D9).
 
 ## Alternativas consideradas
 

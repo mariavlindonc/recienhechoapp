@@ -1,0 +1,97 @@
+# Blueprint de Render: la capacidad de notificaciones en el plan gratis (ADR-013).
+# Sube el api-gateway, una instancia de notificaciones, el mock del contrato y un Key Value. El resto del
+# sistema corre en el compose local. Las variables con sync: false se cargan a mano
+# en Render la primera vez: son secretos o dependen de la URL que asigne Render.
+
+services:
+  - type: web
+    name: recienhecho-api-gateway
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: develop
+    dockerfilePath: ./backend/api-gateway/Dockerfile
+    dockerContext: ./backend/api-gateway
+    healthCheckPath: /health
+    envVars:
+      - key: GIN_MODE
+        value: release
+      # Un web service gratis no recibe tráfico por la red privada de Render: el
+      # gateway llega a notificaciones por su URL pública, https://<nombre>.onrender.com.
+      - key: NOTIFICACIONES_URLS
+        sync: false
+      # Estos servicios no suben a Render: sus rutas responden 503.
+      - key: PEDIDOS_URLS
+        value: http://pedidos.invalid
+      - key: PRODUCTOS_URLS
+        value: http://productos.invalid
+      - key: USUARIOS_URLS
+        value: http://usuarios.invalid
+      # Sin usuarios no se firma ningún token; el gateway igual exige el secreto.
+      - key: JWT_SECRETO
+        generateValue: true
+      # Sin frontend en Render nadie la usa, pero el gateway la exige (ADR-019).
+      - key: CLAVE_FRONTEND
+        generateValue: true
+      # Las mismas claves que en notificaciones, para el límite por grupo (ADR-004).
+      - key: NOTIFICACIONES_CLAVES_API
+        sync: false
+      - key: NOTIFICACIONES_LIMITE_POR_MINUTO
+        value: "60"
+      # Notificaciones tarda en despertar en el plan gratis: con el 1 s por defecto el
+      # chequeo la daba por caída y el gateway respondía 503 (ADR-012).
+      - key: CHEQUEO_TIEMPO_MAXIMO
+        value: 60s
+
+  - type: web
+    name: recienhecho-notificaciones
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: develop
+    dockerfilePath: ./backend/notificaciones/Dockerfile
+    dockerContext: ./backend/notificaciones
+    healthCheckPath: /vivo
+    envVars:
+      - key: GIN_MODE
+        value: release
+      # Key Value en lugar de MongoDB, y sin RABBITMQ_URL (ADR-002, ADR-013).
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: recienhecho-notificaciones-datos
+          property: connectionString
+      - key: NOTIFICACIONES_CLAVES_API
+        sync: false
+      # Brevo por el puerto 2525: Render gratis bloquea 25, 465 y 587 (ADR-005).
+      - key: SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: SMTP_PUERTO
+        value: "2525"
+      - key: SMTP_USUARIO
+        sync: false
+      - key: SMTP_CLAVE
+        sync: false
+      # Tiene que ser un remitente verificado en Brevo.
+      - key: SMTP_REMITENTE
+        sync: false
+
+  # Mock del contrato (Prism) para que el grupo consumidor pruebe sin pegarle al
+  # servicio real (ADR-004). Se duerme igual que los otros y solo gasta horas si se usa.
+  - type: web
+    name: recienhecho-notificaciones-mock
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: develop
+    dockerfilePath: ./docs/contracts/notificaciones/Dockerfile.mock
+    dockerContext: ./docs/contracts/notificaciones
+
+  - type: keyvalue
+    name: recienhecho-notificaciones-datos
+    plan: free
+    region: oregon
+    # Solo desde los servicios de Render: sin acceso desde internet.
+    ipAllowList: []
+    # Sin desalojo: una notificación no se puede borrar por falta de memoria.
+    maxmemoryPolicy: noeviction

@@ -11,22 +11,23 @@ import (
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/puertos"
 )
 
-// contadorDeEnvios es lo que este adaptador necesita de las métricas. Lo cumple
+// medidor es lo que este adaptador necesita de las métricas. Lo cumple
 // *metricas.Metricas; en los tests se usa uno falso.
-type contadorDeEnvios interface {
+type medidor interface {
 	ContarEnvio(resultado puertos.ResultadoEnvio)
+	MarcarCircuitoDelCorreo(estado puertos.EstadoCircuito)
 }
 
 // Eventos cumple puertos.Eventos.
 type Eventos struct {
-	metricas contadorDeEnvios
+	metricas medidor
 	logger   *slog.Logger
 }
 
 var _ puertos.Eventos = (*Eventos)(nil)
 
 // Nuevos arma el adaptador con las métricas y el logger del servicio.
-func Nuevos(metricas contadorDeEnvios, logger *slog.Logger) *Eventos {
+func Nuevos(metricas medidor, logger *slog.Logger) *Eventos {
 	return &Eventos{metricas: metricas, logger: logger}
 }
 
@@ -42,6 +43,21 @@ func (eventos *Eventos) EnvioIntentado(contexto context.Context, intento puertos
 		"intento", intento.Numero,
 		"resultado", intento.Resultado,
 		"error", ocultarEmails(intento.Error.Error()),
+	)
+}
+
+// CircuitoDelCorreoCambio publica el estado nuevo del disyuntor del servidor de
+// correo en las métricas y deja el cambio en el log: como WARN cuando se abre (el
+// correo está caído) y como INFO en los demás casos.
+func (eventos *Eventos) CircuitoDelCorreoCambio(contexto context.Context, anterior, nuevo puertos.EstadoCircuito) {
+	eventos.metricas.MarcarCircuitoDelCorreo(nuevo)
+	nivel := slog.LevelInfo
+	if nuevo == puertos.CircuitoAbierto {
+		nivel = slog.LevelWarn
+	}
+	eventos.logger.Log(contexto, nivel, "cambió el estado del disyuntor del servidor de correo",
+		"anterior", anterior,
+		"nuevo", nuevo,
 	)
 }
 

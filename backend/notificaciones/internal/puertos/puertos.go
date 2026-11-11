@@ -16,6 +16,11 @@ import (
 // error se considera transitorio y se reintenta.
 var ErrEnvioRechazado = errors.New("el servidor de correo rechazó el envío")
 
+// ErrCorreoNoDisponible lo devuelve un Remitente cuando ni siquiera intentó el
+// envío porque sabe que el servidor de correo está caído (el disyuntor está
+// abierto, ADR-011). No cuenta como intento: la notificación se posterga.
+var ErrCorreoNoDisponible = errors.New("el servidor de correo no está disponible")
+
 // ClaveIdempotencia asocia la Idempotency-Key de un grupo con la notificación que
 // creó y con la huella del contenido que se pidió.
 type ClaveIdempotencia struct {
@@ -77,9 +82,19 @@ type IntentoDeEnvio struct {
 	Error          error // nil si el mail salió
 }
 
+// EstadoCircuito es el estado del disyuntor que protege al servidor de correo.
+type EstadoCircuito string
+
+const (
+	CircuitoCerrado     EstadoCircuito = "cerrado"     // normal: los envíos pasan
+	CircuitoAbierto     EstadoCircuito = "abierto"     // el correo está caído: no se intenta enviar
+	CircuitoSemiabierto EstadoCircuito = "semiabierto" // se deja pasar un envío de prueba
+)
+
 // Eventos recibe los hechos del negocio que interesan fuera de la aplicación. La
 // aplicación solo avisa qué pasó; el adaptador decide qué loguear y qué contar en
 // las métricas (ADR-006, ADR-007).
 type Eventos interface {
 	EnvioIntentado(contexto context.Context, intento IntentoDeEnvio)
+	CircuitoDelCorreoCambio(contexto context.Context, anterior, nuevo EstadoCircuito)
 }

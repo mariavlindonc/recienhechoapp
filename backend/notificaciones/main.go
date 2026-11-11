@@ -19,11 +19,15 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/api"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/disyuntor"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/eventos"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/metricas"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/mongodb"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/rabbitmq"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/redis"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/adaptadores/smtp"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/aplicacion"
+	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/puertos"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/registro"
 	"github.com/mariavlindonc/recienhechoapp/backend/notificaciones/internal/trazas"
 )
@@ -68,38 +72,32 @@ func ejecutar() error {
 		apagarTrazas(contextoTrazas)
 	}()
 
-	clienteMongo, err := mongo.Connect(options.Client().ApplyURI(configuracion.direccionMongo).SetMonitor(trazas.MonitorMongo()))
+	repositorio, chequearAlmacenamiento, cerrarAlmacenamiento, err := abrirAlmacenamiento(contexto, configuracion)
 	if err != nil {
-		return fmt.Errorf("configurar la conexión a MongoDB: %w", err)
+		return err
 	}
-	defer clienteMongo.Disconnect(context.Background())
+	defer cerrarAlmacenamiento()
 
-	repositorio := mongodb.NuevoRepositorio(clienteMongo.Database(configuracion.baseMongo))
-	contextoArranque, cancelarArranque := context.WithTimeout(contexto, esperaAlArrancar)
-	defer cancelarArranque()
-	if err := repositorio.PrepararIndices(contextoArranque); err != nil {
-		return fmt.Errorf("preparar MongoDB: %w", err)
-	}
-
-	remitente, err := smtp.NuevoRemitente(configuracion.smtp)
+	remitenteSMTP, err := smtp.NuevoRemitente(configuracion.smtp)
 	if err != nil {
 		return err
 	}
 	medidor := metricas.Nuevas()
-	servicio := aplicacion.NuevoServicio(repositorio, remitente, eventos.Nuevos(medidor, slog.Default()), ahora, nuevoUUID)
+	observador := eventos.Nuevos(medidor, slog.Default())
+	// El disyuntor envuelve al SMTP: con el correo caído no se intenta enviar (ADR-011).
+	remitente := disyuntor.NuevoRemitente(remitenteSMTP, observador, disyuntor.ConfiguracionDelServicio)
+	servicio := aplicacion.NuevoServicio(repositorio, remitente, observador, ahora, nuevoUUID)
 
 	router := gin.New()
 	// otelgin va primero: abre el span de la solicitud (o continúa la traza que llega
 	// en traceparent) y así el middleware de logs ya ve el trace_id.
 	router.Use(otelgin.Middleware(nombreServicio, otelgin.WithFilter(sinChequeosDeSalud)), gin.Recovery(), registro.Solicitudes(slog.Default()), medidor.Solicitudes())
 	api.Registrar(router, servicio, api.Configuracion{
-		ClavesAPI:       configuracion.clavesAPI,
-		LimitePorMinuto: configuracion.limitePorMinuto,
-		Ahora:           ahora,
+		ClavesAPI: configuracion.clavesAPI,
 		ChequearSalud: func(contextoSalud context.Context) error {
 			contextoSalud, cancelarSalud := context.WithTimeout(contextoSalud, esperaSalud)
 			defer cancelarSalud()
-			return clienteMongo.Ping(contextoSalud, nil)
+			return chequearAlmacenamiento(contextoSalud)
 		},
 	})
 	servidor := &http.Server{
@@ -110,6 +108,11 @@ func ejecutar() error {
 
 	var procesos sync.WaitGroup
 	procesos.Add(2)
+	if configuracion.direccionRabbit != "" {
+		procesos.Go(func() { rabbitmq.Consumir(contexto, configuracion.direccionRabbit, servicio) })
+	} else {
+		slog.Info("sin RABBITMQ_URL: no se consumen eventos de pedidos")
+	}
 	go func() {
 		defer procesos.Done()
 		enviarPendientes(contexto, servicio, configuracion.intervaloDeEnvio)
@@ -149,6 +152,34 @@ func ejecutar() error {
 	return nil
 }
 
+// abrirAlmacenamiento conecta con MongoDB o, si se configuró REDIS_URL, con Redis
+// (el Key Value gratis de Render, ADR-013). Devuelve también el chequeo de salud
+// y cómo cerrar la conexión.
+func abrirAlmacenamiento(contexto context.Context, configuracion configuracion) (puertos.Repositorio, func(context.Context) error, func(), error) {
+	if configuracion.direccionRedis != "" {
+		repositorio, err := redis.NuevoRepositorio(configuracion.direccionRedis)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return repositorio, repositorio.Ping, func() { repositorio.Cerrar() }, nil
+	}
+
+	clienteMongo, err := mongo.Connect(options.Client().ApplyURI(configuracion.direccionMongo).SetMonitor(trazas.MonitorMongo()))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("configurar la conexión a MongoDB: %w", err)
+	}
+	cerrar := func() { clienteMongo.Disconnect(context.Background()) }
+	repositorio := mongodb.NuevoRepositorio(clienteMongo.Database(configuracion.baseMongo))
+	contextoArranque, cancelarArranque := context.WithTimeout(contexto, esperaAlArrancar)
+	defer cancelarArranque()
+	if err := repositorio.PrepararIndices(contextoArranque); err != nil {
+		cerrar()
+		return nil, nil, nil, fmt.Errorf("preparar MongoDB: %w", err)
+	}
+	chequear := func(contextoSalud context.Context) error { return clienteMongo.Ping(contextoSalud, nil) }
+	return repositorio, chequear, cerrar, nil
+}
+
 // enviarPendientes es el proceso en segundo plano: cada intervalo manda las
 // notificaciones pendientes, hasta que se cancela el contexto.
 func enviarPendientes(contexto context.Context, servicio *aplicacion.Servicio, intervalo time.Duration) {
@@ -170,10 +201,11 @@ func enviarPendientes(contexto context.Context, servicio *aplicacion.Servicio, i
 	}
 }
 
-// sinChequeosDeSalud evita trazar /health, que el compose consulta seguido y no
-// aporta nada en Jaeger.
+// sinChequeosDeSalud evita trazar los chequeos de salud (/health y /vivo): los
+// consultan máquinas (el balanceador, un orquestador), cada pocos segundos y
+// siempre igual, así que no aportan información y tapan las trazas útiles (ADR-006).
 func sinChequeosDeSalud(pedido *http.Request) bool {
-	return pedido.URL.Path != "/health"
+	return pedido.URL.Path != "/health" && pedido.URL.Path != "/vivo"
 }
 
 // ahora es el reloj del servicio. Se trunca a milisegundos porque es la precisión

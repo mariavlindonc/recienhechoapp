@@ -31,7 +31,7 @@ El primer flujo que funciona de punta a punta es el de la capacidad publicada: `
 - OpenTelemetry es la librería que genera las trazas en un formato estándar (OTLP); Jaeger las guarda y las muestra en una web.
 - Instrumentación: `otelgin` en la entrada HTTP de cada servicio, `otelhttp` en las llamadas salientes del api-gateway (propaga el header `traceparent`, que es lo que une los tramos de distintos servicios en una sola traza) y un monitor de comandos en el acceso a MongoDB.
 - **Nota de implementación (Entrega 2):** la instrumentación oficial `otelmongo` no tiene versión publicada para `mongo-driver/v2` (solo un commit en desarrollo), así que `notificaciones` usa un monitor de comandos propio (`internal/trazas`) que crea un span por comando con la librería de trazas de OpenTelemetry. Además, solo traza los comandos que son parte de una solicitud con traza: el proceso de envío consulta MongoDB cada 5 s y, si no, llenaría Jaeger de trazas sueltas. Cuando `otelmongo` publique una versión para el driver v2, se puede reemplazar sin cambiar el resto.
-- `/health` no se traza: lo consulta el compose seguido y no aporta nada.
+- Los chequeos de salud (`/health` y `/vivo`) no se trazan: los consultan máquinas (el balanceador, un orquestador), cada pocos segundos y siempre igual, así que no aportan información y tapan las trazas útiles. La contra es que, si un día `/health` tarda (hace ping a MongoDB), no hay traza que muestre dónde; el log de la solicitud igual registra la duración.
 - El envío SMTP, que pasa en segundo plano, abre su propio span vinculado a la traza de la solicitud que creó la notificación.
 - El destino se configura con `OTEL_EXPORTER_OTLP_ENDPOINT`; el código no conoce a Jaeger.
 
@@ -50,9 +50,11 @@ El primer flujo que funciona de punta a punta es el de la capacidad publicada: `
 
 **Alerta inicial:** más de 5 notificaciones pasan a `fallida` en 10 minutos (el servidor de correo está caído o rechazando envíos).
 
+**Alerta del correo caído:** `CorreoNoDisponible`, cuando el disyuntor del servidor de correo ([ADR-011](ADR-011-resiliencia.md)) no está cerrado durante 1 minuto en alguna instancia (`max(notificaciones_correo_circuito) > 0`, con 0 cerrado, 1 semiabierto y 2 abierto). El disyuntor cambia de estado solo cuando se intenta un envío: se abre con 5 fallos seguidos y se cierra con el primer envío que sale bien después de que vuelve el correo. Si una instancia no tiene nada que mandar, sigue abierta y la alerta sigue disparada hasta la próxima notificación.
+
 ## Convenciones compartidas entre servicios
 
-Agregado el 22/10/2026, por decisión de Athina a partir de la revisión del código.
+Agregado el 22/10/2026, a partir de la revisión del código.
 
 Como un servicio no importa código de otro (AGENTS.md), el código de logs, trazas y métricas está **copiado** en cada servicio. Las copias pueden diferir en su forma interna, pero tienen que respetar este contrato, porque el tablero, las alertas y la correlación de logs dependen de que todos los servicios lo cumplan igual:
 
@@ -75,7 +77,7 @@ Si una copia se desvía, esa parte deja de funcionar para ese servicio **sin dar
 **Trazas**
 - SDK de OpenTelemetry con exportador OTLP/HTTP hacia `OTEL_EXPORTER_OTLP_ENDPOINT`, propagador W3C (`traceparent` y `baggage`) y `service.name` igual al nombre del servicio.
 - Sin `OTEL_EXPORTER_OTLP_ENDPOINT`, el servicio arranca igual y solo propaga la traza. Los errores de exportación van al log como `WARN`; nunca cortan una solicitud.
-- `/health` no se traza.
+- Los chequeos de salud (`/health` y `/vivo`) no se trazan.
 
 **Orden de los middlewares de Gin:** `otelgin` → `gin.Recovery()` → logs de solicitudes → métricas. `otelgin` va primero para que los demás ya vean el `trace_id`.
 
@@ -106,7 +108,7 @@ Los nombres cambian porque en el gateway son funciones del paquete `main`, que n
 - Se suman tres contenedores al `docker-compose`: Jaeger, Prometheus y Grafana.
 - Cada servicio suma dependencias de OpenTelemetry y del cliente de Prometheus.
 - Mientras los logs no estén centralizados, para seguir una solicitud hay que buscar el `trace_id` en los logs de cada contenedor.
-- Jaeger guarda las trazas en memoria: se pierden al reiniciarlo. Alcanza para desarrollo y la demo.
+- Jaeger guarda las trazas en memoria: se pierden al reiniciarlo. Alcanza para desarrollo y la demo. Guarda hasta 20.000 y borra las más viejas, para no pasar de unos 250 MB de RAM.
 - El SLO y el umbral de la alerta son iniciales: se ajustan con los tests de carga (D13).
 - En desarrollo, el tablero no se puede ver desde otra computadora: para mostrarlo hay que compartir pantalla.
 - En el despliegue hay que administrar las cuentas de Grafana (alta, rol y baja de cada persona) y configurar HTTPS ([ADR-013](ADR-013-capacidad-y-costos.md)).

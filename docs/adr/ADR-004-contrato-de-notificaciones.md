@@ -13,7 +13,7 @@ Publicamos **notificaciones**: otro sistema nos pide mandar un email a uno de su
 ## Decisión
 
 - **Estilo:** API REST sobre HTTP/JSON.
-- **Formato del contrato:** OpenAPI 3.1, en [`docs/contracts/notificaciones.yaml`](../contracts/notificaciones.yaml). El enunciado no impone un formato; elegimos OpenAPI porque es el estándar para describir APIs HTTP y porque hay herramientas que lo leen directamente (mocks, validadores, generadores de clientes).
+- **Formato del contrato:** OpenAPI 3.1, en [`docs/contracts/notificaciones/notificaciones.yaml`](../contracts/notificaciones/notificaciones.yaml). El enunciado no impone un formato; elegimos OpenAPI porque es el estándar para describir APIs HTTP y porque hay herramientas que lo leen directamente (mocks, validadores, generadores de clientes).
 - **Operaciones:** `POST /notificaciones` (responde `202` y el envío sigue en segundo plano) y `GET /notificaciones/{id}` (estado `pendiente`, `enviada` o `fallida`).
 - **Asíncrono hacia adentro:** el `POST` no espera al servidor de correo. Así una demora del correo no le genera timeouts al consumidor, y los reintentos son responsabilidad nuestra.
 - **Idempotencia:** el header `Idempotency-Key` es obligatorio en el `POST`. Misma clave y mismo cuerpo devuelven la notificación existente; misma clave y otro cuerpo, `409`. Así el consumidor puede reintentar ante un timeout sin mandar el mail dos veces.
@@ -21,7 +21,7 @@ Publicamos **notificaciones**: otro sistema nos pide mandar un email a uno de su
 - **Errores:** un único formato `{codigo, mensaje}`, con códigos estables documentados.
 - **Límite de uso:** 60 solicitudes por minuto por grupo; todas las claves de un grupo suman (`429` con `Retry-After`).
 - **Exposición:** a través del api-gateway, el único punto de entrada del sistema.
-- **Versionado:** versionado semántico en `info.version` del contrato, sin versión en la URL. Solo hacemos cambios compatibles (suben la versión menor); uno incompatible subiría la versión mayor y se acordaría antes con el grupo consumidor. Reglas completas en el [README de contratos](../contracts/README.md#versionado).
+- **Versionado:** versionado semántico en `info.version` del contrato, sin versión en la URL. Solo hacemos cambios compatibles (suben la versión menor); uno incompatible subiría la versión mayor y se acordaría antes con el grupo consumidor. Reglas completas en el [README del contrato](../contracts/notificaciones/README.md#versionado).
 - **Mock:** [Prism](https://stoplight.io/open-source/prism) (`stoplight/prism:5`) levanta el contrato como servidor falso (`docker compose up -d notificaciones-mock`, puerto 4010). Valida los pedidos contra el contrato y responde con los ejemplos del YAML. Corre con `-m false` porque la versión 5 falla al arrancar con varios procesos.
 
 ## Alternativas consideradas

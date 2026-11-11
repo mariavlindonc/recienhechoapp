@@ -196,3 +196,44 @@ func TestRechazoFallaSinReintentar(prueba *testing.T) {
 		prueba.Errorf("una fallida no se reintenta; se esperaba ErrTransicionInvalida, dio: %v", err)
 	}
 }
+
+func TestPostergarNoGastaIntentos(prueba *testing.T) {
+	notificacion, _ := dominio.NuevaNotificacion("id-1", "grupo-a", solicitudValida(), momento)
+
+	if err := notificacion.Postergar(momento.Add(30 * time.Second)); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+
+	if notificacion.Intentos != 0 || notificacion.Estado != dominio.EstadoPendiente {
+		prueba.Errorf("postergar no es un intento: quedó %s con %d intentos", notificacion.Estado, notificacion.Intentos)
+	}
+	if !notificacion.ProximoIntento.Equal(momento.Add(30 * time.Second)) {
+		prueba.Errorf("próximo intento = %v", notificacion.ProximoIntento)
+	}
+
+	notificacion.MarcarEnviada(momento)
+	if err := notificacion.Postergar(momento); !errors.Is(err, dominio.ErrTransicionInvalida) {
+		prueba.Errorf("una enviada no se posterga; se esperaba ErrTransicionInvalida, dio: %v", err)
+	}
+}
+
+func TestVenceALas24Horas(prueba *testing.T) {
+	notificacion, _ := dominio.NuevaNotificacion("id-1", "grupo-a", solicitudValida(), momento)
+
+	if notificacion.Vencida(momento.Add(dominio.VidaMaximaPendiente - time.Second)) {
+		prueba.Error("antes de las 24 h no está vencida")
+	}
+	if !notificacion.Vencida(momento.Add(dominio.VidaMaximaPendiente)) {
+		prueba.Fatal("a las 24 h está vencida")
+	}
+
+	if err := notificacion.MarcarVencida(); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+	if notificacion.Estado != dominio.EstadoFallida || notificacion.Motivo != dominio.MotivoVencida {
+		prueba.Errorf("se esperaba fallida por vencimiento, quedó %s (%q)", notificacion.Estado, notificacion.Motivo)
+	}
+	if notificacion.Vencida(momento.Add(48 * time.Hour)) {
+		prueba.Error("una fallida ya no se considera vencida")
+	}
+}

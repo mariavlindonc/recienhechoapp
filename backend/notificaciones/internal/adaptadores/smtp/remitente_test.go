@@ -100,7 +100,9 @@ func (servidor *servidorFalso) conversar(conexion net.Conn) {
 				if renglon == ".\r\n" {
 					break
 				}
-				contenido.WriteString(renglon)
+				// Como un servidor real (RFC 5321, 4.5.2): el cliente le agrega un punto
+				// a cada renglón que empieza con punto, y acá se le saca.
+				contenido.WriteString(strings.TrimPrefix(renglon, "."))
 			}
 			servidor.mensajes <- contenido.String()
 			responder("250 recibido")
@@ -120,10 +122,11 @@ func (servidor *servidorFalso) puerto() int {
 func nuevoRemitente(prueba *testing.T, puerto int, tiempoMaximo time.Duration) *smtp.Remitente {
 	prueba.Helper()
 	remitente, err := smtp.NuevoRemitente(smtp.Configuracion{
-		Host:         "127.0.0.1",
-		Puerto:       puerto,
-		Remitente:    "Recién hecho <avisos@recienhecho.test>",
-		TiempoMaximo: tiempoMaximo,
+		Host:                 "127.0.0.1",
+		Puerto:               puerto,
+		Remitente:            "Recién hecho <avisos@recienhecho.test>",
+		TiempoMaximo:         tiempoMaximo,
+		TiempoMaximoConexion: tiempoMaximo,
 	})
 	if err != nil {
 		prueba.Fatalf("crear remitente: %v", err)
@@ -236,12 +239,13 @@ func TestAsuntoConSaltoDeLineaNoAgregaEncabezados(prueba *testing.T) {
 }
 
 func TestConfiguracionInvalida(prueba *testing.T) {
-	valida := smtp.Configuracion{Host: "localhost", Puerto: 1025, Remitente: "avisos@recienhecho.test", TiempoMaximo: time.Second}
+	valida := smtp.Configuracion{Host: "localhost", Puerto: 1025, Remitente: "avisos@recienhecho.test", TiempoMaximo: time.Second, TiempoMaximoConexion: time.Second}
 	casos := map[string]func(configuracion *smtp.Configuracion){
-		"sin host":           func(configuracion *smtp.Configuracion) { configuracion.Host = "" },
-		"sin puerto":         func(configuracion *smtp.Configuracion) { configuracion.Puerto = 0 },
-		"remitente inválido": func(configuracion *smtp.Configuracion) { configuracion.Remitente = "no es un mail" },
-		"sin tiempo máximo":  func(configuracion *smtp.Configuracion) { configuracion.TiempoMaximo = 0 },
+		"sin host":               func(configuracion *smtp.Configuracion) { configuracion.Host = "" },
+		"sin puerto":             func(configuracion *smtp.Configuracion) { configuracion.Puerto = 0 },
+		"remitente inválido":     func(configuracion *smtp.Configuracion) { configuracion.Remitente = "no es un mail" },
+		"sin tiempo máximo":      func(configuracion *smtp.Configuracion) { configuracion.TiempoMaximo = 0 },
+		"sin tiempo de conexión": func(configuracion *smtp.Configuracion) { configuracion.TiempoMaximoConexion = 0 },
 	}
 
 	for nombre, cambiar := range casos {
@@ -256,5 +260,43 @@ func TestConfiguracionInvalida(prueba *testing.T) {
 
 	if _, err := smtp.NuevoRemitente(valida); err != nil {
 		prueba.Errorf("la configuración válida dio error: %v", err)
+	}
+}
+
+// El cuerpo viene de otras personas (por ejemplo, el mensaje del vendedor). Aunque
+// imite encabezados, comandos SMTP o HTML, tiene que llegar como texto del cuerpo.
+func TestUnCuerpoMaliciosoLlegaComoTexto(prueba *testing.T) {
+	servidor := iniciarServidorFalso(prueba, "250 ok")
+	remitente := nuevoRemitente(prueba, servidor.puerto(), 5*time.Second)
+	malicioso := puertos.Mensaje{
+		Destinatario: "cliente@ejemplo.com",
+		Asunto:       "No podemos hacer tu pedido especial",
+		Cuerpo: "Hola\r\n\r\nBcc: espia@malo.test\r\n" + // intenta agregar un encabezado
+			".\r\nMAIL FROM:<falso@malo.test>\r\nRCPT TO:<otra@malo.test>\r\n" + // intenta cerrar el mail y mandar otro
+			"<script>alert(1)</script> <a href=\"https://malo.test\">pagá acá</a>",
+	}
+
+	if err := remitente.Enviar(context.Background(), malicioso); err != nil {
+		prueba.Fatalf("error inesperado: %v", err)
+	}
+
+	if sobre := <-servidor.sobres; sobre != "<avisos@recienhecho.test> -> <cliente@ejemplo.com>" {
+		prueba.Errorf("sobre = %q", sobre)
+	}
+	select {
+	case otro := <-servidor.sobres:
+		prueba.Errorf("se coló otro mail: %q", otro)
+	case <-time.After(200 * time.Millisecond):
+	}
+	recibido, err := mail.ReadMessage(strings.NewReader(<-servidor.mensajes))
+	if err != nil {
+		prueba.Fatalf("el mensaje no tiene formato de email: %v", err)
+	}
+	if bcc := recibido.Header.Get("Bcc"); bcc != "" || recibido.Header.Get("Content-Type") != "text/plain; charset=UTF-8" {
+		prueba.Errorf("encabezados alterados: Bcc %q, Content-Type %q", bcc, recibido.Header.Get("Content-Type"))
+	}
+	cuerpo, _ := io.ReadAll(quotedprintable.NewReader(recibido.Body))
+	if strings.TrimRight(string(cuerpo), "\r\n") != malicioso.Cuerpo {
+		prueba.Errorf("el cuerpo cambió:\n%q\nse esperaba:\n%q", cuerpo, malicioso.Cuerpo)
 	}
 }

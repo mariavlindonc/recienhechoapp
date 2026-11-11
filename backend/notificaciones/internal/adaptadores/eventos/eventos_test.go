@@ -16,10 +16,15 @@ import (
 // contadorFalso cumple lo que el adaptador necesita de las métricas.
 type contadorFalso struct {
 	resultados []puertos.ResultadoEnvio
+	circuito   []puertos.EstadoCircuito
 }
 
 func (contador *contadorFalso) ContarEnvio(resultado puertos.ResultadoEnvio) {
 	contador.resultados = append(contador.resultados, resultado)
+}
+
+func (contador *contadorFalso) MarcarCircuitoDelCorreo(estado puertos.EstadoCircuito) {
+	contador.circuito = append(contador.circuito, estado)
 }
 
 func nuevoAdaptador() (*eventos.Eventos, *contadorFalso, *bytes.Buffer) {
@@ -77,5 +82,31 @@ func TestElLogTapaLosEmailsDelError(prueba *testing.T) {
 	}
 	if !strings.Contains(salida.String(), "550 5.1.1 <[email oculto]>: la casilla no existe") {
 		prueba.Errorf("el resto del error se tiene que mantener: %s", salida.String())
+	}
+}
+
+func TestLosCambiosDelCircuitoQuedanEnElLogYEnLasMetricas(prueba *testing.T) {
+	adaptador, contador, salida := nuevoAdaptador()
+
+	adaptador.CircuitoDelCorreoCambio(context.Background(), puertos.CircuitoCerrado, puertos.CircuitoAbierto)
+	adaptador.CircuitoDelCorreoCambio(context.Background(), puertos.CircuitoSemiabierto, puertos.CircuitoCerrado)
+
+	if len(contador.circuito) != 2 || contador.circuito[0] != puertos.CircuitoAbierto || contador.circuito[1] != puertos.CircuitoCerrado {
+		prueba.Errorf("estados publicados = %v", contador.circuito)
+	}
+
+	lineas := strings.Split(strings.TrimSpace(salida.String()), "\n")
+	if len(lineas) != 2 {
+		prueba.Fatalf("se esperaban 2 líneas, hubo %d: %s", len(lineas), salida.String())
+	}
+	casos := []struct{ nivel, anterior, nuevo string }{{"WARN", "cerrado", "abierto"}, {"INFO", "semiabierto", "cerrado"}}
+	for indice, caso := range casos {
+		var linea map[string]any
+		if err := json.Unmarshal([]byte(lineas[indice]), &linea); err != nil {
+			prueba.Fatalf("la línea no es JSON: %q", lineas[indice])
+		}
+		if linea["level"] != caso.nivel || linea["anterior"] != caso.anterior || linea["nuevo"] != caso.nuevo {
+			prueba.Errorf("línea %d = %v, se esperaba %s de %s a %s", indice+1, linea, caso.nivel, caso.anterior, caso.nuevo)
+		}
 	}
 }
