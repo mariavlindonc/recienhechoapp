@@ -93,6 +93,13 @@ a {
   max-width: 420px;
 }
 
+/* Ingresar y registrarse: el formulario va centrado en la pantalla. */
+.formulario.acceso {
+  width: 100%;
+  margin: 48px auto;
+  box-sizing: border-box;
+}
+
 .aviso-error {
   color: var(--md-sys-color-error);
   animation: entrar var(--duracion-media) var(--curva-salida) both;

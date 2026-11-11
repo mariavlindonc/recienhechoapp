@@ -44,7 +44,7 @@ El retraso máximo entre un cambio en `productos` y su aparición en la búsqued
 
 Así el retraso normal es de pocos segundos (la vuelta de 2 s más lo que tarde Meilisearch en indexar), dentro de los 10 de RNF1. Se mide con una métrica de la antigüedad de la fila más vieja en `indice_pendiente`.
 
-**Reconstrucción completa:** un comando `productos reindexar` carga todos los productos de MySQL en un índice nuevo y lo intercambia con el actual (operación de swap de Meilisearch), sin dejar la búsqueda vacía mientras corre. Se usa al cambiar la configuración del índice o si se sospecha que quedó desincronizado.
+**Reconstrucción completa:** un comando `/servicio reindexar` carga todos los productos de MySQL en un índice nuevo y lo intercambia con el actual (operación de swap de Meilisearch), sin dejar la búsqueda vacía mientras corre. Se usa al cambiar la configuración del índice o si se sospecha que quedó desincronizado.
 
 **Si Meilisearch se cae:** `GET /productos/busqueda` responde `503` y el frontend ofrece el listado del catálogo por categoría, que sale de MySQL con caché ([ADR-009](ADR-009-cache.md)). Se pierde la búsqueda de texto, pero se puede seguir comprando.
 

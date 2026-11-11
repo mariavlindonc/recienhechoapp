@@ -11,7 +11,7 @@ El enunciado pide comunicación síncrona (con timeout, manejo de errores, respu
 
 En Recién hecho hay dos tipos de interacción:
 
-- Las que necesitan la respuesta para seguir: crear un pedido necesita el precio actual del producto y saber si hay insumos.
+- Las que necesitan la respuesta para seguir: crear un pedido necesita el precio actual del producto y su receta.
 - Las que pueden pasar después: avisarle al comprador que su pedido cambió de estado no tiene que frenar el cambio de estado.
 
 ## Decisión
@@ -22,9 +22,9 @@ En Recién hecho hay dos tipos de interacción:
 |---|---|---|
 | api-gateway → servicios internos | 3 s | No (lo decide el cliente) |
 | pedidos → productos (precio y receta) | 1 s | 2, con espera exponencial (100 ms, 200 ms) |
-| pedidos → inventario (otro grupo) | 1,5 s | No: si no contesta, el pedido queda `pendiente_confirmacion` y se confirma después (detalle en D9) |
+| pedidos → inventario (otro grupo) | 1,5 s | El consumo corre en segundo plano al pasar a `en_produccion`, con reintentos espaciados y consulta previa del stock ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)) |
 
-- Solo se reintentan operaciones idempotentes (GET, o POST con `Idempotency-Key`) y errores transitorios (timeout, 502, 503, 504). Los 4xx no se reintentan.
+- Solo se reintentan operaciones idempotentes (GET, o POST con `Idempotency-Key`) y errores transitorios (timeout, 502, 503, 504). Los 4xx no se reintentan. La excepción es el consumo de insumos, que no es idempotente: se reintenta solo después de consultar el stock del proveedor ([ADR-020](ADR-020-reserva-y-consumo-de-insumos.md)).
 - Una respuesta que llega después del timeout se descarta.
 - Si `productos` no responde, el pedido no se crea y el comprador ve "no pudimos tomar el pedido, probá en un rato". No se usan precios de caché para cobrar.
 - Los mecanismos de protección (circuit breaker, degradación) se definen en D10.
@@ -69,7 +69,7 @@ Que el evento se publique sí o sí después de guardar el cambio, aunque el ser
 - **Gateway → servicios:** se mantiene lo decidido (timeout de 3 s, sin reintentos, `503 no_disponible` si el servicio no responde). Validado: el gateway reenvía `/notificaciones*` con `httputil.ReverseProxy`, corta a los 3 s y no reintenta. Con `docker compose stop notificaciones`, un `POST` a `localhost:8080/notificaciones` responde `503 no_disponible` a los 3 s y el gateway sigue atendiendo `/health`.
 - **Asíncrono en el flujo propio de notificaciones:** el `POST` responde `202` y el envío del mail pasa en segundo plano, con 3 reintentos tras el primer intento y espera exponencial (30, 60 y 120 s). Confirma la idea de este ADR de no hacer esperar al que pide por una dependencia lenta, aunque todavía sin broker.
 - **RabbitMQ** queda para la presentación, cuando exista `pedidos` para publicar `pedido.estado_cambiado`.
-- Los mecanismos de protección y la tabla de dependencias de cada servicio están en [ADR-011](ADR-011-resiliencia.md); el circuit breaker hacia inventario en [ADR-010](ADR-010-consumo-de-inventario.md).
+- Los mecanismos de protección y la tabla de dependencias de cada servicio están en [ADR-011](ADR-011-resiliencia.md); el circuit breaker hacia inventario en [ADR-020](ADR-020-reserva-y-consumo-de-insumos.md).
 
 ## Validación (implementación de pedidos, 26/10/2026)
 

@@ -26,7 +26,7 @@ Que un comprador pueda encargar sin llamar a la pastelería, y que la pastelerí
 
 Cuatro microservicios en Go (Gin) detrás de un API Gateway: **usuarios**, **productos**, **pedidos** y **notificaciones**, más un frontend en React. Publicamos la capacidad de **notificaciones** para que la use otro grupo, y consumimos la de **inventario** que publica otro grupo. Diagramas y detalle en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-Última versión publicada: 1.0.0 (entrega final). Tiene todos los servicios, el frontend, observabilidad, balanceo de carga, tests de carga y caídas controladas. La capacidad de notificaciones se despliega en Render ([ADR-013](docs/adr/ADR-013-capacidad-y-costos.md)).
+Última versión publicada: 1.0.1 (entrega final). Tiene todos los servicios, el frontend, observabilidad, balanceo de carga, tests de carga y caídas controladas. La capacidad de notificaciones se despliega en Render ([ADR-013](docs/adr/ADR-013-capacidad-y-costos.md)).
 
 ## Cómo levantarlo
 
@@ -52,7 +52,7 @@ Tests y lint (en Windows, con Git Bash):
 
 ```bash
 for servicio in backend/*/; do (cd "$servicio" && go test -race ./... && go vet ./...) || break; done; gofmt -l backend
-(cd frontend && bunx tsc && bun test)
+(cd frontend && bun install --frozen-lockfile && bunx tsc && bun test)
 ```
 
 ## Documentación

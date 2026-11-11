@@ -101,6 +101,8 @@ Automática, al volver Mailpit.
 
 ### Resumen
 
+> Ensayo hecho con el modelo de [ADR-010](adr/ADR-010-consumo-de-inventario.md), reemplazado por [ADR-020](adr/ADR-020-reserva-y-consumo-de-insumos.md): hoy crear un pedido no llama al inventario, y la reconfirmación en segundo plano ya no existe. Queda como registro.
+
 Durante el test de carga de pedidos ([ADR-013](adr/ADR-013-capacidad-y-costos.md#resultados)), el inventario falso corrió en modo `lento`: tarda 5 s, más que el timeout de 1,5 s ([ADR-010](adr/ADR-010-consumo-de-inventario.md)). `pedidos` siguió tomando pedidos: los dejó en `pendiente_confirmacion` y los confirmó solo cuando el inventario volvió a responder.
 
 ### Impacto

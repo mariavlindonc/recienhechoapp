@@ -20,8 +20,7 @@ Con la app levantada y los budines de ejemplo cargados:
 docker compose --profile carga run --rm k6 run --tag testid=notificaciones /carga/notificaciones.js
 ```
 
-`testid` separa las corridas en el tablero. Para comparar la caché, correr `catalogo.js` dos veces: una con `CACHE_HABILITADA=true` y otra con `CACHE_HABILITADA=false`, aplicando cada cambio con `docker compose up -d productos`. Lo mismo para `pedidos.js` con `INVENTARIO_MODO=confirma` y `INVENTARIO_MODO=lento`, agregando `-e DIAS=3` a la segunda corrida para que use otro día con el cupo libre.
-
+`testid` separa las corridas en el tablero. Para comparar la caché, correr `catalogo.js` dos veces: una con `CACHE_HABILITADA=true` y otra con `CACHE_HABILITADA=false`, aplicando cada cambio con `docker compose up -d productos`.
 Para probar que un script anda, sin carga: `docker compose --profile carga run --rm k6 run --vus 1 --iterations 1 /carga/catalogo.js`.
 
 Los resultados medidos y su análisis están en [ADR-013](../../docs/adr/ADR-013-capacidad-y-costos.md#resultados). Los resultados crudos de cada corrida se guardan en `resultados/<fecha>/` ([29/10/2026](resultados/2026-10-29/README.md)).

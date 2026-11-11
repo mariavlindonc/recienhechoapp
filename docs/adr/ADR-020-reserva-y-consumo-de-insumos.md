@@ -58,7 +58,7 @@ Pasar a `en_produccion` no espera al proveedor: se guarda el estado y el pedido 
 |---|---|
 | OK | Guarda el stock devuelto, baja lo reservado y sigue con el próximo insumo |
 | `409 INSUFFICIENT_STOCK` | Marca el pedido para que lo revise el vendedor. No frena la producción |
-| Timeout (1,5 s), 5xx o sin conexión | Se reintenta con esperas que se duplican (1, 2, 4, 8 minutos) hasta un máximo de 10 |
+| Timeout (1,5 s), 5xx o sin conexión | Se reintenta con esperas que se duplican (1, 2, 4, 8 minutos) y después cada 10 minutos, sin límite de intentos |
 | 4xx inesperado (error nuestro o cambio de contrato) | No se reintenta. Alerta para el equipo, y el pedido queda marcado para el vendedor |
 
 **Cómo no descontar dos veces.** Si `decrease` no respondió, no se sabe si se aplicó. Antes de repetir se consulta `GET /api/branches/{branchId}/products/{productId}/stock`, **solo en este caso**, y se compara con el stock conocido:
@@ -122,7 +122,7 @@ Qué cuesta:
 
 ## Pendientes
 
-1. **El servicio del proveedor anda, en otra dirección que la del contrato.** El 06/11 y el 08/11/2026, la URL del contrato (`stock-volcamelli-inventario.onrender.com`) devolvía `404` con `x-render-routing: no-server`: Render no tiene ningún servicio con ese nombre. El 09/11 el grupo del proveedor confirmó que anda. La dirección que responde es `https://stock-volcamelli.onrender.com`, sin `-inventario`. La URL se corrigió en el contrato, en su README, en el adaptador y en [DEMO.md](../DEMO.md).
+1. **El servicio del proveedor anda, en otra dirección que la del contrato.** El 06/11 y el 08/11/2026, la URL del contrato (`stock-volcamelli-inventario.onrender.com`) devolvía `404` con `x-render-routing: no-server`: Render no tiene ningún servicio con ese nombre. El 09/11 el grupo del proveedor confirmó que anda. La dirección que responde es `https://stock-volcamelli.onrender.com`, sin `-inventario`. La URL se corrigió en el contrato, en su README y en el adaptador.
 
    Probado el 09/11 contra el servicio real, con la API key que nos pasó el grupo (va en `X-API-Key` y no se escribe en el repositorio):
 
@@ -178,4 +178,4 @@ Qué cuesta:
 - La base `inventario` comparte servidor con la base `pedidos`: se cae con ella, y si algún día se separan, se pierde la transacción.
 - Nuestro stock puede diferir del de la base del proveedor si alguien la cambia por afuera: la comparación después de un timeout lo detecta y lo manda al vendedor.
 - Si `pedidos` pasara a tener varias instancias, habría que asegurar que el consumo siga yendo de a un pedido por vez.
-- Cambian R3 y R7 del SPEC, los criterios de aceptación de C4 y C5, [ADR-002](ADR-002-persistencia.md), [ADR-011](ADR-011-resiliencia.md), [ADR-015](ADR-015-consistencia-y-concurrencia.md), [ADR-017](ADR-017-pedidos-especiales.md) y la tabla de infraestructura de AGENTS.md. Se actualizan al implementar.
+- Cambian R3 y R7 del SPEC, los criterios de aceptación de C4 y C5, [ADR-002](ADR-002-persistencia.md), [ADR-011](ADR-011-resiliencia.md), [ADR-015](ADR-015-consistencia-y-concurrencia.md), [ADR-017](ADR-017-pedidos-especiales.md) y la tabla de infraestructura de AGENTS.md. Se actualizaron al implementar.

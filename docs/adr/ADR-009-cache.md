@@ -12,7 +12,7 @@ En Recién hecho el flujo que más se lee es el **catálogo**: la portada, el li
 
 ## Decisión
 
-**Redis** (`redis:7`) como caché de `productos`, con el patrón **cache-aside**: el servicio busca primero en Redis; si no está, lee MySQL, guarda el resultado y lo devuelve.
+**Redis** (`redis:7.4.11`) como caché de `productos`, con el patrón **cache-aside**: el servicio busca primero en Redis; si no está, lee MySQL, guarda el resultado y lo devuelve.
 
 **Qué se guarda:**
 
