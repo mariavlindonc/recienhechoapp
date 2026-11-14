@@ -34,11 +34,11 @@ export default function Marco() {
       <md-app-bar>
         <div slot="title">Recién hecho</div>
         {sesion ? (
-          <md-button slot="end" color="text" onClick={salir}>
+          <md-button slot="action-items" color="text" onClick={salir}>
             Salir ({sesion.usuario.nombre})
           </md-button>
         ) : (
-          <md-button slot="end" color="tonal" onClick={() => navegar('/ingresar')}>
+          <md-button slot="action-items" color="tonal" onClick={() => navegar('/ingresar')}>
             Ingresar
           </md-button>
         )}

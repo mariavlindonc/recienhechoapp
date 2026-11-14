@@ -60,6 +60,14 @@ a {
   color: var(--md-sys-color-primary);
 }
 
+/* Fija arriba: si no, al scrollear se va con el botón de Salir. */
+md-app-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--md-sys-color-background);
+}
+
 .marco {
   display: flex;
   min-height: 100dvh;
